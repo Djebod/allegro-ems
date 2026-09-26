@@ -1,44 +1,17 @@
 "use client";
 
-import Link from "next/link";
-import Guard from "@/components/Guard";
-import Shell from "@/components/Shell";
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 
-const menu = [
-  { judul: "Kelola Cuti & Izin", ket: "Pengajuan masuk, keputusan, dan saldo cuti.", href: "/cuti/kelola", siap: true },
-  { judul: "Hari Libur", ket: "Libur nasional, cuti bersama, dan libur perusahaan.", href: "/hari-libur", siap: true },
-  { judul: "Cuti & Izin Saya", ket: "Saldo dan pengajuan untuk diri sendiri.", href: "/cuti", siap: true },
-  { judul: "Surat Peringatan", ket: "Catatan kedisiplinan, masa penilaian tiga bulan.", href: "/sp", siap: true },
-  { judul: "Kantor", ket: "Titik lokasi dan radius absensi staf kantor.", href: "/admin/kantor", siap: true },
-  { judul: "Absensi Kantor", ket: "Rekap kehadiran staf kantor beserta buktinya.", href: "/absensi-kantor", siap: true },
-  { judul: "Absen Saya", ket: "Absen masuk dan pulang untuk diri sendiri.", href: "/absen", siap: true },
-  { judul: "Data Karyawan", ket: "Identitas, divisi, tarif, dan penugasan.", href: "/admin/karyawan", siap: true },
-  { judul: "Payroll Bulanan", ket: "Menunggu rumus potongan telat.", href: "#", siap: false },
-];
-
-export default function DashboardHR() {
-  return (
-    <Guard izinkan={["HR", "OWNER"]}>
-      <Shell judul="Dashboard HR" keterangan="Kepegawaian, cuti, dan kehadiran.">
-        <div className="grid gap-3 sm:grid-cols-2">
-          {menu.map((m) =>
-            m.siap ? (
-              <Link key={m.judul} href={m.href} className="kartu hover:border-allegro-600">
-                <h2 className="font-semibold text-ink">{m.judul}</h2>
-                <p className="mt-1 text-sm text-muted">{m.ket}</p>
-              </Link>
-            ) : (
-              <div key={m.judul} className="kartu opacity-60">
-                <div className="flex items-start justify-between gap-2">
-                  <h2 className="font-semibold text-ink">{m.judul}</h2>
-                  <span className="label-status bg-surface text-muted">Belum aktif</span>
-                </div>
-                <p className="mt-1 text-sm text-muted">{m.ket}</p>
-              </div>
-            )
-          )}
-        </div>
-      </Shell>
-    </Guard>
-  );
+/**
+ * Halaman ini dulu berisi kartu-kartu menu. Sekarang menunya ada di menu
+ * samping dan semua peran mendarat di /beranda. Alamatnya tetap dijaga
+ * supaya tautan atau markah lama tidak berakhir di halaman kosong.
+ */
+export default function Alihkan() {
+  const router = useRouter();
+  useEffect(() => {
+    router.replace("/beranda");
+  }, [router]);
+  return <p className="p-6 text-muted">Memuat…</p>;
 }

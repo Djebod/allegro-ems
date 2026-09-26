@@ -154,12 +154,18 @@ export function useAuth() {
   return ctx;
 }
 
-/** Halaman awal sesuai peran. */
+/**
+ * Halaman awal sesuai peran.
+ *
+ * Semua peran kantor mendarat di beranda yang sama, karena Admin, HR,
+ * Owner, dan Finance juga karyawan yang wajib absen. Kalau mereka mendarat
+ * di halaman kelola, tombol absennya tidak pernah terlihat dan mereka lupa.
+ * Mandor tetap langsung ke halaman timnya - pekerjaan pertamanya tiap pagi
+ * adalah mengabsen tim di lapangan.
+ */
 export function berandaUntuk(role: RoleOrPending | null): string {
-  if (role === "ADMIN") return "/admin";
-  if (role === "FINANCE") return "/finance";
   if (role === "MANDOR") return "/mandor";
-  if (role === "HR" || role === "OWNER") return "/hr";
-  if (role === "KARYAWAN") return "/beranda";
+  if (role === "ADMIN" || role === "FINANCE" || role === "HR" || role === "OWNER" || role === "KARYAWAN")
+    return "/beranda";
   return "/menunggu-akses";
 }

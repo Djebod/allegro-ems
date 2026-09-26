@@ -7,6 +7,7 @@ import Guard from "@/components/Guard";
 import Shell from "@/components/Shell";
 import Modal from "@/components/Modal";
 import FotoKaryawan from "@/components/FotoKaryawan";
+import PerluTindakan, { punyaTindakan } from "@/components/PerluTindakan";
 import { Field, Pesan } from "@/components/Field";
 import { useAuth } from "@/lib/auth";
 import { dbClient } from "@/lib/firebase";
@@ -25,6 +26,7 @@ import type {
   AbsenKantor,
   Attendance,
   Employee,
+  HariLibur,
   PengajuanCuti,
   SaldoCuti,
   SuratPeringatan,
@@ -68,6 +70,7 @@ function Isi() {
   const hariIni = tanggalHariIni();
 
   const [karyawan, setKaryawan] = useState<Employee | null>(null);
+  const [libur, setLibur] = useState<HariLibur | null>(null);
   const [absenKantor, setAbsenKantor] = useState<AbsenKantor[]>([]);
   const [absenLapangan, setAbsenLapangan] = useState<Attendance[]>([]);
   const [saldo, setSaldo] = useState<SaldoCuti | null>(null);
@@ -99,6 +102,10 @@ function Isi() {
       return;
     }
     muatKaryawan().finally(() => setMemuat(false));
+    // ID dokumen hari libur adalah tanggalnya, jadi cukup satu bacaan.
+    getDoc(doc(dbClient(), "holidays", hariIni))
+      .then((s) => setLibur(s.exists() ? { id: s.id, ...(s.data() as Omit<HariLibur, "id">) } : null))
+      .catch(() => {});
     ambilSaldo(employeeId, Number(hariIni.slice(0, 4))).then(setSaldo).catch(() => {});
 
     const lepas = [
@@ -133,6 +140,13 @@ function Isi() {
 
   const spAktif = useMemo(() => sp.filter((x) => masihBerlaku(x, hariIni)), [sp, hariIni]);
   const cutiMenunggu = useMemo(() => cuti.filter((c) => c.status === "DIAJUKAN"), [cuti]);
+  const cutiHariIni = useMemo(
+    () =>
+      cuti.find(
+        (c) => c.status === "DISETUJUI" && c.tanggalMulai <= hariIni && c.tanggalSelesai >= hariIni
+      ) || null,
+    [cuti, hariIni]
+  );
   const cutiBerikut = useMemo(
     () =>
       cuti
@@ -143,17 +157,31 @@ function Isi() {
 
   if (memuat) return <p className="text-muted">Memuat…</p>;
 
+  // Akun tanpa data karyawan: Admin sistem, atau orang yang belum disambungkan.
+  // Peran pengelola tetap mendapat kotak "Perlu tindakan"; kartu absen
+  // tidak ditampilkan karena tidak ada catatan kehadiran yang bisa diisi.
   if (!employeeId)
     return (
-      <Pesan
-        jenis="gagal"
-        isi="Akun ini belum disambungkan ke data karyawan. Minta Admin membuka Pengguna & Peran, lalu memilih nama Anda."
-      />
+      <>
+        <div className="kartu">
+          <p className="text-sm text-muted">{sapaan()},</p>
+          <h2 className="text-xl font-bold text-ink">{profile?.name}</h2>
+          <p className="mt-2 text-sm text-muted">
+            Akun ini tidak tersambung ke data karyawan, jadi tidak ada absen untuk Anda.
+            {punyaTindakan(profile?.role)
+              ? " Kalau Anda juga karyawan yang wajib absen, sambungkan akun ini lewat Pengguna & Peran."
+              : " Minta Admin membuka Pengguna & Peran, lalu memilih nama Anda."}
+          </p>
+        </div>
+        <PerluTindakan hariIni={hariIni} />
+      </>
     );
 
   if (!karyawan) return <Pesan jenis="gagal" isi="Data karyawan Anda tidak ditemukan." />;
 
   const jadwal = jadwalUntuk(karyawan, hariIni);
+  // Mandor tidak absen di /absen: ia mencatat dirinya bersama timnya di lapangan.
+  const mandor = profile?.role === "MANDOR" || karyawan.position === "MANDOR";
 
   return (
     <>
@@ -217,15 +245,37 @@ function Isi() {
             </div>
           </div>
 
-          <Link href="/absen" className="btn-lapangan max-w-[14rem]">
-            {!absenHariIni?.masuk
-              ? "Absen masuk"
-              : !absenHariIni?.pulang
-              ? "Absen pulang"
-              : "Absen sudah lengkap"}
-          </Link>
+          {mandor ? (
+            <Link href="/mandor" className="btn-lapangan max-w-[14rem]">
+              Absen tim hari ini
+            </Link>
+          ) : cutiHariIni && !absenHariIni?.masuk ? (
+            <div className="rounded-xl bg-allegro-50 px-5 py-3 text-sm text-allegro-700">
+              Anda sedang {JENIS_CUTI[cutiHariIni.jenis]?.label.toLowerCase() || "cuti"} sampai{" "}
+              {tanggalPendek(cutiHariIni.tanggalSelesai)}
+            </div>
+          ) : libur && !absenHariIni?.masuk ? (
+            <div className="rounded-xl bg-allegro-50 px-5 py-3 text-sm text-allegro-700">
+              Hari libur: {libur.nama}
+            </div>
+          ) : (
+            <Link href="/absen" className="btn-lapangan max-w-[14rem]">
+              {!absenHariIni?.masuk
+                ? "Absen masuk"
+                : !absenHariIni?.pulang
+                ? "Absen pulang"
+                : "Absen sudah lengkap"}
+            </Link>
+          )}
         </div>
+        {mandor && (
+          <p className="mt-3 text-xs text-muted">
+            Kehadiran Anda dicatat bersama tim di halaman mandor, jadi angka di atas tetap kosong.
+          </p>
+        )}
       </div>
+
+      <PerluTindakan hariIni={hariIni} />
 
       {/* Angka penting */}
       <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -283,9 +333,11 @@ function Isi() {
 
       {/* Menu */}
       <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Link href="/absen" className="kartu hover:border-allegro-600">
-          <h3 className="font-semibold text-ink">Absen Saya</h3>
-          <p className="mt-1 text-sm text-muted">Absen masuk dan pulang.</p>
+        <Link href={mandor ? "/mandor" : "/absen"} className="kartu hover:border-allegro-600">
+          <h3 className="font-semibold text-ink">{mandor ? "Absen Tim" : "Absen Saya"}</h3>
+          <p className="mt-1 text-sm text-muted">
+            {mandor ? "Catat kehadiran tim dan diri sendiri." : "Absen masuk dan pulang."}
+          </p>
         </Link>
         <Link href="/cuti" className="kartu hover:border-allegro-600">
           <h3 className="font-semibold text-ink">Cuti &amp; Izin</h3>
