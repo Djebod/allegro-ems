@@ -112,6 +112,14 @@ export interface Employee {
   /** Kantor tempat orang ini absen. Kosong berarti pekerja lapangan. */
   kantorId?: string;
 
+  /**
+   * Atasan langsung, berisi kode karyawan. Dipakai supaya atasan bisa
+   * melihat kehadiran bawahannya. Untuk tukang dan kenek, isinya kode
+   * mandornya.
+   */
+  atasanId?: string;
+  atasanNama?: string;
+
   /* --- Jadwal kerja kantor --- */
   jamMasuk?: string;
   jamPulang?: string;
@@ -429,6 +437,8 @@ export interface PengajuanCuti {
   employeeId: string;
   employeeName: string;
   divisi: string;
+  /** Salinan atasan saat pengajuan dibuat. */
+  atasanId: string;
   jenis: string;
 
   tanggalMulai: string;
@@ -547,6 +557,9 @@ export interface AbsenKantor {
 
   jadwalMasuk: string;
   jadwalPulang: string;
+
+  /** Salinan atasan saat kejadian, supaya atasan bisa membaca catatannya. */
+  atasanId: string;
 
   workHours: number;
   terlambatMenit: number;

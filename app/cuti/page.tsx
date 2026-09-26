@@ -150,6 +150,7 @@ function Isi() {
         employeeId,
         employeeName: karyawan.name,
         divisi: karyawan.divisi || "",
+        atasanId: karyawan.atasanId || "",
         jenis,
         tanggalMulai: mulai,
         tanggalSelesai: berbasisJam ? mulai : selesai,

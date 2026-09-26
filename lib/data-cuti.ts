@@ -274,3 +274,20 @@ export async function batalkanPengajuan(pengajuan: PengajuanCuti, alasan: string
     updatedAt: serverTimestamp(),
   });
 }
+
+/** Pengajuan cuti seluruh bawahan seorang atasan. */
+export function pantauCutiBawahan(
+  atasanId: string,
+  onData: (d: PengajuanCuti[]) => void,
+  onGagal: () => void
+) {
+  return onSnapshot(
+    query(collection(dbClient(), "leaveRequests"), where("atasanId", "==", atasanId)),
+    (snap) => {
+      const isi = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<PengajuanCuti, "id">) }));
+      isi.sort((a, b) => b.tanggalMulai.localeCompare(a.tanggalMulai));
+      onData(isi);
+    },
+    onGagal
+  );
+}

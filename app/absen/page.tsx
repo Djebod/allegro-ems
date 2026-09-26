@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { doc, getDoc } from "firebase/firestore";
 import Guard from "@/components/Guard";
@@ -253,6 +254,10 @@ function Isi() {
         <button className="btn-ringan w-full" disabled={mencari} onClick={() => periksaLokasi()}>
           Periksa lokasi saya
         </button>
+
+        <Link href="/beranda" className="btn-ringan block w-full text-center">
+          Kembali ke beranda
+        </Link>
       </div>
 
       {absen?.perluValidasi && (

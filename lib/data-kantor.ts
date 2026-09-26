@@ -167,6 +167,7 @@ export async function catatAbsenKantor(opsi: {
       pulang: null,
       jadwalMasuk: jadwal.masuk,
       jadwalPulang: jadwal.pulang,
+      atasanId: opsi.karyawan.atasanId || "",
       workHours: 0,
       terlambatMenit: 0,
       pulangCepatMenit: 0,
@@ -248,4 +249,24 @@ export async function koreksiAbsenKantor(opsi: {
     status: hitung.status,
     updatedAt: serverTimestamp(),
   });
+}
+
+/** Absensi hari ini seluruh bawahan seorang atasan. */
+export function pantauAbsenBawahan(
+  atasanId: string,
+  dari: string,
+  sampai: string,
+  onData: (d: AbsenKantor[]) => void,
+  onGagal: () => void
+) {
+  return onSnapshot(
+    query(
+      collection(dbClient(), "officeAttendance"),
+      where("atasanId", "==", atasanId),
+      where("date", ">=", dari),
+      where("date", "<=", sampai)
+    ),
+    (snap) => onData(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<AbsenKantor, "id">) }))),
+    onGagal
+  );
 }

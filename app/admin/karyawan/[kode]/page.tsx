@@ -13,6 +13,7 @@ import { Field, Pesan } from "@/components/Field";
 import { dbClient } from "@/lib/firebase";
 import {
   ambilKtp,
+  calonAtasan,
   daftarMandor,
   pantauPenugasan,
   pantauTarif,
@@ -60,6 +61,7 @@ function Isi({ kode }: { kode: string }) {
   const [proyek, setProyek] = useState<Project[]>([]);
   const [sections, setSections] = useState<Section[]>([]);
   const [mandor, setMandor] = useState<Employee[]>([]);
+  const [atasan, setAtasan] = useState<Employee[]>([]);
 
   const [bukaUbah, setBukaUbah] = useState(false);
   const [uData, setUData] = useState<Partial<Employee>>({});
@@ -91,6 +93,7 @@ function Isi({ kode }: { kode: string }) {
     semuaProyek().then(setProyek).catch(() => {});
     semuaSection().then(setSections).catch(() => {});
     daftarMandor().then(setMandor).catch(() => {});
+    calonAtasan(kode).then(setAtasan).catch(() => {});
 
     const lepasTarif = pantauTarif(kode, setTarif, () => {});
     const lepasTugas = pantauPenugasan(kode, setTugas, () => {});
@@ -238,6 +241,10 @@ function Isi({ kode }: { kode: string }) {
           <div>
             <dt className="text-muted">Divisi</dt>
             <dd className="font-medium text-ink">{karyawan.divisi || "—"}</dd>
+          </div>
+          <div>
+            <dt className="text-muted">Atasan langsung</dt>
+            <dd className="font-medium text-ink">{karyawan.atasanNama || "—"}</dd>
           </div>
           <div>
             <dt className="text-muted">Status kepegawaian</dt>
@@ -449,6 +456,27 @@ function Isi({ kode }: { kode: string }) {
               />
             </Field>
           </div>
+
+          <Field
+            label="Atasan langsung"
+            bantuan="Atasan bisa melihat kehadiran dan cuti orang ini di berandanya. Untuk tukang dan kenek, isi dengan mandornya."
+          >
+            <select
+              className="input-dasar"
+              value={uData.atasanId || ""}
+              onChange={(e) => {
+                const a = atasan.find((x) => x.id === e.target.value);
+                setUData({ ...uData, atasanId: e.target.value, atasanNama: a?.name || "" });
+              }}
+            >
+              <option value="">— tidak punya atasan langsung —</option>
+              {atasan.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name} ({a.employeeCode}) · {a.position}
+                </option>
+              ))}
+            </select>
+          </Field>
 
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Posisi" wajib>
@@ -686,6 +714,8 @@ function Isi({ kode }: { kode: string }) {
                   name: uData.name.trim(),
                   nickname: uData.nickname || "",
                   divisi: uData.divisi || "",
+                  atasanId: uData.atasanId || "",
+                  atasanNama: uData.atasanNama || "",
                   position: uData.position,
                   jenisKelamin: uData.jenisKelamin,
                   phone: uData.phone || "",

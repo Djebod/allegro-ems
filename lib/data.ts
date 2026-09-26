@@ -1157,3 +1157,84 @@ export async function simpanImporKaryawan(
 
   return { ditambah, diperbarui };
 }
+
+/** Absensi lapangan milik sendiri, untuk beranda karyawan. */
+export function pantauAbsensiSaya(
+  employeeId: string,
+  dari: string,
+  sampai: string,
+  onData: (data: Attendance[]) => void,
+  onGagal: () => void
+) {
+  return onSnapshot(
+    query(
+      collection(dbClient(), "attendance"),
+      where("employeeId", "==", employeeId),
+      where("date", ">=", dari),
+      where("date", "<=", sampai)
+    ),
+    (snap) => {
+      const isi = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Attendance, "id">) }));
+      isi.sort((a, b) => b.date.localeCompare(a.date));
+      onData(isi);
+    },
+    onGagal
+  );
+}
+
+/**
+ * Perubahan data pribadi oleh karyawan sendiri.
+ * Sengaja dibatasi pada hal yang memang miliknya: nama panggilan, nomor
+ * HP, alamat, dan foto. Nama, NIK, jabatan, divisi, jadwal, dan rekening
+ * tetap wilayah Admin — kalau rekening bisa diubah sendiri, satu akun
+ * yang dibajak berarti gaji berpindah tanpa ada yang tahu.
+ */
+export async function ubahDataPribadi(
+  employeeId: string,
+  data: { nickname: string; phone: string; address: string }
+) {
+  await updateDoc(doc(dbClient(), "employees", employeeId), {
+    nickname: data.nickname.trim(),
+    phone: data.phone.trim(),
+    address: data.address.trim(),
+    updatedAt: serverTimestamp(),
+  });
+}
+
+export async function ubahFotoSaya(employeeId: string, url: string, publicId: string) {
+  await updateDoc(doc(dbClient(), "employees", employeeId), {
+    profilePhotoUrl: url,
+    profilePublicId: publicId,
+    updatedAt: serverTimestamp(),
+  });
+}
+
+/* ---------------- Melihat ke bawah ---------------- */
+
+/** Karyawan yang atasan langsungnya orang ini. */
+export function pantauBawahan(
+  atasanId: string,
+  onData: (data: Employee[]) => void,
+  onGagal: () => void
+) {
+  return onSnapshot(
+    query(collection(dbClient(), "employees"), where("atasanId", "==", atasanId)),
+    (snap) => {
+      const isi = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Employee, "id">) }));
+      isi.sort((a, b) => a.name.localeCompare(b.name));
+      onData(isi.filter((e) => e.status === "ACTIVE"));
+    },
+    onGagal
+  );
+}
+
+/** Daftar calon atasan: karyawan aktif selain dirinya sendiri. */
+export async function calonAtasan(kecuali: string) {
+  const snap = await getDocs(
+    query(collection(dbClient(), "employees"), where("status", "==", "ACTIVE"))
+  );
+  return snap.docs
+    .map((d) => ({ id: d.id, ...(d.data() as Omit<Employee, "id">) }))
+    .filter((e) => e.id !== kecuali)
+    .sort((a, b) => a.name.localeCompare(b.name));
+}

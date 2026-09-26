@@ -2,7 +2,7 @@ rules_version = '2';
 
 // ============================================================
 //  ABSENSI & PAYROLL PROYEK — Allegro Global Construction
-//  Security Rules — Tahap 14 (absensi kantor mandiri)
+//  Security Rules — Tahap 16 (atasan melihat bawahannya)
 //  users, projects, sections, employees, employeePrivate,
 //  salaryRates, employeeAssignments, attendance, attendanceCorrections,
 //  employeeLoans, loanLocks, loanRepayments, payroll, payrollItems
@@ -154,6 +154,10 @@ service cloud.firestore {
         // Setiap orang boleh membaca data karyawannya sendiri - itu yang
         // dipakai halaman Cuti Saya untuk tahu divisi dan tanggal masuk.
         || (sudahLogin() && employeeId == karyawanSaya())
+        // Atasan langsung boleh membaca data bawahannya.
+        || (sudahLogin()
+            && resource != null
+            && resource.data.atasanId == karyawanSaya())
         || (isMandor()
             && resource != null
             && resource.data.currentMandorId == profilSaya().employeeId);
@@ -161,9 +165,19 @@ service cloud.firestore {
       allow create: if isAdmin() && karyawanSah()
         && request.resource.data.employeeCode == employeeId;
 
-      allow update: if isAdmin() && karyawanSah()
+      allow update: if (isAdmin() || isHR()) && karyawanSah()
         && request.resource.data.employeeCode == resource.data.employeeCode
         && request.resource.data.nik == resource.data.nik;
+
+      // Karyawan boleh memperbarui data pribadinya sendiri, tetapi HANYA
+      // kolom di bawah ini. Nama, NIK, jabatan, divisi, jadwal, tarif,
+      // dan rekening tetap wilayah Admin — kalau rekening bisa diubah
+      // sendiri, satu akun yang dibajak berarti gaji berpindah diam-diam.
+      allow update: if sudahLogin()
+        && employeeId == karyawanSaya()
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['nickname', 'phone', 'address',
+                       'profilePhotoUrl', 'profilePublicId', 'updatedAt']);
 
       // Hanya boleh dihapus kalau memang salah input dan belum dipakai
       // di mana pun. Setelah ada absensi, karyawan cukup dinonaktifkan.
@@ -281,6 +295,10 @@ service cloud.firestore {
       // galat di dalam rules ikut terbaca sebagai penolakan izin.
       allow read: if isAdmin()
         || isFinance()
+        || urusKepegawaian()
+        // Setiap orang boleh melihat catatan absensinya sendiri.
+        || (sudahLogin()
+            && (resource == null || resource.data.employeeId == karyawanSaya()))
         || (isMandor()
             && (resource == null || resource.data.mandorId == profilSaya().employeeId));
 
@@ -509,7 +527,8 @@ service cloud.firestore {
     match /leaveBalances/{saldoId} {
       // Karyawan hanya boleh melihat saldonya sendiri.
       allow read: if urusKepegawaian()
-        || (sudahLogin() && resource != null && resource.data.employeeId == karyawanSaya());
+        || (sudahLogin()
+            && (resource == null || resource.data.employeeId == karyawanSaya()));
 
       // Saldo tidak boleh diubah oleh pemiliknya sendiri, hanya oleh HR.
       allow create, update: if urusKepegawaian() && saldoSah()
@@ -534,7 +553,9 @@ service cloud.firestore {
 
     match /leaveRequests/{pengajuanId} {
       allow read: if urusKepegawaian()
-        || (sudahLogin() && resource != null && resource.data.employeeId == karyawanSaya());
+        || (sudahLogin()
+            && (resource == null || resource.data.employeeId == karyawanSaya()))
+        || (sudahLogin() && resource != null && resource.data.atasanId == karyawanSaya());
 
       // Mengajukan hanya untuk diri sendiri, dan selalu lahir sebagai
       // DIAJUKAN - tidak bisa langsung menyetujui cuti sendiri.
@@ -589,7 +610,8 @@ service cloud.firestore {
     match /warningLetters/{spId} {
       // Karyawan boleh membaca surat peringatan atas namanya sendiri.
       allow read: if urusKepegawaian()
-        || (sudahLogin() && resource != null && resource.data.employeeId == karyawanSaya());
+        || (sudahLogin()
+            && (resource == null || resource.data.employeeId == karyawanSaya()));
 
       allow create: if urusKepegawaian()
         && spSah()
@@ -637,9 +659,18 @@ service cloud.firestore {
     }
 
     match /officeAttendance/{absenId} {
+      // "resource == null" berarti dokumennya belum ada — keadaan normal
+      // saat absen pertama hari itu diperiksa lebih dulu. Harus dijawab
+      // boleh, bukan dibiarkan jadi galat, karena galat di dalam rules
+      // ikut terbaca sebagai penolakan izin.
       allow read: if urusKepegawaian()
         || isFinance()
-        || (sudahLogin() && resource != null && resource.data.employeeId == karyawanSaya());
+        || (sudahLogin()
+            && (resource == null || resource.data.employeeId == karyawanSaya()))
+        // Atasan langsung boleh membaca kehadiran bawahannya. Kolom
+        // atasanId disalin saat catatan dibuat, jadi tidak perlu membaca
+        // dokumen karyawan lagi untuk memeriksanya.
+        || (sudahLogin() && resource != null && resource.data.atasanId == karyawanSaya());
 
       // Absen hanya untuk diri sendiri. ID wajib "<kode>_<tanggal>",
       // jadi satu orang mustahil punya dua catatan di satu hari — termasuk

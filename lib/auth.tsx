@@ -160,6 +160,6 @@ export function berandaUntuk(role: RoleOrPending | null): string {
   if (role === "FINANCE") return "/finance";
   if (role === "MANDOR") return "/mandor";
   if (role === "HR" || role === "OWNER") return "/hr";
-  if (role === "KARYAWAN") return "/absen";
+  if (role === "KARYAWAN") return "/beranda";
   return "/menunggu-akses";
 }

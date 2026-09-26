@@ -260,6 +260,14 @@ function Isi() {
             />
           </Field>
 
+          {Number(form.radius) > 0 && Number(form.radius) < 80 && (
+            <p className="text-xs text-bahaya">
+              Radius {form.radius} meter terlalu sempit. GPS ponsel biasanya meleset 20 sampai 150
+              meter, apalagi di dalam gedung — dengan radius sesempit ini, orang yang benar-benar
+              berada di kantor pun akan sering tertolak. Sebaiknya minimal 100 meter.
+            </p>
+          )}
+
           <button className="btn-utama w-full" onClick={simpan} disabled={sibuk}>
             {sibuk ? "Menyimpan…" : "Simpan kantor"}
           </button>
