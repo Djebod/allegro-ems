@@ -91,9 +91,36 @@ export function cariKantorTerdekat(
   };
 }
 
+/**
+ * Jam "HH:MM" waktu Indonesia Barat dari waktu ISO yang tersimpan.
+ *
+ * Kolom `waktu` disimpan dengan toISOString(), yang selalu UTC. Memotong
+ * teksnya (`waktu.slice(11, 16)`) menghasilkan jam UTC - tujuh jam lebih
+ * awal. Absen masuk 15.12 WIB terbaca 08.12, sehingga dihitung "telat 12
+ * menit" dari jadwal 08.00. Pernah terjadi 26 September 2026.
+ *
+ * Zona waktunya dikunci ke Asia/Jakarta, bukan mengikuti perangkat: kalau
+ * ada HP yang zona waktunya keliru, keterlambatannya tetap dihitung benar.
+ * Seluruh kantor Allegro berada di WIB.
+ */
+export function jamWIB(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const bagian = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Jakarta",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(d);
+  const jam = bagian.find((b) => b.type === "hour")?.value ?? "00";
+  const menit = bagian.find((b) => b.type === "minute")?.value ?? "00";
+  return `${jam}:${menit}`;
+}
+
 export function jamEfektifKantor(a: AbsenKantor): { masuk: string | null; pulang: string | null } {
   return {
-    masuk: a.koreksiMasuk || a.masuk?.waktu.slice(11, 16) || null,
-    pulang: a.koreksiPulang || a.pulang?.waktu.slice(11, 16) || null,
+    masuk: a.koreksiMasuk || jamWIB(a.masuk?.waktu),
+    pulang: a.koreksiPulang || jamWIB(a.pulang?.waktu),
   };
 }

@@ -76,6 +76,12 @@ Pakai **`keTanggal()`** di `lib/absensi.ts`, yang membentuk tanggal dari jam set
 
 Pengecualian: tanggal yang **dibaca dari sel Excel** justru harus memakai `getUTCFullYear()`, `getUTCMonth()`, `getUTCDate()` — karena ExcelJS mengembalikannya sebagai tengah malam UTC. Lihat `keTanggalIsi()` di `lib/impor-karyawan.ts`.
 
+### 5.1b Jangan memotong jam dari teks ISO
+
+`waktu.slice(11, 16)` pada teks hasil `toISOString()` menghasilkan jam **UTC**, tujuh jam lebih awal dari WIB. Absen masuk 15.12 terbaca 08.12 dan dihitung "telat 12 menit". Pernah terjadi 26 September 2026 di absensi kantor.
+
+Pakai **`jamWIB()`** di `lib/kantor.ts`, yang zona waktunya dikunci ke Asia/Jakarta. Selisih jam (jam kerja lapangan) aman karena dihitung dari dua waktu penuh, bukan dari teks jamnya.
+
 ### 5.2 Firestore Rules: dokumen yang belum ada
 
 Membaca dokumen yang belum ada membuat `resource` bernilai `null`. Menulis `resource.data.x == y` pada keadaan itu bukan menghasilkan "salah", melainkan **galat** — dan Firestore menerjemahkan galat jadi penolakan izin.

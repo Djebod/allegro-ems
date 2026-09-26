@@ -1,4 +1,4 @@
-import { cariKantorTerdekat, hitungKantor, jamDibayar } from "@/lib/kantor";
+import { cariKantorTerdekat, hitungKantor, jamDibayar, jamWIB } from "@/lib/kantor";
 import type { Kantor } from "@/types";
 
 let lolos = 0, gagal = 0;
@@ -64,6 +64,14 @@ t = cariKantorTerdekat(kantor, (k) => (k.id === "SBY" ? 10 : 90000));
 cek("kantor nonaktif tidak dipakai", t.kantor?.id !== "SBY", true);
 
 cek("tanpa kantor sama sekali", cariKantorTerdekat([], () => 0).kantor, null);
+
+console.log("\n== Jam WIB dari waktu tersimpan (UTC) ==");
+// 15.12 WIB tersimpan sebagai 08:12 UTC. Kekeliruan lama membaca 08:12.
+cek("15.12 WIB tidak terbaca 08.12", jamWIB("2026-09-26T08:12:00.000Z"), "15:12");
+cek("telat dihitung dari jam WIB", hitungKantor({ masuk: jamWIB("2026-09-26T08:12:00.000Z"), pulang: null, ...jadwal }).terlambatMenit, 432);
+cek("07.55 WIB tidak telat", hitungKantor({ masuk: jamWIB("2026-09-26T00:55:00.000Z"), pulang: null, ...jadwal }).terlambatMenit, 0);
+cek("lewat tengah malam UTC", jamWIB("2026-09-25T17:30:00.000Z"), "00:30");
+cek("waktu kosong", jamWIB(null), null);
 
 console.log(`\n==== ${lolos} lolos, ${gagal} gagal ====`);
 process.exit(gagal ? 1 : 0);

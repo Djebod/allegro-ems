@@ -13,7 +13,7 @@ import {
   where,
 } from "firebase/firestore";
 import { dbClient } from "@/lib/firebase";
-import { hitungKantor } from "@/lib/kantor";
+import { hitungKantor, jamWIB } from "@/lib/kantor";
 import { jadwalUntuk } from "@/lib/jadwal";
 import { rapikanKode } from "@/lib/data";
 import type { AbsenKantor, Employee, EventAbsenKantor, Kantor, TitikAbsen } from "@/types";
@@ -147,8 +147,8 @@ export async function catatAbsenKantor(opsi: {
   };
 
   const jamMasuk =
-    opsi.jenis === "masuk" ? sekarang.slice(11, 16) : kini?.masuk?.waktu.slice(11, 16) || null;
-  const jamPulang = opsi.jenis === "pulang" ? sekarang.slice(11, 16) : null;
+    opsi.jenis === "masuk" ? jamWIB(sekarang) : jamWIB(kini?.masuk?.waktu);
+  const jamPulang = opsi.jenis === "pulang" ? jamWIB(sekarang) : null;
 
   const hitung = hitungKantor({
     masuk: jamMasuk,
@@ -228,8 +228,8 @@ export async function koreksiAbsenKantor(opsi: {
 }) {
   if (!opsi.alasan.trim()) throw new Error("Alasan koreksi wajib diisi.");
 
-  const masuk = opsi.koreksiMasuk || opsi.absen.masuk?.waktu.slice(11, 16) || null;
-  const pulang = opsi.koreksiPulang || opsi.absen.pulang?.waktu.slice(11, 16) || null;
+  const masuk = opsi.koreksiMasuk || jamWIB(opsi.absen.masuk?.waktu);
+  const pulang = opsi.koreksiPulang || jamWIB(opsi.absen.pulang?.waktu);
 
   const hitung = hitungKantor({
     masuk,

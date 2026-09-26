@@ -10,7 +10,7 @@ import { Field, Pesan } from "@/components/Field";
 import { useAuth } from "@/lib/auth";
 import { dbClient } from "@/lib/firebase";
 import { ambilAbsenHariIni, catatAbsenKantor, semuaKantor } from "@/lib/data-kantor";
-import { cariKantorTerdekat, hitungKantor } from "@/lib/kantor";
+import { cariKantorTerdekat, hitungKantor, jamWIB } from "@/lib/kantor";
 import { jadwalUntuk } from "@/lib/jadwal";
 import { jarakMeter } from "@/lib/lokasi";
 import { cloudinarySiap, unggahFoto } from "@/lib/cloudinary";
@@ -149,8 +149,8 @@ function Isi() {
   const jadwal = jadwalUntuk(karyawan, tanggal);
   const hitung = absen
     ? hitungKantor({
-        masuk: absen.masuk?.waktu.slice(11, 16) || null,
-        pulang: absen.pulang?.waktu.slice(11, 16) || null,
+        masuk: jamWIB(absen.masuk?.waktu),
+        pulang: jamWIB(absen.pulang?.waktu),
         jadwalMasuk: jadwal.masuk,
         jadwalPulang: jadwal.pulang,
       })
