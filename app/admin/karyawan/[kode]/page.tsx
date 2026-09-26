@@ -565,6 +565,39 @@ function Isi({ kode }: { kode: string }) {
           </div>
 
           <div className="rounded-lg border border-line p-4">
+            <p className="mb-3 text-sm font-medium text-ink">Jadwal kerja kantor</p>
+            <p className="mb-3 text-xs text-muted">
+              Dipakai menafsirkan cap waktu mesin: menentukan telat dan pulang cepat.
+            </p>
+            <div className="grid gap-4 sm:grid-cols-3">
+              <Field label="Jam masuk">
+                <input
+                  type="time"
+                  className="input-dasar"
+                  value={uData.jamMasuk || ""}
+                  onChange={(e) => setUData({ ...uData, jamMasuk: e.target.value })}
+                />
+              </Field>
+              <Field label="Jam pulang">
+                <input
+                  type="time"
+                  className="input-dasar"
+                  value={uData.jamPulang || ""}
+                  onChange={(e) => setUData({ ...uData, jamPulang: e.target.value })}
+                />
+              </Field>
+              <Field label="Jam pulang Sabtu">
+                <input
+                  type="time"
+                  className="input-dasar"
+                  value={uData.jamPulangSabtu || ""}
+                  onChange={(e) => setUData({ ...uData, jamPulangSabtu: e.target.value })}
+                />
+              </Field>
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-line p-4">
             <p className="mb-3 text-sm font-medium text-ink">Pajak &amp; BPJS</p>
             <div className="space-y-4">
               <div className="grid gap-4 sm:grid-cols-2">
@@ -662,6 +695,9 @@ function Isi({ kode }: { kode: string }) {
                   rekeningPembayar: uData.rekeningPembayar || "",
                   kontrakMulai: uData.kontrakMulai || "",
                   kontrakSelesai: uData.kontrakSelesai || "",
+                  jamMasuk: uData.jamMasuk || "",
+                  jamPulang: uData.jamPulang || "",
+                  jamPulangSabtu: uData.jamPulangSabtu || "",
                   statusPtkp: uData.statusPtkp || "",
                   npwp: uData.npwp || "",
                   bpjsKesehatan: uData.bpjsKesehatan || "",

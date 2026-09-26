@@ -13,6 +13,7 @@ const menu = [
   { judul: "Payroll Mingguan", ket: "Perhitungan upah per proyek dan section.", href: "/payroll", siap: true },
   { judul: "Cuti & Izin", ket: "Pengajuan, keputusan, dan saldo cuti karyawan.", href: "/cuti/kelola", siap: true },
   { judul: "Surat Peringatan", ket: "Catatan kedisiplinan, masa penilaian tiga bulan.", href: "/sp", siap: true },
+  { judul: "Absensi Kantor", ket: "Impor mesin fingerprint, penafsiran, dan koreksi.", href: "/absensi-kantor", siap: true },
 ];
 
 export default function AdminDashboard() {

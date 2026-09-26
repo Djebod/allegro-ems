@@ -10,7 +10,7 @@ const menu = [
   { judul: "Cuti & Izin Saya", ket: "Saldo dan pengajuan untuk diri sendiri.", href: "/cuti", siap: true },
   { judul: "Surat Peringatan", ket: "Catatan kedisiplinan, masa penilaian tiga bulan.", href: "/sp", siap: true },
   { judul: "Data Karyawan", ket: "Identitas, divisi, tarif, dan penugasan.", href: "/admin/karyawan", siap: true },
-  { judul: "Absensi Kantor", ket: "Menunggu aturan pembacaan mesin fingerprint.", href: "#", siap: false },
+  { judul: "Absensi Kantor", ket: "Impor mesin fingerprint, penafsiran, dan koreksi.", href: "/absensi-kantor", siap: true },
   { judul: "Payroll Bulanan", ket: "Menunggu rumus potongan telat.", href: "#", siap: false },
 ];
 

@@ -108,6 +108,12 @@ export interface Employee {
 
   /** Rekening perusahaan yang dipakai membayar orang ini. */
   rekeningPembayar?: string;
+
+  /* --- Jadwal kerja kantor. Dipakai menafsirkan cap waktu mesin. --- */
+  jamMasuk?: string;
+  jamPulang?: string;
+  /** Sabtu pulang lebih awal: admin 12.00, planner 15.00. */
+  jamPulangSabtu?: string;
   profilePhotoUrl?: string | null;
   profilePublicId?: string | null;
   /**
@@ -487,6 +493,58 @@ export interface SuratPeringatan {
   alasanPencabutan?: string;
 
   diterbitkanOleh: string;
+  createdAt?: unknown;
+  updatedAt?: unknown;
+}
+
+/* ---------------- Absensi kantor (mesin fingerprint) ---------------- */
+
+export type StatusAbsenKantor = "HADIR" | "TIDAK_LENGKAP" | "SELESAI";
+
+/** Pemetaan nomor karyawan di mesin ke kode karyawan di sistem. */
+export interface PetaMesin {
+  id: string;
+  mesinId: string;
+  namaDiMesin: string;
+  employeeId: string;
+  employeeName: string;
+  dibuatOleh: string;
+  createdAt?: unknown;
+}
+
+/** ID dokumen = "<kodeKaryawan>_<YYYY-MM-DD>". */
+export interface AbsenKantor {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  divisi: string;
+  date: string;
+
+  /** Seluruh cap waktu apa adanya dari mesin, untuk ditelusuri ulang. */
+  scans: string[];
+
+  masuk: string | null;
+  istirahatKeluar: string | null;
+  istirahatMasuk: string | null;
+  pulang: string | null;
+
+  jadwalMasuk: string;
+  jadwalPulang: string;
+
+  workHours: number;
+  terlambatMenit: number;
+  pulangCepatMenit: number;
+  status: StatusAbsenKantor;
+  /** Hal yang perlu dilihat manusia, mis. scan ganjil atau jam janggal. */
+  catatan: string[];
+
+  /** Jam yang dibetulkan Admin. Kalau terisi, ini yang dipakai. */
+  koreksiMasuk?: string | null;
+  koreksiPulang?: string | null;
+  alasanKoreksi?: string;
+  isOverridden: boolean;
+
+  diimporOleh: string;
   createdAt?: unknown;
   updatedAt?: unknown;
 }
