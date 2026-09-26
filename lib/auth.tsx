@@ -100,7 +100,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Firebase gagal dinyalakan - biasanya Environment Variable belum terisi
       // atau aplikasi belum di-Redeploy sesudah variabelnya ditambahkan.
       setError(
-        "Pengaturan Firebase belum lengkap. Isi Environment Variable di Vercel, lalu Redeploy aplikasinya."
+        "Pengaturan Firebase belum terbaca. Di komputer: periksa berkas .env.local, lalu hentikan dan jalankan ulang npm run dev. Di Vercel: periksa Environment Variable, lalu Redeploy."
       );
       setLoading(false);
     }

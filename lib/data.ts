@@ -35,7 +35,14 @@ import type {
   StatusPayroll,
   TitikAbsen,
 } from "@/types";
-import { gabungTanggalJam, hitungJam, idAbsensi, NAMA_SESI, periksaSesi } from "@/lib/absensi";
+import {
+  gabungTanggalJam,
+  hitungJam,
+  idAbsensi,
+  keTanggal,
+  NAMA_SESI,
+  periksaSesi,
+} from "@/lib/absensi";
 import { hitungUpahKaryawan, segarkanItem } from "@/lib/payroll";
 
 /**
@@ -177,7 +184,7 @@ export async function hapusKaryawan(id: string) {
 function hariSebelum(tanggal: string): string {
   const d = new Date(`${tanggal}T00:00:00`);
   d.setDate(d.getDate() - 1);
-  return d.toISOString().slice(0, 10);
+  return keTanggal(d);
 }
 
 export function pantauTarif(

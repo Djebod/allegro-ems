@@ -26,6 +26,7 @@ import {
 import { useAuth } from "@/lib/auth";
 import { FOLDER_KTP, FOLDER_PROFIL } from "@/lib/cloudinary";
 import { bacaAngka, keRupiah, rupiahPenuh } from "@/lib/rupiah";
+import { tanggalHariIni } from "@/lib/absensi";
 import type {
   Employee,
   EmployeeAssignment,
@@ -35,7 +36,8 @@ import type {
   Section,
 } from "@/types";
 
-const hariIni = () => new Date().toISOString().slice(0, 10);
+// Memakai jam setempat, bukan UTC. Lihat keTanggal() di lib/absensi.ts.
+const hariIni = () => tanggalHariIni();
 
 function Isi({ kode }: { kode: string }) {
   const { profile } = useAuth();

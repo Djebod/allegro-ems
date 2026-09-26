@@ -5,7 +5,7 @@ import {
   MAX_REGULAR_HOURS_PER_DAY,
   MIN_OVERTIME_HOURS,
 } from "@/lib/constants";
-import { hitungJam } from "@/lib/absensi";
+import { hitungJam, keTanggal } from "@/lib/absensi";
 import type { Attendance, Employee, PayrollItem, SalaryRate } from "@/types";
 
 /** Senin pada minggu tanggal tertentu. */
@@ -14,13 +14,13 @@ export function seninMingguIni(acuan = new Date()): string {
   const hari = d.getDay(); // 0 = Minggu
   const mundur = hari === 0 ? 6 : hari - 1;
   d.setDate(d.getDate() - mundur);
-  return d.toISOString().slice(0, 10);
+  return keTanggal(d);
 }
 
 export function tambahHari(tanggal: string, jumlah: number): string {
   const d = new Date(`${tanggal}T00:00:00`);
   d.setDate(d.getDate() + jumlah);
-  return d.toISOString().slice(0, 10);
+  return keTanggal(d);
 }
 
 /** Tarif yang berlaku pada satu tanggal tertentu. */

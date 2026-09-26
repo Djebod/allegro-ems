@@ -28,11 +28,23 @@ export function idAbsensi(employeeId: string, tanggal: string): string {
   return `${employeeId}_${tanggal}`;
 }
 
-export function tanggalHariIni(): string {
-  const d = new Date();
+/**
+ * Mengubah Date menjadi "YYYY-MM-DD" menurut jam SETEMPAT.
+ *
+ * Jangan pernah memakai toISOString() untuk ini. Fungsi itu selalu
+ * mengubah ke UTC, sehingga di WIB (UTC+7) tengah malam terbaca sebagai
+ * pukul 17.00 hari sebelumnya — dan seluruh tanggalnya mundur sehari.
+ * Kekeliruan itu tidak terlihat di server berzona UTC, tetapi muncul di
+ * komputer siapa pun yang memakai waktu Indonesia.
+ */
+export function keTanggal(d: Date): string {
   const bulan = String(d.getMonth() + 1).padStart(2, "0");
   const hari = String(d.getDate()).padStart(2, "0");
   return `${d.getFullYear()}-${bulan}-${hari}`;
+}
+
+export function tanggalHariIni(): string {
+  return keTanggal(new Date());
 }
 
 export function jamDari(iso?: string | null): string {

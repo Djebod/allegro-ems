@@ -1,5 +1,6 @@
 "use client";
 
+import { keTanggal } from "@/lib/absensi";
 import type { HariLibur, PengajuanCuti, SaldoCuti } from "@/types";
 
 /** Jatah cuti tahunan menurut aturan perusahaan. */
@@ -212,7 +213,7 @@ export function hitungHariKerja(
   const akhir = new Date(`${selesai}T00:00:00`);
 
   while (d <= akhir) {
-    const iso = d.toISOString().slice(0, 10);
+    const iso = keTanggal(d);
     const minggu = d.getDay() === 0;
     if (!minggu && !tanggalLibur.has(iso)) jumlah += 1;
     d.setDate(d.getDate() + 1);
