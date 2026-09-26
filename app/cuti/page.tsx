@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { doc, getDoc } from "firebase/firestore";
 import Guard from "@/components/Guard";
@@ -199,6 +200,9 @@ function Isi() {
         <button className="btn-utama" onClick={() => setBuka(true)}>
           Ajukan cuti / izin
         </button>
+        <Link className="btn-ringan" href="/absen">
+          Absen saya
+        </Link>
 
         <div className="flex flex-wrap gap-x-8 gap-y-3 rounded-xl border border-line bg-white px-5 py-3">
           <div>

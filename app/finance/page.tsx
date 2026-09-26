@@ -12,6 +12,12 @@ const menu = [
     siap: true,
   },
   {
+    judul: "Absen Saya",
+    ket: "Absen masuk dan pulang untuk diri sendiri.",
+    href: "/absen",
+    siap: true,
+  },
+  {
     judul: "Rekap Absensi",
     ket: "Lihat absensi harian beserta bukti lokasi dan foto.",
     href: "/admin/absensi",

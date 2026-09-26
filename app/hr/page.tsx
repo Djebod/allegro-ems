@@ -9,6 +9,9 @@ const menu = [
   { judul: "Hari Libur", ket: "Libur nasional, cuti bersama, dan libur perusahaan.", href: "/hari-libur", siap: true },
   { judul: "Cuti & Izin Saya", ket: "Saldo dan pengajuan untuk diri sendiri.", href: "/cuti", siap: true },
   { judul: "Surat Peringatan", ket: "Catatan kedisiplinan, masa penilaian tiga bulan.", href: "/sp", siap: true },
+  { judul: "Kantor", ket: "Titik lokasi dan radius absensi staf kantor.", href: "/admin/kantor", siap: true },
+  { judul: "Absensi Kantor", ket: "Rekap kehadiran staf kantor beserta buktinya.", href: "/absensi-kantor", siap: true },
+  { judul: "Absen Saya", ket: "Absen masuk dan pulang untuk diri sendiri.", href: "/absen", siap: true },
   { judul: "Data Karyawan", ket: "Identitas, divisi, tarif, dan penugasan.", href: "/admin/karyawan", siap: true },
   { judul: "Payroll Bulanan", ket: "Menunggu rumus potongan telat.", href: "#", siap: false },
 ];

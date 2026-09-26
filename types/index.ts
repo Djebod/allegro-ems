@@ -109,7 +109,10 @@ export interface Employee {
   /** Rekening perusahaan yang dipakai membayar orang ini. */
   rekeningPembayar?: string;
 
-  /* --- Jadwal kerja kantor. Dipakai menafsirkan cap waktu mesin. --- */
+  /** Kantor tempat orang ini absen. Kosong berarti pekerja lapangan. */
+  kantorId?: string;
+
+  /* --- Jadwal kerja kantor --- */
   jamMasuk?: string;
   jamPulang?: string;
   /** Sabtu pulang lebih awal: admin 12.00, planner 15.00. */
@@ -493,6 +496,73 @@ export interface SuratPeringatan {
   alasanPencabutan?: string;
 
   diterbitkanOleh: string;
+  createdAt?: unknown;
+  updatedAt?: unknown;
+}
+
+/* ---------------- Kantor ---------------- */
+
+/** ID dokumen = kode kantor, mis. "BDG" atau "JKT". */
+export interface Kantor {
+  id: string;
+  code: string;
+  nama: string;
+  alamat: string;
+  latitude: number;
+  longitude: number;
+  radiusMeter: number;
+  status: "ACTIVE" | "INACTIVE";
+  createdAt?: unknown;
+  updatedAt?: unknown;
+}
+
+/* ---------------- Absensi kantor ---------------- */
+
+export interface EventAbsenKantor {
+  waktu: string;
+  recordedAt?: unknown;
+  location: TitikAbsen;
+  photoUrl: string;
+  /** Absen dari luar jangkauan kantor mana pun. */
+  diLuarRadius: boolean;
+  /** Wajib diisi bila di luar radius. */
+  alasan: string;
+  /** Kantor terdekat yang dipakai mengukur jarak. */
+  kantorId: string;
+  kantorNama: string;
+}
+
+export type StatusAbsenKantor = "HADIR" | "SELESAI";
+
+/** ID dokumen = "<kodeKaryawan>_<YYYY-MM-DD>". */
+export interface AbsenKantor {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  divisi: string;
+  date: string;
+
+  masuk: EventAbsenKantor | null;
+  pulang: EventAbsenKantor | null;
+
+  jadwalMasuk: string;
+  jadwalPulang: string;
+
+  workHours: number;
+  terlambatMenit: number;
+  pulangCepatMenit: number;
+  status: StatusAbsenKantor;
+
+  /** Ada sesi di luar radius yang menunggu keputusan Admin. */
+  perluValidasi: boolean;
+  hasilValidasi?: "DITERIMA" | "DITOLAK" | null;
+  catatanValidasi?: string;
+
+  koreksiMasuk?: string | null;
+  koreksiPulang?: string | null;
+  alasanKoreksi?: string;
+  isOverridden: boolean;
+
   createdAt?: unknown;
   updatedAt?: unknown;
 }

@@ -210,6 +210,16 @@ Kategori **wajib dipilih dari daftar**, tidak boleh diketik bebas — kalau beba
 
 GPS wajib, radius per proyek (bawaan 1.000 m), foto wajib dari kamera belakang, satu foto per orang per sesi. Mandor mencatat timnya dan dirinya sendiri. Urutan sesi tidak bisa dilompati.
 
+### Absensi kantor
+
+Mesin fingerprint **tidak dipakai lagi**. Staf kantor absen sendiri lewat HP:
+
+- Hanya **masuk dan pulang**. Istirahat tidak diabsenkan — satu jam dipotong otomatis untuk hari lebih panjang dari enam jam
+- **Swafoto wajib** (kamera depan). Tanpa sidik jari, foto adalah satu-satunya bukti orangnya sendiri yang absen
+- GPS diukur ke **seluruh kantor aktif**, dipakai yang terdekat. Orang Bandung yang sedang di kantor Jakarta tetap terhitung di kantor
+- Di luar jangkauan **boleh**, wajib alasan, lalu ditandai untuk diputuskan Admin
+- Kantor adalah data (`offices`), bukan angka di kode — bisa ditambah kapan saja
+
 ### Kasbon
 
 Satu karyawan satu bon aktif. Bisa dicicil; besarnya dibulatkan ke atas supaya cicilan terakhir yang mengecil. Potongan tidak pernah melebihi upah periode itu.
@@ -279,7 +289,6 @@ npm run uji
 - **Tarif lembur** hari kerja dan hari libur
 - Apakah **SP mempengaruhi gaji** atau hanya dicatat
 - Apakah **rekening pembayar** tetap per orang atau berpindah tiap periode
-- Cara **staf kantor mencatat kehadiran** setelah mesin fingerprint tidak dipakai
 
 Kalau salah satunya terjawab, perbarui berkas ini.
 

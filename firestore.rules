@@ -2,7 +2,7 @@ rules_version = '2';
 
 // ============================================================
 //  ABSENSI & PAYROLL PROYEK — Allegro Global Construction
-//  Security Rules — Tahap 13 (mesin fingerprint tidak dipakai lagi)
+//  Security Rules — Tahap 14 (absensi kantor mandiri)
 //  users, projects, sections, employees, employeePrivate,
 //  salaryRates, employeeAssignments, attendance, attendanceCorrections,
 //  employeeLoans, loanLocks, loanRepayments, payroll, payrollItems
@@ -606,6 +606,64 @@ service cloud.firestore {
         && request.resource.data.tanggalTerbit == resource.data.tanggalTerbit
         && request.resource.data.berlakuSampai == resource.data.berlakuSampai
         && request.resource.data.uraian == resource.data.uraian;
+
+      allow delete: if false;
+    }
+
+    // ---------- kantor ----------
+    match /offices/{kantorId} {
+      // Semua orang yang absen perlu membacanya untuk mengukur jarak.
+      allow read: if pegawaiAktif();
+      allow create, update: if urusKepegawaian()
+        && request.resource.data.nama is string
+        && request.resource.data.nama.size() > 0
+        && request.resource.data.latitude is number
+        && request.resource.data.longitude is number
+        && request.resource.data.radiusMeter is number
+        && request.resource.data.radiusMeter >= 20
+        && request.resource.data.radiusMeter <= 2000;
+      allow delete: if false;
+    }
+
+    // ---------- absensi kantor ----------
+    function absenKantorSah() {
+      let d = request.resource.data;
+      return d.employeeId is string && d.employeeId.size() > 0
+        && d.date is string && d.date.size() == 10
+        && d.workHours is number && d.workHours >= 0
+        && d.terlambatMenit is number && d.terlambatMenit >= 0
+        && d.status in ['HADIR', 'SELESAI']
+        && d.isOverridden is bool;
+    }
+
+    match /officeAttendance/{absenId} {
+      allow read: if urusKepegawaian()
+        || isFinance()
+        || (sudahLogin() && resource != null && resource.data.employeeId == karyawanSaya());
+
+      // Absen hanya untuk diri sendiri. ID wajib "<kode>_<tanggal>",
+      // jadi satu orang mustahil punya dua catatan di satu hari — termasuk
+      // kalau tombolnya tertekan dua kali.
+      allow create: if sudahLogin()
+        && absenKantorSah()
+        && absenId == request.resource.data.employeeId + '_' + request.resource.data.date
+        && (urusKepegawaian() || request.resource.data.employeeId == karyawanSaya());
+
+      // Pemiliknya boleh menambah sesi pada catatan hari itu, tetapi tidak
+      // boleh menyentuh koreksi dan hasil validasi — itu wilayah Admin.
+      allow update: if absenKantorSah()
+        && request.resource.data.employeeId == resource.data.employeeId
+        && request.resource.data.date == resource.data.date
+        && (
+          urusKepegawaian()
+          || (
+            resource.data.employeeId == karyawanSaya()
+            && request.resource.data.isOverridden == resource.data.isOverridden
+            && request.resource.data.koreksiMasuk == resource.data.koreksiMasuk
+            && request.resource.data.koreksiPulang == resource.data.koreksiPulang
+            && request.resource.data.hasilValidasi == resource.data.hasilValidasi
+          )
+        );
 
       allow delete: if false;
     }

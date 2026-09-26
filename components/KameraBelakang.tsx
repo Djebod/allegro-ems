@@ -12,11 +12,14 @@ import { useEffect, useRef, useState } from "react";
 export default function KameraBelakang({
   terbuka,
   judul,
+  arah = "belakang",
   onFoto,
   onBatal,
 }: {
   terbuka: boolean;
   judul: string;
+  /** Belakang untuk memotret orang lain, depan untuk swafoto sendiri. */
+  arah?: "depan" | "belakang";
   onFoto: (file: File) => void;
   onBatal: () => void;
 }) {
@@ -35,7 +38,7 @@ export default function KameraBelakang({
       setSiap(false);
       try {
         const s = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: "environment" } },
+          video: { facingMode: { ideal: arah === "depan" ? "user" : "environment" } },
           audio: false,
         });
         if (batal) {
@@ -58,7 +61,7 @@ export default function KameraBelakang({
       aliran.current?.getTracks().forEach((t) => t.stop());
       aliran.current = null;
     };
-  }, [terbuka]);
+  }, [terbuka, arah]);
 
   function ambil() {
     const v = video.current;
@@ -113,7 +116,7 @@ export default function KameraBelakang({
           ref={cadangan}
           type="file"
           accept="image/*"
-          capture="environment"
+          capture={arah === "depan" ? "user" : "environment"}
           className="hidden"
           onChange={(e) => {
             const f = e.target.files?.[0];
