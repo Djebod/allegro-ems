@@ -1,0 +1,612 @@
+rules_version = '2';
+
+// ============================================================
+//  ABSENSI & PAYROLL PROYEK — Allegro Global Construction
+//  Security Rules — Tahap 11 (HRIS: cuti, izin, surat peringatan)
+//  users, projects, sections, employees, employeePrivate,
+//  salaryRates, employeeAssignments, attendance, attendanceCorrections,
+//  employeeLoans, loanLocks, loanRepayments, payroll, payrollItems
+//
+//  Prinsip: DEFAULT DENY. Semua yang tidak disebut di sini ditolak.
+//  Menu yang disembunyikan di layar BUKAN keamanan. Aturan di file
+//  inilah yang benar-benar menjaga data.
+// ============================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------- fungsi bantu ----------
+    function emailSuperAdmin() {
+      return 'syam.rakhmany@gmail.com';
+    }
+
+    function sudahLogin() {
+      return request.auth != null;
+    }
+
+    function emailUser() {
+      return request.auth.token.email.lower();
+    }
+
+    function profilSaya() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function berperan(peran) {
+      return sudahLogin()
+        && profilSaya().status == 'ACTIVE'
+        && profilSaya().role == peran;
+    }
+
+    function isAdmin()   { return berperan('ADMIN'); }
+    function isFinance() { return berperan('FINANCE'); }
+    function isMandor()  { return berperan('MANDOR'); }
+    function isHR()      { return berperan('HR'); }
+    function isOwner()   { return berperan('OWNER'); }
+
+    /** Yang mengurus kepegawaian: HR, Owner, dan Admin sistem. */
+    function urusKepegawaian() {
+      return isAdmin() || isHR() || isOwner();
+    }
+
+    /** Kode karyawan yang tersambung ke akun yang sedang login. */
+    function karyawanSaya() {
+      return profilSaya().employeeId;
+    }
+
+    /** Siapa saja yang sudah diberi peran dan masih aktif. */
+    function pegawaiAktif() {
+      return sudahLogin() && profilSaya().status == 'ACTIVE' && profilSaya().role != 'PENDING';
+    }
+
+    // ---------- users ----------
+    match /users/{uid} {
+
+      allow read: if sudahLogin() && (request.auth.uid == uid || isAdmin());
+
+      // Pendaftaran diri sendiri saat login Google pertama kali.
+      // Semua orang masuk sebagai PENDING, kecuali super admin.
+      allow create: if sudahLogin()
+        && request.auth.uid == uid
+        && request.resource.data.email == emailUser()
+        && request.resource.data.projectIds.size() == 0
+        && request.resource.data.sectionIds.size() == 0
+        && (
+          (emailUser() == emailSuperAdmin()
+            && request.resource.data.role == 'ADMIN'
+            && request.resource.data.status == 'ACTIVE')
+          ||
+          (emailUser() != emailSuperAdmin()
+            && request.resource.data.role == 'PENDING'
+            && request.resource.data.status == 'PENDING')
+        );
+
+      allow update: if isAdmin()
+        && request.resource.data.email == resource.data.email
+        && (resource.data.email != emailSuperAdmin() || emailUser() == emailSuperAdmin());
+
+      allow delete: if false;
+    }
+
+    // ---------- projects ----------
+    function proyekSah() {
+      let d = request.resource.data;
+      return d.code is string && d.code.size() > 0
+        && d.name is string && d.name.size() > 0
+        && d.address is string
+        && d.latitude is number && d.latitude >= -90 && d.latitude <= 90
+        && d.longitude is number && d.longitude >= -180 && d.longitude <= 180
+        && d.attendanceRadiusMeter is number
+        && d.attendanceRadiusMeter >= 50 && d.attendanceRadiusMeter <= 5000
+        && d.status in ['ACTIVE', 'COMPLETED', 'SUSPENDED', 'ARCHIVED'];
+    }
+
+    match /projects/{projectId} {
+      // Mandor ikut boleh membaca: koordinat proyek dibutuhkan saat absensi.
+      allow read: if pegawaiAktif();
+
+      // Kode proyek = ID dokumen, jadi keunikannya dijamin Firestore.
+      allow create: if isAdmin() && proyekSah() && request.resource.data.code == projectId;
+
+      // Kode tidak boleh berubah setelah dibuat.
+      allow update: if isAdmin() && proyekSah() && request.resource.data.code == resource.data.code;
+
+      // Proyek tidak dihapus, cukup diubah statusnya jadi ARCHIVED.
+      allow delete: if false;
+    }
+
+    // ---------- sections ----------
+    function sectionSah() {
+      let d = request.resource.data;
+      return d.projectId is string && d.projectId.size() > 0
+        && d.code is string && d.code.size() > 0
+        && d.name is string && d.name.size() > 0
+        && d.status in ['ACTIVE', 'INACTIVE'];
+    }
+
+    match /sections/{sectionId} {
+      allow read: if pegawaiAktif();
+      allow create: if isAdmin() && sectionSah();
+      allow update: if isAdmin() && sectionSah()
+        && request.resource.data.code == resource.data.code
+        && request.resource.data.projectId == resource.data.projectId;
+      allow delete: if false;
+    }
+
+    // ---------- employees ----------
+    function karyawanSah() {
+      let d = request.resource.data;
+      return d.employeeCode is string && d.employeeCode.size() > 0
+        && d.name is string && d.name.size() > 0
+        && d.nik is string && d.nik.size() == 16
+        && d.position in ['MANDOR', 'TUKANG', 'KENEK']
+        && d.status in ['ACTIVE', 'INACTIVE'];
+    }
+
+    match /employees/{employeeId} {
+      // Mandor hanya boleh membaca karyawan yang sedang ditugaskan
+      // kepadanya. Kolom currentMandorId adalah cerminan penugasan yang
+      // sedang berjalan; histori lengkapnya ada di employeeAssignments.
+      allow read: if isAdmin()
+        || isFinance()
+        || isHR()
+        || isOwner()
+        // Setiap orang boleh membaca data karyawannya sendiri - itu yang
+        // dipakai halaman Cuti Saya untuk tahu divisi dan tanggal masuk.
+        || (sudahLogin() && employeeId == karyawanSaya())
+        || (isMandor()
+            && resource != null
+            && resource.data.currentMandorId == profilSaya().employeeId);
+
+      allow create: if isAdmin() && karyawanSah()
+        && request.resource.data.employeeCode == employeeId;
+
+      allow update: if isAdmin() && karyawanSah()
+        && request.resource.data.employeeCode == resource.data.employeeCode
+        && request.resource.data.nik == resource.data.nik;
+
+      // Hanya boleh dihapus kalau memang salah input dan belum dipakai
+      // di mana pun. Setelah ada absensi, karyawan cukup dinonaktifkan.
+      allow delete: if isAdmin();
+    }
+
+    // ---------- employeePrivate (foto KTP) ----------
+    // Sengaja dipisah dari employees supaya Finance dan Mandor tidak
+    // ikut membacanya. KTP adalah identitas resmi, bukan data operasional.
+    match /employeePrivate/{employeeId} {
+      allow read, write: if isAdmin();
+    }
+
+    // ---------- salaryRates ----------
+    function tarifSah() {
+      let d = request.resource.data;
+      return d.employeeId is string && d.employeeId.size() > 0
+        && d.paymentMode in ['DAILY', 'HOURLY']
+        && d.dailyRate is number && d.dailyRate >= 0
+        && d.hourlyRate is number && d.hourlyRate >= 0
+        && d.overtimeHourlyRate is number && d.overtimeHourlyRate >= 0
+        && d.effectiveFrom is string && d.effectiveFrom.size() == 10;
+    }
+
+    match /salaryRates/{rateId} {
+      // Mandor tidak boleh melihat gaji siapa pun, termasuk gajinya sendiri
+      // lewat jalur ini. Itu urusan Admin dan Finance.
+      allow read: if isAdmin() || isFinance();
+
+      allow create: if isAdmin() && tarifSah() && request.resource.data.effectiveUntil == null;
+
+      // Satu-satunya perubahan yang diizinkan: menutup masa berlaku.
+      // Angkanya sendiri tidak boleh diubah, karena payroll lama memakainya.
+      allow update: if isAdmin()
+        && request.resource.data.employeeId == resource.data.employeeId
+        && request.resource.data.paymentMode == resource.data.paymentMode
+        && request.resource.data.dailyRate == resource.data.dailyRate
+        && request.resource.data.hourlyRate == resource.data.hourlyRate
+        && request.resource.data.overtimeHourlyRate == resource.data.overtimeHourlyRate
+        && request.resource.data.effectiveFrom == resource.data.effectiveFrom;
+
+      allow delete: if false;
+    }
+
+    // ---------- employeeAssignments ----------
+    function penugasanSah() {
+      let d = request.resource.data;
+      return d.employeeId is string && d.employeeId.size() > 0
+        && d.projectId is string && d.projectId.size() > 0
+        && d.sectionId is string && d.sectionId.size() > 0
+        && d.mandorId is string && d.mandorId.size() > 0
+        // Penanggung jawab tidak boleh diri sendiri, KECUALI orang itu
+        // memang seorang mandor. Mandor mengabsen dirinya sendiri, dan
+        // kolom inilah yang dipakai untuk menentukan hak bacanya.
+        && (
+          d.mandorId != d.employeeId
+          || get(/databases/$(database)/documents/employees/$(d.employeeId)).data.position == 'MANDOR'
+        )
+        && d.effectiveFrom is string && d.effectiveFrom.size() == 10
+        && d.status in ['ACTIVE', 'ENDED'];
+    }
+
+    match /employeeAssignments/{assignmentId} {
+      allow read: if isAdmin()
+        || isFinance()
+        || (isMandor()
+            && resource != null
+            && resource.data.mandorId == profilSaya().employeeId);
+
+      allow create: if isAdmin() && penugasanSah()
+        && request.resource.data.status == 'ACTIVE'
+        && request.resource.data.effectiveUntil == null;
+
+      // Hanya untuk menutup penugasan. Isi penugasannya tidak boleh diubah,
+      // supaya histori penempatan tetap sesuai kenyataan.
+      allow update: if isAdmin()
+        && request.resource.data.employeeId == resource.data.employeeId
+        && request.resource.data.projectId == resource.data.projectId
+        && request.resource.data.sectionId == resource.data.sectionId
+        && request.resource.data.mandorId == resource.data.mandorId
+        && request.resource.data.effectiveFrom == resource.data.effectiveFrom;
+
+      allow delete: if false;
+    }
+
+    // ---------- attendance ----------
+    function radiusProyek(projectId) {
+      return get(/databases/$(database)/documents/projects/$(projectId)).data.attendanceRadiusMeter;
+    }
+
+    function absensiSah() {
+      let d = request.resource.data;
+      return d.employeeId is string && d.employeeId.size() > 0
+        && d.date is string && d.date.size() == 10
+        && d.projectId is string && d.projectId.size() > 0
+        && d.mandorId is string && d.mandorId.size() > 0
+        && d.workHours is number && d.workHours >= 0
+        && d.overtimeHours is number && d.overtimeHours >= 0
+        && d.status in ['BELUM', 'HADIR', 'TIDAK_LENGKAP', 'SELESAI'];
+    }
+
+    /** Jarak sesi yang baru ditulis harus di dalam radius proyek. */
+    function jarakWajar() {
+      let t = request.resource.data.terakhir;
+      return t == null
+        || (t.jarakMeter is number
+            && t.jarakMeter >= 0
+            && t.jarakMeter <= radiusProyek(request.resource.data.projectId));
+    }
+
+    match /attendance/{absenId} {
+      // Catatan: "resource == null" berarti dokumennya belum ada. Itu
+      // keadaan normal saat absen pertama hari itu diperiksa lebih dulu,
+      // dan harus dijawab "boleh" — bukan dibiarkan jadi galat, karena
+      // galat di dalam rules ikut terbaca sebagai penolakan izin.
+      allow read: if isAdmin()
+        || isFinance()
+        || (isMandor()
+            && (resource == null || resource.data.mandorId == profilSaya().employeeId));
+
+      // ID dokumen wajib "<employeeId>_<tanggal>". Inilah yang membuat
+      // satu orang mustahil punya dua catatan di hari yang sama, termasuk
+      // ketika sinyal putus lalu aplikasi mengirim ulang.
+      allow create: if (isAdmin() || isMandor())
+        && absensiSah()
+        && jarakWajar()
+        && absenId == request.resource.data.employeeId + '_' + request.resource.data.date
+        && (isAdmin() || request.resource.data.mandorId == profilSaya().employeeId);
+
+      // Mandor hanya boleh menambah sesi pada catatan miliknya sendiri,
+      // dan tidak boleh memindahkan catatan itu ke orang atau hari lain.
+      allow update: if (isAdmin() || isMandor())
+        && absensiSah()
+        && jarakWajar()
+        && request.resource.data.employeeId == resource.data.employeeId
+        && request.resource.data.date == resource.data.date
+        && request.resource.data.mandorId == resource.data.mandorId
+        && (
+          isAdmin()
+          || (
+            resource.data.mandorId == profilSaya().employeeId
+            // Setelah Admin mengoreksi, mandor tidak bisa menulis lagi
+            // pada catatan itu. Kalau masih ada yang keliru, jalurnya
+            // lewat Admin, supaya tetap berjejak.
+            && resource.data.isOverridden == false
+          )
+        );
+
+      // Absensi tidak dihapus. Kalau salah, jalurnya koreksi ber-audit.
+      allow delete: if false;
+    }
+
+    // ---------- attendanceCorrections (jejak audit) ----------
+    function koreksiSah() {
+      let d = request.resource.data;
+      return d.attendanceId is string && d.attendanceId.size() > 0
+        && d.employeeId is string && d.employeeId.size() > 0
+        && d.date is string && d.date.size() == 10
+        && d.field in ['checkIn', 'breakStart', 'breakEnd', 'checkOut',
+                       'overtimeStart', 'overtimeEnd']
+        && d.hasil in ['VALID', 'TIDAK_VALID']
+        && d.approvedBy is string && d.approvedBy.size() > 0
+        // Penilaian "tidak valid" tidak boleh sekadar diklik: wajib
+        // menyebut alasannya dan melampirkan bukti. Ini ditegakkan di
+        // server, bukan hanya di formulir, supaya tidak bisa dilewati.
+        && (
+          d.hasil == 'VALID'
+          || (d.alasan is string && d.alasan.size() > 0
+              && d.attachmentUrl is string && d.attachmentUrl.size() > 0)
+        );
+    }
+
+    match /attendanceCorrections/{koreksiId} {
+      allow read: if isAdmin() || isFinance();
+      allow create: if isAdmin() && koreksiSah();
+
+      // Jejak audit bersifat tambah-saja. Sekali tertulis, tidak bisa
+      // diubah maupun dihapus oleh siapa pun, termasuk Admin.
+      allow update, delete: if false;
+    }
+
+    // ---------- bon karyawan ----------
+    function bonSah() {
+      let d = request.resource.data;
+      return d.employeeId is string && d.employeeId.size() > 0
+        && d.employeeName is string && d.employeeName.size() > 0
+        && d.originalAmount is number && d.originalAmount > 0
+        && d.remainingAmount is number
+        && d.remainingAmount >= 0
+        && d.remainingAmount <= d.originalAmount
+        && d.loanDate is string && d.loanDate.size() == 10
+        && d.status in ['OPEN', 'PARTIALLY_PAID', 'PAID', 'CANCELLED'];
+    }
+
+    match /employeeLoans/{bonId} {
+      // Karyawan tidak punya akses; bon adalah urusan Admin dan Finance.
+      allow read: if isAdmin() || isFinance() || isOwner();
+      allow create: if (isAdmin() || isFinance()) && bonSah();
+
+      // Nominal asli dan pemiliknya tidak boleh berubah. Yang boleh
+      // berubah hanya sisa dan statusnya, karena itulah yang bergerak
+      // setiap kali ada pembayaran.
+      allow update: if (isAdmin() || isFinance()) && bonSah()
+        && request.resource.data.employeeId == resource.data.employeeId
+        && request.resource.data.originalAmount == resource.data.originalAmount
+        && request.resource.data.loanDate == resource.data.loanDate;
+
+      // Bon tidak dihapus. Yang salah dibatalkan, jejaknya tetap ada.
+      allow delete: if false;
+    }
+
+    // ---------- loanLocks (penjaga satu bon aktif) ----------
+    // ID dokumennya adalah kode karyawan. Karena Firestore menolak
+    // "create" pada dokumen yang sudah ada, bon aktif kedua mustahil
+    // terbentuk - bahkan bila dua orang menyimpan pada detik yang sama.
+    match /loanLocks/{employeeId} {
+      allow read: if isAdmin() || isFinance();
+      allow create: if (isAdmin() || isFinance())
+        && request.resource.data.employeeId == employeeId;
+      allow update: if false;
+      // Dihapus saat bon lunas atau dibatalkan, supaya karyawan itu
+      // boleh mengajukan bon berikutnya.
+      allow delete: if isAdmin() || isFinance();
+    }
+
+    // ---------- loanRepayments ----------
+    match /loanRepayments/{bayarId} {
+      allow read: if isAdmin() || isFinance();
+      allow create: if (isAdmin() || isFinance())
+        && request.resource.data.loanId is string
+        && request.resource.data.amount is number
+        && request.resource.data.amount > 0;
+      // Catatan pembayaran bersifat tambah-saja, sama seperti jejak audit.
+      allow update, delete: if false;
+    }
+
+    // ---------- payroll ----------
+    function statusPayroll(payrollId) {
+      return get(/databases/$(database)/documents/payroll/$(payrollId)).data.status;
+    }
+
+    function payrollSah() {
+      let d = request.resource.data;
+      return d.projectId is string && d.projectId.size() > 0
+        && d.sectionId is string && d.sectionId.size() > 0
+        && d.periodStart is string && d.periodStart.size() == 10
+        && d.periodEnd is string && d.periodEnd.size() == 10
+        && d.periodEnd > d.periodStart
+        && d.status in ['DRAFT', 'REVIEW', 'APPROVED', 'PAID', 'LOCKED']
+        && d.totalNetPay is number;
+    }
+
+    match /payroll/{payrollId} {
+      allow read: if isAdmin() || isFinance() || isOwner();
+
+      // ID dokumen mengunci satu periode per section, sehingga periode
+      // yang sama tidak bisa dihitung dua kali.
+      allow create: if (isAdmin() || isFinance())
+        && payrollSah()
+        && request.resource.data.status == 'DRAFT'
+        && payrollId == request.resource.data.projectId + '__'
+                      + request.resource.data.sectionId + '__'
+                      + request.resource.data.periodStart;
+
+      // Periode, proyek, dan section tidak boleh bergeser setelah dibuat.
+      // Payroll yang sudah LOCKED tidak bisa disentuh siapa pun.
+      allow update: if (isAdmin() || isFinance())
+        && payrollSah()
+        && resource.data.status != 'LOCKED'
+        && request.resource.data.projectId == resource.data.projectId
+        && request.resource.data.sectionId == resource.data.sectionId
+        && request.resource.data.periodStart == resource.data.periodStart
+        && request.resource.data.periodEnd == resource.data.periodEnd;
+
+      // Boleh dihapus hanya selagi DRAFT, untuk membatalkan salah hitung.
+      // Sesudah disahkan, payroll adalah catatan pembayaran upah -
+      // menghapusnya berarti menghapus bukti, jadi tidak diizinkan
+      // walaupun oleh Admin.
+      allow delete: if (isAdmin() || isFinance()) && resource.data.status == 'DRAFT';
+    }
+
+    // ---------- payrollItems ----------
+    match /payrollItems/{itemId} {
+      allow read: if isAdmin() || isFinance() || isOwner();
+
+      allow create: if (isAdmin() || isFinance())
+        && request.resource.data.payrollId is string
+        && request.resource.data.employeeId is string
+        && request.resource.data.netPay is number;
+
+      // Hanya boleh disesuaikan selagi DRAFT atau REVIEW, dan hanya
+      // bagian tambahan/potongannya. Jam kerja dan tarif adalah salinan
+      // dari absensi serta tarif yang berlaku saat itu - kalau keduanya
+      // bisa diketik ulang, seluruh gunanya snapshot hilang.
+      allow update: if (isAdmin() || isFinance())
+        && statusPayroll(resource.data.payrollId) in ['DRAFT', 'REVIEW']
+        && request.resource.data.payrollId == resource.data.payrollId
+        && request.resource.data.employeeId == resource.data.employeeId
+        && request.resource.data.totalWorkDays == resource.data.totalWorkDays
+        && request.resource.data.totalWorkHours == resource.data.totalWorkHours
+        && request.resource.data.totalOvertimeHours == resource.data.totalOvertimeHours
+        && request.resource.data.dailyRate == resource.data.dailyRate
+        && request.resource.data.hourlyRate == resource.data.hourlyRate
+        && request.resource.data.overtimeHourlyRate == resource.data.overtimeHourlyRate
+        && request.resource.data.regularPay == resource.data.regularPay
+        && request.resource.data.overtimePay == resource.data.overtimePay;
+
+      allow delete: if (isAdmin() || isFinance())
+        && statusPayroll(resource.data.payrollId) == 'DRAFT';
+    }
+
+    // ---------- hari libur ----------
+    // Tanggal dipakai sebagai ID dokumen, jadi satu tanggal tidak bisa
+    // terdaftar dua kali.
+    match /holidays/{tanggal} {
+      allow read: if pegawaiAktif();
+      allow create: if urusKepegawaian()
+        && request.resource.data.tanggal == tanggal
+        && request.resource.data.nama is string
+        && request.resource.data.nama.size() > 0
+        && request.resource.data.jenis in ['NASIONAL', 'CUTI_BERSAMA', 'PERUSAHAAN'];
+      allow update, delete: if urusKepegawaian();
+    }
+
+    // ---------- saldo cuti ----------
+    function saldoSah() {
+      let d = request.resource.data;
+      return d.employeeId is string && d.employeeId.size() > 0
+        && d.tahun is number
+        && d.jatahTahunan is number && d.jatahTahunan >= 0
+        && d.penyesuaian is number
+        && d.tahunanTerpakai is number && d.tahunanTerpakai >= 0
+        && d.jatahSakit is number && d.jatahSakit >= 0
+        && d.sakitTerpakai is number && d.sakitTerpakai >= 0;
+    }
+
+    match /leaveBalances/{saldoId} {
+      // Karyawan hanya boleh melihat saldonya sendiri.
+      allow read: if urusKepegawaian()
+        || (sudahLogin() && resource != null && resource.data.employeeId == karyawanSaya());
+
+      // Saldo tidak boleh diubah oleh pemiliknya sendiri, hanya oleh HR.
+      allow create, update: if urusKepegawaian() && saldoSah()
+        // Bagian sebelum garis bawah wajib kode karyawannya, supaya satu
+        // orang tidak bisa punya dua kartu di tahun yang sama.
+        && saldoId.split('_')[0] == request.resource.data.employeeId;
+      allow delete: if false;
+    }
+
+    // ---------- pengajuan cuti & izin ----------
+    function pengajuanSah() {
+      let d = request.resource.data;
+      return d.employeeId is string && d.employeeId.size() > 0
+        && d.jenis is string && d.jenis.size() > 0
+        && d.tanggalMulai is string && d.tanggalMulai.size() == 10
+        && d.tanggalSelesai is string && d.tanggalSelesai.size() == 10
+        && d.tanggalSelesai >= d.tanggalMulai
+        && d.jumlahHari is number && d.jumlahHari >= 0
+        && d.alasan is string && d.alasan.size() > 0
+        && d.status in ['DIAJUKAN', 'DISETUJUI', 'DITOLAK', 'DIBATALKAN'];
+    }
+
+    match /leaveRequests/{pengajuanId} {
+      allow read: if urusKepegawaian()
+        || (sudahLogin() && resource != null && resource.data.employeeId == karyawanSaya());
+
+      // Mengajukan hanya untuk diri sendiri, dan selalu lahir sebagai
+      // DIAJUKAN - tidak bisa langsung menyetujui cuti sendiri.
+      allow create: if sudahLogin()
+        && pengajuanSah()
+        && request.resource.data.employeeId == karyawanSaya()
+        && request.resource.data.status == 'DIAJUKAN'
+        && request.resource.data.saldoDipotong == false;
+
+      // Keputusan hanya oleh HR/Owner/Admin. Pemiliknya sendiri hanya
+      // boleh membatalkan, bukan mengubah isinya.
+      allow update: if pengajuanSah()
+        && request.resource.data.employeeId == resource.data.employeeId
+        && request.resource.data.tanggalMulai == resource.data.tanggalMulai
+        && request.resource.data.tanggalSelesai == resource.data.tanggalSelesai
+        && request.resource.data.jumlahHari == resource.data.jumlahHari
+        && (
+          urusKepegawaian()
+          || (
+            resource.data.employeeId == karyawanSaya()
+            && request.resource.data.status == 'DIBATALKAN'
+          )
+        );
+
+      allow delete: if false;
+    }
+
+    // ---------- kategori masalah SP ----------
+    match /spCategories/{kategoriId} {
+      allow read: if pegawaiAktif();
+      allow create, update: if urusKepegawaian()
+        && request.resource.data.nama is string
+        && request.resource.data.nama.size() > 0;
+      // Kategori tidak dihapus, cukup dinonaktifkan - surat peringatan
+      // lama masih menunjuk ke sini.
+      allow delete: if false;
+    }
+
+    // ---------- surat peringatan ----------
+    function spSah() {
+      let d = request.resource.data;
+      return d.employeeId is string && d.employeeId.size() > 0
+        && d.kategoriId is string && d.kategoriId.size() > 0
+        && d.tingkat is number && d.tingkat >= 1 && d.tingkat <= 3
+        && d.tanggalTerbit is string && d.tanggalTerbit.size() == 10
+        && d.berlakuSampai is string && d.berlakuSampai.size() == 10
+        && d.berlakuSampai > d.tanggalTerbit
+        && d.uraian is string && d.uraian.size() > 0
+        && d.dicabut is bool;
+    }
+
+    match /warningLetters/{spId} {
+      // Karyawan boleh membaca surat peringatan atas namanya sendiri.
+      allow read: if urusKepegawaian()
+        || (sudahLogin() && resource != null && resource.data.employeeId == karyawanSaya());
+
+      allow create: if urusKepegawaian()
+        && spSah()
+        && request.resource.data.dicabut == false;
+
+      // Yang boleh berubah hanya pencabutannya. Isi suratnya beku —
+      // kalau uraian dan tingkatnya bisa diubah belakangan, catatan
+      // kedisiplinan kehilangan artinya.
+      allow update: if urusKepegawaian()
+        && spSah()
+        && request.resource.data.employeeId == resource.data.employeeId
+        && request.resource.data.kategoriId == resource.data.kategoriId
+        && request.resource.data.tingkat == resource.data.tingkat
+        && request.resource.data.tanggalTerbit == resource.data.tanggalTerbit
+        && request.resource.data.berlakuSampai == resource.data.berlakuSampai
+        && request.resource.data.uraian == resource.data.uraian;
+
+      allow delete: if false;
+    }
+
+    // ---------- koleksi lain masih ditutup ----------
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

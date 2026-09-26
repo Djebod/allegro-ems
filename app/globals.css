@@ -1,0 +1,68 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-surface text-ink antialiased;
+  }
+  :focus-visible {
+    @apply outline outline-2 outline-offset-2 outline-allegro-600;
+  }
+}
+
+@layer components {
+  .btn-utama {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-allegro-700 px-4 py-2.5
+           text-sm font-semibold text-white transition-colors hover:bg-allegro-800
+           disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-lapangan {
+    @apply inline-flex w-full items-center justify-center rounded-xl bg-kuning-400 px-5 py-4
+           text-base font-bold text-allegro-800 transition-colors hover:bg-kuning-300
+           disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-kuning {
+    @apply inline-flex items-center justify-center rounded-lg bg-kuning-400 px-3 py-1.5
+           text-xs font-bold text-allegro-800 transition-colors hover:bg-kuning-300
+           disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-ringan {
+    @apply inline-flex items-center justify-center rounded-lg border border-line bg-white
+           px-3 py-2 text-sm font-medium text-ink transition-colors hover:bg-surface;
+  }
+  .kartu {
+    @apply rounded-xl border border-line bg-white p-5;
+  }
+  .input-dasar {
+    @apply w-full rounded-lg border border-line bg-white px-3 py-2 text-sm text-ink
+           focus:border-allegro-600 focus:outline-none;
+  }
+  .tabel-padat {
+    @apply w-full table-auto border-collapse text-left text-xs;
+  }
+  .tabel-padat thead th {
+    @apply whitespace-nowrap bg-allegro-700 px-2 py-1.5 text-[11px] font-semibold text-white;
+  }
+  .tabel-padat tbody td {
+    @apply border-b border-line px-2 py-1.5 align-middle;
+  }
+  .tabel-padat tbody tr:nth-child(odd) {
+    @apply bg-white;
+  }
+  .tabel-padat tbody tr:nth-child(even) {
+    @apply bg-surface;
+  }
+  .tabel-padat tbody tr:hover {
+    @apply bg-allegro-50;
+  }
+  .label-status {
+    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold;
+  }
+  .tabel-padat .label-status {
+    @apply px-2 py-0 text-[10px];
+  }
+  .tabel-padat .btn-kuning {
+    @apply px-2 py-1 text-[11px];
+  }
+}
