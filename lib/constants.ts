@@ -39,3 +39,42 @@ export const DEFAULT_ATTENDANCE_RADIUS_METER = 1000;
 
 /** Target ukuran foto setelah dikompres sebelum diupload (byte). */
 export const MAX_PHOTO_SIZE_BYTE = 300 * 1024;
+
+/* ---------------- Data kepegawaian ---------------- */
+
+/**
+ * Rekening perusahaan yang dipakai membayar upah. Daftarnya dari client;
+ * hasil payroll dikelompokkan per rekening saat akan ditransfer.
+ */
+export const REKENING_PEMBAYAR = [
+  "BLU FINANCE",
+  "BLU KO VINNO",
+  "ALLEGRO BANDUNG",
+  "ALLEGRO JAKARTA",
+  "ALPHA",
+];
+
+/** Status PTKP untuk laporan pajak. */
+export const STATUS_PTKP = [
+  "TK/0",
+  "TK/1",
+  "TK/2",
+  "TK/3",
+  "K/0",
+  "K/1",
+  "K/2",
+  "K/3",
+];
+
+export const STATUS_KEPEGAWAIAN = [
+  { nilai: "PKWT", label: "PKWT (kontrak)" },
+  { nilai: "HARIAN_LEPAS", label: "Harian lepas" },
+  { nilai: "BORONGAN", label: "Borongan" },
+  { nilai: "MAGANG", label: "Magang" },
+];
+
+/** Kontrak yang berakhir dalam sekian hari ditandai di layar. */
+export const BATAS_INGAT_KONTRAK_HARI = 30;
+
+/** Bawaan lama cicilan kasbon bila tidak diisi. */
+export const TENOR_KASBON_BAWAAN = 1;

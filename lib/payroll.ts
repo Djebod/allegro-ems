@@ -60,6 +60,8 @@ export function hitungUpahKaryawan(opsi: {
   absensi: Attendance[];
   tarif: SalaryRate[];
   sisaBon: number;
+  /** Cicilan bulanan bon, bila bonnya memang dicicil. */
+  cicilanBon?: number;
 }): HasilHitung {
   const masalah: string[] = [];
 
@@ -124,11 +126,18 @@ export function hitungUpahKaryawan(opsi: {
   }
 
   const grossPay = Math.round(regularPay + overtimePay);
-  const loanDeduction = Math.min(opsi.sisaBon, grossPay);
 
-  if (opsi.sisaBon > grossPay && grossPay > 0) {
+  // Kalau bonnya punya rencana cicilan, itu yang diusulkan. Kalau tidak,
+  // diusulkan sebesar sisa bon. Keduanya tidak pernah melebihi upah,
+  // supaya tidak ada upah bersih yang minus.
+  const diinginkan = opsi.cicilanBon && opsi.cicilanBon > 0
+    ? Math.min(opsi.cicilanBon, opsi.sisaBon)
+    : opsi.sisaBon;
+  const loanDeduction = Math.min(diinginkan, grossPay);
+
+  if (diinginkan > grossPay && grossPay > 0) {
     masalah.push(
-      `Sisa bon lebih besar daripada upah periode ini. Potongan diusulkan sebatas upahnya saja.`
+      `Potongan bon yang seharusnya ${diinginkan.toLocaleString("id-ID")} melebihi upah periode ini. Diusulkan sebatas upahnya saja.`
     );
   }
 

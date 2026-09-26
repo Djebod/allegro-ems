@@ -2,7 +2,7 @@ rules_version = '2';
 
 // ============================================================
 //  ABSENSI & PAYROLL PROYEK — Allegro Global Construction
-//  Security Rules — Tahap 11 (HRIS: cuti, izin, surat peringatan)
+//  Security Rules — Tahap 12 (HRIS + data kepegawaian & cicilan kasbon)
 //  users, projects, sections, employees, employeePrivate,
 //  salaryRates, employeeAssignments, attendance, attendanceCorrections,
 //  employeeLoans, loanLocks, loanRepayments, payroll, payrollItems
@@ -139,7 +139,7 @@ service cloud.firestore {
       return d.employeeCode is string && d.employeeCode.size() > 0
         && d.name is string && d.name.size() > 0
         && d.nik is string && d.nik.size() == 16
-        && d.position in ['MANDOR', 'TUKANG', 'KENEK']
+        && d.position in ['MANDOR', 'TUKANG', 'KENEK', 'STAF', 'PIC']
         && d.status in ['ACTIVE', 'INACTIVE'];
     }
 
@@ -355,7 +355,9 @@ service cloud.firestore {
         && d.remainingAmount >= 0
         && d.remainingAmount <= d.originalAmount
         && d.loanDate is string && d.loanDate.size() == 10
-        && d.status in ['OPEN', 'PARTIALLY_PAID', 'PAID', 'CANCELLED'];
+        && d.status in ['OPEN', 'PARTIALLY_PAID', 'PAID', 'CANCELLED']
+        && d.tenorBulan is number && d.tenorBulan >= 1
+        && d.cicilanPerBulan is number && d.cicilanPerBulan > 0;
     }
 
     match /employeeLoans/{bonId} {
@@ -369,7 +371,11 @@ service cloud.firestore {
       allow update: if (isAdmin() || isFinance()) && bonSah()
         && request.resource.data.employeeId == resource.data.employeeId
         && request.resource.data.originalAmount == resource.data.originalAmount
-        && request.resource.data.loanDate == resource.data.loanDate;
+        && request.resource.data.loanDate == resource.data.loanDate
+        // Rencana cicilannya juga beku. Kalau perlu diubah, bonnya
+        // dibatalkan lalu dibuat baru - supaya jejaknya jelas.
+        && request.resource.data.tenorBulan == resource.data.tenorBulan
+        && request.resource.data.cicilanPerBulan == resource.data.cicilanPerBulan;
 
       // Bon tidak dihapus. Yang salah dibatalkan, jejaknya tetap ada.
       allow delete: if false;

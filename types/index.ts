@@ -69,8 +69,10 @@ export interface Section {
   updatedAt?: unknown;
 }
 
-export type Position = "MANDOR" | "TUKANG" | "KENEK";
+export type Position = "MANDOR" | "TUKANG" | "KENEK" | "STAF" | "PIC";
 export type EmployeeStatus = "ACTIVE" | "INACTIVE";
+export type JenisKelamin = "L" | "P";
+export type StatusKepegawaian = "PKWT" | "HARIAN_LEPAS" | "BORONGAN" | "MAGANG";
 export type PaymentMode = "DAILY" | "HOURLY";
 
 /** ID dokumen = kode karyawan (mis. "TKG-001"). */
@@ -90,6 +92,22 @@ export interface Employee {
   bankAccountName?: string;
   /** Dipakai untuk aturan "satu divisi hanya satu orang cuti bersamaan". */
   divisi?: string;
+
+  /* --- Data untuk laporan pajak dan BPJS --- */
+  jenisKelamin?: JenisKelamin;
+  /** Status PTKP, mis. TK/0 atau K/2. Dipakai laporan pajak. */
+  statusPtkp?: string;
+  npwp?: string;
+  bpjsKesehatan?: string;
+  bpjsKetenagakerjaan?: string;
+
+  /* --- Kepegawaian --- */
+  statusKepegawaian?: StatusKepegawaian;
+  kontrakMulai?: string;
+  kontrakSelesai?: string;
+
+  /** Rekening perusahaan yang dipakai membayar orang ini. */
+  rekeningPembayar?: string;
   profilePhotoUrl?: string | null;
   profilePublicId?: string | null;
   /**
@@ -258,6 +276,13 @@ export interface EmployeeLoan {
   loanDate: string;
   description: string;
   status: StatusBon;
+
+  /** Rencana pelunasan, sesuai formulir kasbon perusahaan. */
+  tenorBulan: number;
+  /** Bulan mulai dipotong, bentuk "YYYY-MM". */
+  mulaiPotong: string;
+  /** Besar potongan tiap bulan, dibulatkan ke atas. */
+  cicilanPerBulan: number;
   createdBy: string;
   createdAt?: unknown;
   updatedAt?: unknown;

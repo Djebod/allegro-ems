@@ -623,9 +623,15 @@ export async function buatBon(data: {
   jumlah: number;
   tanggal: string;
   keterangan: string;
+  tenorBulan: number;
+  mulaiPotong: string;
   oleh: string;
 }) {
   if (data.jumlah <= 0) throw new Error("Nominal bon harus lebih dari nol.");
+  if (data.tenorBulan < 1) throw new Error("Lama cicilan minimal satu bulan.");
+  if (!/^\d{4}-\d{2}$/.test(data.mulaiPotong)) {
+    throw new Error("Bulan mulai potong belum benar.");
+  }
 
   const db = dbClient();
   const bonRef = doc(collection(db, "employeeLoans"));
@@ -650,6 +656,11 @@ export async function buatBon(data: {
     loanDate: data.tanggal,
     description: data.keterangan,
     status: "OPEN" as StatusBon,
+    tenorBulan: data.tenorBulan,
+    mulaiPotong: data.mulaiPotong,
+    // Dibulatkan ke atas supaya cicilan terakhir yang mengecil, bukan
+    // menyisakan receh yang tidak pernah lunas.
+    cicilanPerBulan: Math.ceil(data.jumlah / data.tenorBulan),
     createdBy: data.oleh,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
@@ -1011,6 +1022,7 @@ export async function susunItemPayroll(opsi: {
       absensi: absennya,
       tarif: tarif.filter((t) => t.employeeId === employeeId),
       sisaBon: bon.find((b) => b.employeeId === employeeId)?.remainingAmount || 0,
+      cicilanBon: bon.find((b) => b.employeeId === employeeId)?.cicilanPerBulan || 0,
     });
     items.push(hasil.item);
     hasil.masalah.forEach((m) => masalah.push(`${orang.name} — ${m}`));

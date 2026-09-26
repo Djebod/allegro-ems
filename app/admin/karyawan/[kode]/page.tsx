@@ -26,9 +26,17 @@ import {
 import { useAuth } from "@/lib/auth";
 import { FOLDER_KTP, FOLDER_PROFIL } from "@/lib/cloudinary";
 import { bacaAngka, keRupiah, rupiahPenuh } from "@/lib/rupiah";
+import {
+  REKENING_PEMBAYAR,
+  STATUS_KEPEGAWAIAN,
+  STATUS_PTKP,
+} from "@/lib/constants";
 import { tanggalHariIni } from "@/lib/absensi";
 import type {
   Employee,
+  JenisKelamin,
+  Position,
+  StatusKepegawaian,
   EmployeeAssignment,
   PaymentMode,
   Project,
@@ -53,6 +61,8 @@ function Isi({ kode }: { kode: string }) {
   const [sections, setSections] = useState<Section[]>([]);
   const [mandor, setMandor] = useState<Employee[]>([]);
 
+  const [bukaUbah, setBukaUbah] = useState(false);
+  const [uData, setUData] = useState<Partial<Employee>>({});
   const [bukaTarif, setBukaTarif] = useState(false);
   const [bukaTugas, setBukaTugas] = useState(false);
   const [salah, setSalah] = useState<string | null>(null);
@@ -202,14 +212,64 @@ function Isi({ kode }: { kode: string }) {
             </p>
             </div>
           </div>
-          <span
-            className={`label-status ${
-              karyawan.status === "ACTIVE" ? "bg-green-100 text-green-800" : "bg-surface text-muted"
-            }`}
-          >
-            {karyawan.status}
-          </span>
+          <div className="flex items-center gap-2">
+            <span
+              className={`label-status ${
+                karyawan.status === "ACTIVE"
+                  ? "bg-green-100 text-green-800"
+                  : "bg-surface text-muted"
+              }`}
+            >
+              {karyawan.status}
+            </span>
+            <button
+              className="btn-ringan"
+              onClick={() => {
+                setUData({ ...karyawan });
+                setBukaUbah(true);
+              }}
+            >
+              Ubah data
+            </button>
+          </div>
         </div>
+
+        <dl className="mt-4 grid gap-3 border-t border-line pt-4 text-sm sm:grid-cols-4">
+          <div>
+            <dt className="text-muted">Divisi</dt>
+            <dd className="font-medium text-ink">{karyawan.divisi || "—"}</dd>
+          </div>
+          <div>
+            <dt className="text-muted">Status kepegawaian</dt>
+            <dd className="font-medium text-ink">{karyawan.statusKepegawaian || "—"}</dd>
+          </div>
+          <div>
+            <dt className="text-muted">Rekening pembayar</dt>
+            <dd className="font-medium text-ink">{karyawan.rekeningPembayar || "—"}</dd>
+          </div>
+          <div>
+            <dt className="text-muted">Kontrak</dt>
+            <dd className="font-medium text-ink">
+              {karyawan.kontrakSelesai ? `sampai ${karyawan.kontrakSelesai}` : "—"}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-muted">PTKP</dt>
+            <dd className="font-medium text-ink">{karyawan.statusPtkp || "—"}</dd>
+          </div>
+          <div>
+            <dt className="text-muted">NPWP</dt>
+            <dd className="font-medium text-ink">{karyawan.npwp || "—"}</dd>
+          </div>
+          <div>
+            <dt className="text-muted">BPJS Kesehatan</dt>
+            <dd className="font-medium text-ink">{karyawan.bpjsKesehatan || "—"}</dd>
+          </div>
+          <div>
+            <dt className="text-muted">BPJS Ketenagakerjaan</dt>
+            <dd className="font-medium text-ink">{karyawan.bpjsKetenagakerjaan || "—"}</dd>
+          </div>
+        </dl>
 
         <div className="mt-5 grid gap-6 sm:grid-cols-2">
           <UnggahFoto
@@ -349,6 +409,281 @@ function Isi({ kode }: { kode: string }) {
           </details>
         )}
       </div>
+
+
+      {/* Ubah data karyawan */}
+      <Modal
+        judul={`Ubah data · ${karyawan.name}`}
+        terbuka={bukaUbah}
+        onTutup={() => setBukaUbah(false)}
+      >
+        <div className="space-y-4">
+          {salah && <Pesan jenis="gagal" isi={salah} />}
+
+          <p className="text-xs text-muted">
+            Kode karyawan dan NIK tidak bisa diubah — keduanya penanda tetap yang dipakai seluruh
+            catatan absensi dan payroll.
+          </p>
+
+          <Field label="Nama lengkap" wajib>
+            <input
+              className="input-dasar"
+              value={uData.name || ""}
+              onChange={(e) => setUData({ ...uData, name: e.target.value })}
+            />
+          </Field>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Nama panggilan">
+              <input
+                className="input-dasar"
+                value={uData.nickname || ""}
+                onChange={(e) => setUData({ ...uData, nickname: e.target.value })}
+              />
+            </Field>
+            <Field label="Divisi">
+              <input
+                className="input-dasar"
+                value={uData.divisi || ""}
+                onChange={(e) => setUData({ ...uData, divisi: e.target.value })}
+              />
+            </Field>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Posisi" wajib>
+              <select
+                className="input-dasar"
+                value={uData.position || "TUKANG"}
+                onChange={(e) => setUData({ ...uData, position: e.target.value as Position })}
+              >
+                {["MANDOR", "TUKANG", "KENEK", "STAF", "PIC"].map((p) => (
+                  <option key={p} value={p}>
+                    {p}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Jenis kelamin">
+              <select
+                className="input-dasar"
+                value={uData.jenisKelamin || "L"}
+                onChange={(e) =>
+                  setUData({ ...uData, jenisKelamin: e.target.value as JenisKelamin })
+                }
+              >
+                <option value="L">Laki-laki</option>
+                <option value="P">Perempuan</option>
+              </select>
+            </Field>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Nomor HP">
+              <input
+                className="input-dasar"
+                inputMode="tel"
+                value={uData.phone || ""}
+                onChange={(e) => setUData({ ...uData, phone: e.target.value })}
+              />
+            </Field>
+            <Field label="Tanggal masuk" bantuan="Menentukan kapan hak cuti tahunan terbit.">
+              <input
+                type="date"
+                className="input-dasar"
+                value={uData.joinDate || ""}
+                onChange={(e) => setUData({ ...uData, joinDate: e.target.value })}
+              />
+            </Field>
+          </div>
+
+          <Field label="Alamat">
+            <textarea
+              className="input-dasar"
+              rows={2}
+              value={uData.address || ""}
+              onChange={(e) => setUData({ ...uData, address: e.target.value })}
+            />
+          </Field>
+
+          <div className="rounded-lg border border-line p-4">
+            <p className="mb-3 text-sm font-medium text-ink">Kepegawaian</p>
+            <div className="space-y-4">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Status kepegawaian">
+                  <select
+                    className="input-dasar"
+                    value={uData.statusKepegawaian || "PKWT"}
+                    onChange={(e) =>
+                      setUData({
+                        ...uData,
+                        statusKepegawaian: e.target.value as StatusKepegawaian,
+                      })
+                    }
+                  >
+                    {STATUS_KEPEGAWAIAN.map((x) => (
+                      <option key={x.nilai} value={x.nilai}>
+                        {x.label}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Rekening pembayar">
+                  <select
+                    className="input-dasar"
+                    value={uData.rekeningPembayar || ""}
+                    onChange={(e) => setUData({ ...uData, rekeningPembayar: e.target.value })}
+                  >
+                    <option value="">— belum ditentukan —</option>
+                    {REKENING_PEMBAYAR.map((r) => (
+                      <option key={r} value={r}>
+                        {r}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Kontrak mulai">
+                  <input
+                    type="date"
+                    className="input-dasar"
+                    value={uData.kontrakMulai || ""}
+                    onChange={(e) => setUData({ ...uData, kontrakMulai: e.target.value })}
+                  />
+                </Field>
+                <Field label="Kontrak selesai">
+                  <input
+                    type="date"
+                    className="input-dasar"
+                    value={uData.kontrakSelesai || ""}
+                    onChange={(e) => setUData({ ...uData, kontrakSelesai: e.target.value })}
+                  />
+                </Field>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-line p-4">
+            <p className="mb-3 text-sm font-medium text-ink">Pajak &amp; BPJS</p>
+            <div className="space-y-4">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Status PTKP">
+                  <select
+                    className="input-dasar"
+                    value={uData.statusPtkp || "TK/0"}
+                    onChange={(e) => setUData({ ...uData, statusPtkp: e.target.value })}
+                  >
+                    {STATUS_PTKP.map((x) => (
+                      <option key={x} value={x}>
+                        {x}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="NPWP">
+                  <input
+                    className="input-dasar"
+                    inputMode="numeric"
+                    value={uData.npwp || ""}
+                    onChange={(e) => setUData({ ...uData, npwp: e.target.value })}
+                  />
+                </Field>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="No. BPJS Kesehatan">
+                  <input
+                    className="input-dasar"
+                    inputMode="numeric"
+                    value={uData.bpjsKesehatan || ""}
+                    onChange={(e) => setUData({ ...uData, bpjsKesehatan: e.target.value })}
+                  />
+                </Field>
+                <Field label="No. BPJS Ketenagakerjaan">
+                  <input
+                    className="input-dasar"
+                    inputMode="numeric"
+                    value={uData.bpjsKetenagakerjaan || ""}
+                    onChange={(e) =>
+                      setUData({ ...uData, bpjsKetenagakerjaan: e.target.value })
+                    }
+                  />
+                </Field>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-line p-4">
+            <p className="mb-3 text-sm font-medium text-ink">Rekening karyawan</p>
+            <div className="grid gap-4 sm:grid-cols-3">
+              <Field label="Bank">
+                <input
+                  className="input-dasar"
+                  value={uData.bankName || ""}
+                  onChange={(e) => setUData({ ...uData, bankName: e.target.value })}
+                />
+              </Field>
+              <Field label="Nomor rekening">
+                <input
+                  className="input-dasar"
+                  inputMode="numeric"
+                  value={uData.bankAccountNumber || ""}
+                  onChange={(e) => setUData({ ...uData, bankAccountNumber: e.target.value })}
+                />
+              </Field>
+              <Field label="Atas nama">
+                <input
+                  className="input-dasar"
+                  value={uData.bankAccountName || ""}
+                  onChange={(e) => setUData({ ...uData, bankAccountName: e.target.value })}
+                />
+              </Field>
+            </div>
+          </div>
+
+          <button
+            className="btn-utama w-full"
+            disabled={menyimpan}
+            onClick={async () => {
+              setSalah(null);
+              if (!uData.name?.trim()) return setSalah("Nama wajib diisi.");
+              setMenyimpan(true);
+              try {
+                await ubahKaryawan(kode, {
+                  name: uData.name.trim(),
+                  nickname: uData.nickname || "",
+                  divisi: uData.divisi || "",
+                  position: uData.position,
+                  jenisKelamin: uData.jenisKelamin,
+                  phone: uData.phone || "",
+                  address: uData.address || "",
+                  joinDate: uData.joinDate || "",
+                  statusKepegawaian: uData.statusKepegawaian,
+                  rekeningPembayar: uData.rekeningPembayar || "",
+                  kontrakMulai: uData.kontrakMulai || "",
+                  kontrakSelesai: uData.kontrakSelesai || "",
+                  statusPtkp: uData.statusPtkp || "",
+                  npwp: uData.npwp || "",
+                  bpjsKesehatan: uData.bpjsKesehatan || "",
+                  bpjsKetenagakerjaan: uData.bpjsKetenagakerjaan || "",
+                  bankName: uData.bankName || "",
+                  bankAccountNumber: uData.bankAccountNumber || "",
+                  bankAccountName: uData.bankAccountName || "",
+                });
+                await muatKaryawan();
+                setBukaUbah(false);
+                setPesan("Data karyawan diperbarui.");
+              } catch {
+                setSalah("Data gagal disimpan.");
+              } finally {
+                setMenyimpan(false);
+              }
+            }}
+          >
+            {menyimpan ? "Menyimpan…" : "Simpan perubahan"}
+          </button>
+        </div>
+      </Modal>
 
       {/* Modal tarif */}
       <Modal judul="Tarif gaji baru" terbuka={bukaTarif} onTutup={() => setBukaTarif(false)}>

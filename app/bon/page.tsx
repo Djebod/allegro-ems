@@ -16,6 +16,7 @@ import {
 } from "@/lib/data";
 import { bacaAngka, keRupiah, rupiahPenuh } from "@/lib/rupiah";
 import { tanggalHariIni, tanggalPendek } from "@/lib/absensi";
+import { TENOR_KASBON_BAWAAN } from "@/lib/constants";
 import type { Employee, EmployeeLoan, LoanRepayment, StatusBon } from "@/types";
 
 const SARINGAN: { nilai: "BERJALAN" | "SEMUA" | StatusBon; label: string }[] = [
@@ -55,6 +56,8 @@ function Isi() {
   const [pJumlah, setPJumlah] = useState("");
   const [pTanggal, setPTanggal] = useState(tanggalHariIni());
   const [pKeterangan, setPKeterangan] = useState("");
+  const [pTenor, setPTenor] = useState(String(TENOR_KASBON_BAWAAN));
+  const [pMulaiPotong, setPMulaiPotong] = useState(tanggalHariIni().slice(0, 7));
 
   const [bayarUntuk, setBayarUntuk] = useState<EmployeeLoan | null>(null);
   const [bJumlah, setBJumlah] = useState("");
@@ -116,6 +119,11 @@ function Isi() {
     if (!orang) return setSalah("Karyawan wajib dipilih.");
     const jumlah = bacaAngka(pJumlah);
     if (jumlah <= 0) return setSalah("Nominal bon wajib diisi.");
+    const tenor = Number(pTenor);
+    if (!Number.isFinite(tenor) || tenor < 1 || tenor > 24) {
+      return setSalah("Lama cicilan harus antara 1 dan 24 bulan.");
+    }
+    if (!pMulaiPotong) return setSalah("Bulan mulai potong wajib diisi.");
 
     setSibuk(true);
     try {
@@ -124,6 +132,8 @@ function Isi() {
         jumlah,
         tanggal: pTanggal,
         keterangan: pKeterangan.trim(),
+        tenorBulan: tenor,
+        mulaiPotong: pMulaiPotong,
         oleh: profile?.email || "",
       });
       setBukaBaru(false);
@@ -244,6 +254,8 @@ function Isi() {
                 <th className="text-right">Nominal bon</th>
                 <th className="text-right">Sudah dibayar</th>
                 <th className="text-right">Sisa</th>
+                <th className="text-right">Cicilan / bln</th>
+                <th>Mulai potong</th>
                 <th>Status</th>
                 <th>Keterangan</th>
                 <th></th>
@@ -268,6 +280,13 @@ function Isi() {
                     <td className="whitespace-nowrap text-right font-semibold text-ink">
                       {keRupiah(b.remainingAmount)}
                     </td>
+                    <td className="whitespace-nowrap text-right">
+                      {b.cicilanPerBulan ? keRupiah(b.cicilanPerBulan) : "—"}
+                      {b.tenorBulan > 1 && (
+                        <span className="ml-1 text-[10px] text-muted">×{b.tenorBulan}</span>
+                      )}
+                    </td>
+                    <td className="whitespace-nowrap text-muted">{b.mulaiPotong || "—"}</td>
                     <td>
                       <span className={`label-status ${warnaStatus(b.status)}`}>
                         {labelStatus(b.status)}
@@ -335,6 +354,35 @@ function Isi() {
               placeholder="500.000"
             />
           </Field>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Lama cicilan (bulan)" wajib bantuan="Isi 1 bila dipotong sekaligus.">
+              <input
+                className="input-dasar"
+                inputMode="numeric"
+                value={pTenor}
+                onChange={(e) => setPTenor(e.target.value.replace(/\D/g, ""))}
+              />
+            </Field>
+            <Field label="Mulai dipotong bulan" wajib>
+              <input
+                type="month"
+                className="input-dasar"
+                value={pMulaiPotong}
+                onChange={(e) => setPMulaiPotong(e.target.value)}
+              />
+            </Field>
+          </div>
+
+          {bacaAngka(pJumlah) > 0 && Number(pTenor) >= 1 && (
+            <p className="text-xs text-muted">
+              Potongan tiap bulan{" "}
+              <strong className="text-ink">
+                {rupiahPenuh(Math.ceil(bacaAngka(pJumlah) / Number(pTenor)))}
+              </strong>
+              . Cicilan terakhir menyesuaikan sisanya.
+            </p>
+          )}
 
           <Field label="Tanggal bon" wajib>
             <input

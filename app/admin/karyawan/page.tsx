@@ -8,9 +8,22 @@ import Modal from "@/components/Modal";
 import FotoKaryawan from "@/components/FotoKaryawan";
 import { Field, Pesan } from "@/components/Field";
 import { buatKaryawan, pantauKaryawan, rapikanKode, ubahKaryawan } from "@/lib/data";
-import type { Employee, EmployeeStatus, Position } from "@/types";
+import {
+  BATAS_INGAT_KONTRAK_HARI,
+  REKENING_PEMBAYAR,
+  STATUS_KEPEGAWAIAN,
+  STATUS_PTKP,
+} from "@/lib/constants";
+import { selisihHariDariSekarang } from "@/lib/cuti";
+import type {
+  Employee,
+  EmployeeStatus,
+  JenisKelamin,
+  Position,
+  StatusKepegawaian,
+} from "@/types";
 
-const POSISI: Position[] = ["MANDOR", "TUKANG", "KENEK"];
+const POSISI: Position[] = ["MANDOR", "TUKANG", "KENEK", "STAF", "PIC"];
 
 const kosong = {
   employeeCode: "",
@@ -22,6 +35,15 @@ const kosong = {
   phone: "",
   address: "",
   joinDate: "",
+  jenisKelamin: "L" as JenisKelamin,
+  statusPtkp: "TK/0",
+  npwp: "",
+  bpjsKesehatan: "",
+  bpjsKetenagakerjaan: "",
+  statusKepegawaian: "PKWT" as StatusKepegawaian,
+  kontrakMulai: "",
+  kontrakSelesai: "",
+  rekeningPembayar: "",
   bankName: "",
   bankAccountNumber: "",
   bankAccountName: "",
@@ -90,6 +112,15 @@ function Isi() {
         phone: form.phone.trim(),
         address: form.address.trim(),
         joinDate: form.joinDate,
+        jenisKelamin: form.jenisKelamin,
+        statusPtkp: form.statusPtkp,
+        npwp: form.npwp.trim(),
+        bpjsKesehatan: form.bpjsKesehatan.trim(),
+        bpjsKetenagakerjaan: form.bpjsKetenagakerjaan.trim(),
+        statusKepegawaian: form.statusKepegawaian,
+        kontrakMulai: form.kontrakMulai,
+        kontrakSelesai: form.kontrakSelesai,
+        rekeningPembayar: form.rekeningPembayar,
         status: "ACTIVE",
         bankName: form.bankName.trim(),
         bankAccountNumber: form.bankAccountNumber.trim(),
@@ -188,10 +219,23 @@ function Isi() {
                     <p className="mt-1 text-sm text-muted">
                       NIK {e.nik}
                       {e.phone ? ` · ${e.phone}` : ""}
+                      {e.divisi ? ` · ${e.divisi}` : ""}
                     </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
+                  {e.kontrakSelesai &&
+                    e.status === "ACTIVE" &&
+                    selisihHariDariSekarang(e.kontrakSelesai) <= BATAS_INGAT_KONTRAK_HARI && (
+                      <span
+                        className="label-status bg-kuning-400/40 text-allegro-700"
+                        title={`Kontrak berakhir ${e.kontrakSelesai}`}
+                      >
+                        {selisihHariDariSekarang(e.kontrakSelesai) < 0
+                          ? "Kontrak habis"
+                          : `Kontrak ${selisihHariDariSekarang(e.kontrakSelesai)} hari lagi`}
+                      </span>
+                    )}
                   <span
                     className={`label-status ${
                       e.status === "ACTIVE" ? "bg-green-100 text-green-800" : "bg-surface text-muted"
@@ -291,14 +335,126 @@ function Isi() {
             />
           </Field>
 
-          <Field label="Tanggal masuk">
-            <input
-              type="date"
-              className="input-dasar"
-              value={form.joinDate}
-              onChange={(e) => isi("joinDate", e.target.value)}
-            />
-          </Field>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Tanggal masuk" bantuan="Menentukan kapan hak cuti tahunan terbit.">
+              <input
+                type="date"
+                className="input-dasar"
+                value={form.joinDate}
+                onChange={(e) => isi("joinDate", e.target.value)}
+              />
+            </Field>
+            <Field label="Jenis kelamin">
+              <select
+                className="input-dasar"
+                value={form.jenisKelamin}
+                onChange={(e) => isi("jenisKelamin", e.target.value)}
+              >
+                <option value="L">Laki-laki</option>
+                <option value="P">Perempuan</option>
+              </select>
+            </Field>
+          </div>
+
+          <div className="rounded-lg border border-line p-4">
+            <p className="mb-3 text-sm font-medium text-ink">Kepegawaian</p>
+            <div className="space-y-4">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Status kepegawaian">
+                  <select
+                    className="input-dasar"
+                    value={form.statusKepegawaian}
+                    onChange={(e) => isi("statusKepegawaian", e.target.value)}
+                  >
+                    {STATUS_KEPEGAWAIAN.map((x) => (
+                      <option key={x.nilai} value={x.nilai}>
+                        {x.label}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Rekening pembayar" bantuan="Dipakai mengelompokkan transfer gaji.">
+                  <select
+                    className="input-dasar"
+                    value={form.rekeningPembayar}
+                    onChange={(e) => isi("rekeningPembayar", e.target.value)}
+                  >
+                    <option value="">— belum ditentukan —</option>
+                    {REKENING_PEMBAYAR.map((r) => (
+                      <option key={r} value={r}>
+                        {r}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Kontrak mulai">
+                  <input
+                    type="date"
+                    className="input-dasar"
+                    value={form.kontrakMulai}
+                    onChange={(e) => isi("kontrakMulai", e.target.value)}
+                  />
+                </Field>
+                <Field label="Kontrak selesai" bantuan="Sistem menandai kontrak yang akan habis.">
+                  <input
+                    type="date"
+                    className="input-dasar"
+                    value={form.kontrakSelesai}
+                    onChange={(e) => isi("kontrakSelesai", e.target.value)}
+                  />
+                </Field>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-line p-4">
+            <p className="mb-3 text-sm font-medium text-ink">Pajak &amp; BPJS</p>
+            <div className="space-y-4">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Status PTKP" bantuan="Dipakai laporan pajak.">
+                  <select
+                    className="input-dasar"
+                    value={form.statusPtkp}
+                    onChange={(e) => isi("statusPtkp", e.target.value)}
+                  >
+                    {STATUS_PTKP.map((x) => (
+                      <option key={x} value={x}>
+                        {x}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="NPWP">
+                  <input
+                    className="input-dasar"
+                    inputMode="numeric"
+                    value={form.npwp}
+                    onChange={(e) => isi("npwp", e.target.value)}
+                  />
+                </Field>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="No. BPJS Kesehatan">
+                  <input
+                    className="input-dasar"
+                    inputMode="numeric"
+                    value={form.bpjsKesehatan}
+                    onChange={(e) => isi("bpjsKesehatan", e.target.value)}
+                  />
+                </Field>
+                <Field label="No. BPJS Ketenagakerjaan">
+                  <input
+                    className="input-dasar"
+                    inputMode="numeric"
+                    value={form.bpjsKetenagakerjaan}
+                    onChange={(e) => isi("bpjsKetenagakerjaan", e.target.value)}
+                  />
+                </Field>
+              </div>
+            </div>
+          </div>
 
           <div className="rounded-lg border border-line p-4">
             <p className="mb-3 text-sm font-medium text-ink">Rekening (opsional)</p>
