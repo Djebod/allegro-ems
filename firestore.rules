@@ -2,7 +2,7 @@ rules_version = '2';
 
 // ============================================================
 //  ABSENSI & PAYROLL PROYEK — Allegro Global Construction
-//  Security Rules — Tahap 13 (+ absensi kantor dari mesin fingerprint)
+//  Security Rules — Tahap 13 (mesin fingerprint tidak dipakai lagi)
 //  users, projects, sections, employees, employeePrivate,
 //  salaryRates, employeeAssignments, attendance, attendanceCorrections,
 //  employeeLoans, loanLocks, loanRepayments, payroll, payrollItems
@@ -606,51 +606,6 @@ service cloud.firestore {
         && request.resource.data.tanggalTerbit == resource.data.tanggalTerbit
         && request.resource.data.berlakuSampai == resource.data.berlakuSampai
         && request.resource.data.uraian == resource.data.uraian;
-
-      allow delete: if false;
-    }
-
-    // ---------- pemetaan nomor mesin fingerprint ----------
-    // Mesin memakai nomor dan nama panggilan, sistem memakai kode
-    // karyawan. Pemetaannya dibuat sekali, lalu dipakai tiap impor.
-    match /fingerprintMap/{mesinId} {
-      allow read: if urusKepegawaian() || isFinance();
-      allow create, update: if urusKepegawaian()
-        && request.resource.data.mesinId == mesinId
-        && request.resource.data.employeeId is string
-        && request.resource.data.employeeId.size() > 0;
-      allow delete: if urusKepegawaian();
-    }
-
-    // ---------- absensi kantor ----------
-    function absenKantorSah() {
-      let d = request.resource.data;
-      return d.employeeId is string && d.employeeId.size() > 0
-        && d.date is string && d.date.size() == 10
-        && d.scans is list
-        && d.workHours is number && d.workHours >= 0
-        && d.terlambatMenit is number && d.terlambatMenit >= 0
-        && d.status in ['HADIR', 'TIDAK_LENGKAP', 'SELESAI']
-        && d.isOverridden is bool;
-    }
-
-    match /officeAttendance/{absenId} {
-      allow read: if urusKepegawaian()
-        || isFinance()
-        || (sudahLogin() && resource != null && resource.data.employeeId == karyawanSaya());
-
-      // ID wajib "<kodeKaryawan>_<tanggal>", jadi impor berulang tidak
-      // pernah membuat catatan ganda untuk satu orang di satu hari.
-      allow create: if urusKepegawaian()
-        && absenKantorSah()
-        && absenId == request.resource.data.employeeId + '_' + request.resource.data.date;
-
-      // Cap waktu asli dari mesin tidak boleh diubah. Yang boleh hanya
-      // koreksi Admin, dan itu disimpan di kolomnya sendiri.
-      allow update: if urusKepegawaian()
-        && absenKantorSah()
-        && request.resource.data.employeeId == resource.data.employeeId
-        && request.resource.data.date == resource.data.date;
 
       allow delete: if false;
     }

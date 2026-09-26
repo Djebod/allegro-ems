@@ -20,6 +20,7 @@ import type {
   AttendanceCorrection,
   Employee,
   EmployeeAssignment,
+  EmployeeStatus,
   EmployeeLoan,
   EmployeePrivate,
   EventAbsen,
@@ -1099,4 +1100,60 @@ export async function hapusPayroll(payroll: Payroll) {
   }
   await hapusSemuaItem(payroll.id);
   await deleteDoc(doc(dbClient(), "payroll", payroll.id));
+}
+
+/**
+ * Menyimpan hasil impor data karyawan.
+ * Kode yang sudah ada diperbarui, yang belum ditambahkan. Kolom yang
+ * dikosongkan di berkas TIDAK menimpa data lama — supaya impor sebagian
+ * tidak diam-diam menghapus isian yang sudah benar.
+ */
+export async function simpanImporKaryawan(
+  baris: { data: Partial<Employee>; memperbarui: boolean }[],
+  oleh: string
+) {
+  const db = dbClient();
+  let ditambah = 0;
+  let diperbarui = 0;
+
+  for (const b of baris) {
+    const kode = rapikanKode(String(b.data.employeeCode || ""));
+    if (!kode) continue;
+
+    const bersih: Record<string, unknown> = {};
+    Object.entries(b.data).forEach(([k, v]) => {
+      if (v !== "" && v !== undefined && v !== null) bersih[k] = v;
+    });
+
+    const ref = doc(db, "employees", kode);
+    const ada = await getDoc(ref);
+
+    if (ada.exists()) {
+      const { employeeCode: _k, nik: _n, ...ubahan } = bersih;
+      await updateDoc(ref, { ...ubahan, updatedAt: serverTimestamp() });
+      diperbarui += 1;
+    } else {
+      await setDoc(ref, {
+        nickname: "",
+        divisi: "",
+        phone: "",
+        address: "",
+        joinDate: "",
+        profilePhotoUrl: null,
+        profilePublicId: null,
+        currentProjectId: null,
+        currentSectionId: null,
+        currentMandorId: null,
+        ...bersih,
+        employeeCode: kode,
+        status: "ACTIVE" as EmployeeStatus,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        catatanImpor: `Ditambahkan lewat impor oleh ${oleh}`,
+      });
+      ditambah += 1;
+    }
+  }
+
+  return { ditambah, diperbarui };
 }

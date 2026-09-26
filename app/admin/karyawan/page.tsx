@@ -167,6 +167,9 @@ function Isi() {
         <button className="btn-utama" onClick={() => setBuka(true)}>
           Tambah karyawan
         </button>
+        <Link className="btn-ringan" href="/admin/karyawan/impor">
+          Impor dari Excel
+        </Link>
         <input
           className="input-dasar max-w-xs"
           placeholder="Cari nama, kode, atau NIK"
