@@ -2,7 +2,7 @@ rules_version = '2';
 
 // ============================================================
 //  ABSENSI & PAYROLL PROYEK — Allegro Global Construction
-//  Security Rules — Tahap 18 (tunjangan diatur di aplikasi)
+//  Security Rules — Tahap 19 (izin meninggalkan kantor)
 //  users, projects, sections, employees, employeePrivate,
 //  salaryRates, employeeAssignments, attendance, attendanceCorrections,
 //  employeeLoans, loanLocks, loanRepayments, payroll, payrollItems
@@ -708,6 +708,61 @@ service cloud.firestore {
         && d.jumlahHari is number && d.jumlahHari >= 0
         && d.alasan is string && d.alasan.size() > 0
         && d.status in ['DIAJUKAN', 'DISETUJUI', 'DITOLAK', 'DIBATALKAN'];
+    }
+
+    // ---------- izinKeluar (izin meninggalkan kantor saat jam kerja) ----------
+    // Dibuat karyawan, diketahui HR, disetujui Owner. Jam keluar dan kembali
+    // dicatat karyawan sendiri (swafoto + GPS) dan tidak bisa ditimpa.
+    match /izinKeluar/{izinId} {
+      allow read: if urusKepegawaian()
+        || isFinance()
+        || (sudahLogin() && resource.data.employeeId == karyawanSaya())
+        || (sudahLogin() && resource.data.atasanId == karyawanSaya());
+
+      allow create: if sudahLogin()
+        && request.resource.data.employeeId is string
+        && request.resource.data.employeeId == karyawanSaya()
+        && request.resource.data.status == 'MENUNGGU'
+        && request.resource.data.keluar == null
+        && request.resource.data.kembali == null
+        && request.resource.data.diketahuiOleh == null
+        && request.resource.data.diputuskanOleh == null
+        && request.resource.data.keperluan in ['DINAS', 'PRIBADI']
+        && request.resource.data.alasan is string && request.resource.data.alasan.size() > 0
+        && request.resource.data.tanggal is string && request.resource.data.tanggal.size() == 10;
+
+      allow update: if (
+          // Pemilik: mencatat keluar/kembali, atau membatalkan yang belum dipakai.
+          sudahLogin()
+          && resource.data.employeeId == karyawanSaya()
+          && resource.data.status in ['MENUNGGU', 'DISETUJUI']
+          && (
+            request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['keluar', 'kembali', 'durasiMenit', 'lebihDuaJam', 'updatedAt'])
+            || (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt'])
+                && resource.data.status == 'MENUNGGU'
+                && resource.data.keluar == null
+                && request.resource.data.status == 'DIBATALKAN')
+          )
+          && (resource.data.keluar == null || request.resource.data.keluar == resource.data.keluar)
+          && (resource.data.kembali == null || request.resource.data.kembali == resource.data.kembali)
+        ) || (
+          // HR: "Diketahui oleh", sekali saja.
+          (isHR() || isAdmin())
+          && resource.data.diketahuiOleh == null
+          && resource.data.status in ['MENUNGGU', 'DISETUJUI']
+          && request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['diketahuiOleh', 'diketahuiPada', 'updatedAt'])
+        ) || (
+          // Owner: "Disetujui oleh" atau menolak.
+          isOwner()
+          && resource.data.status == 'MENUNGGU'
+          && request.resource.data.status in ['DISETUJUI', 'DITOLAK']
+          && request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['status', 'diputuskanOleh', 'diputuskanPada', 'catatanKeputusan', 'updatedAt'])
+        );
+
+      allow delete: if false;
     }
 
     match /leaveRequests/{pengajuanId} {

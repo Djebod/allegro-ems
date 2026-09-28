@@ -20,6 +20,7 @@ import type { AbsenKantor, Employee, EmployeeLoan, Payroll, PengajuanCuti, Role 
 
 export interface RingkasanTindakan {
   absenLuarKantor: AbsenKantor[] | null;
+  izinKeluarMenunggu: { employeeName: string }[] | null;
   cutiMenunggu: PengajuanCuti[] | null;
   cutiHariIni: PengajuanCuti[] | null;
   kontrakHampirHabis: Employee[] | null;
@@ -54,7 +55,7 @@ export async function ambilRingkasanTindakan(role: Role, hariIni: string): Promi
 
   const batasKontrak = tambahHari(hariIni, BATAS_INGAT_KONTRAK_HARI);
 
-  const [absenLuarKantor, cutiMenunggu, cutiBerjalan, kontrakHampirHabis, bonBerjalan, payrollBelumSah] =
+  const [absenLuarKantor, cutiMenunggu, cutiBerjalan, kontrakHampirHabis, bonBerjalan, payrollBelumSah, izinKeluarMenunggu] =
     await Promise.all([
       aman(bolehKepegawaian(role), async () => {
         // perluValidasi kembali false begitu Admin memutuskan.
@@ -108,10 +109,14 @@ export async function ambilRingkasanTindakan(role: Role, hariIni: string): Promi
           .map((d) => ({ id: d.id, ...(d.data() as Omit<Payroll, "id">) }))
           .sort((a, b) => b.periodStart.localeCompare(a.periodStart));
       }),
+      aman(bolehKepegawaian(role), async () => {
+        const snap = await getDocs(query(collection(db, "izinKeluar"), where("status", "==", "MENUNGGU")));
+        return snap.docs.map((d) => ({ employeeName: String(d.data().employeeName || "") }));
+      }),
     ]);
 
   const cutiHariIni =
     cutiBerjalan?.filter((c) => c.status === "DISETUJUI" && c.tanggalMulai <= hariIni) ?? null;
 
-  return { absenLuarKantor, cutiMenunggu, cutiHariIni, kontrakHampirHabis, bonBerjalan, payrollBelumSah };
+  return { absenLuarKantor, izinKeluarMenunggu, cutiMenunggu, cutiHariIni, kontrakHampirHabis, bonBerjalan, payrollBelumSah };
 }

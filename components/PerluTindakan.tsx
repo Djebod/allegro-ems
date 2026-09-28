@@ -102,6 +102,14 @@ export default function PerluTindakan({ hariIni }: { hariIni: string }) {
                 rincian={d.absenLuarKantor.length ? nama(d.absenLuarKantor) : undefined}
               />
             )}
+            {d.izinKeluarMenunggu && (
+              <Baris
+                label="Izin meninggalkan kantor menunggu"
+                jumlah={d.izinKeluarMenunggu.length}
+                href="/izin-keluar/kelola"
+                rincian={d.izinKeluarMenunggu.length ? nama(d.izinKeluarMenunggu) : undefined}
+              />
+            )}
             {d.cutiMenunggu && (
               <Baris
                 label="Pengajuan cuti dan izin menunggu"

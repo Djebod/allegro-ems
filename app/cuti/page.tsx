@@ -330,7 +330,9 @@ function Isi() {
               </optgroup>
               <optgroup label="Izin">
                 {Object.entries(JENIS_CUTI)
-                  .filter(([, a]) => a.kategori === "IZIN")
+                  // Izin meninggalkan kantor punya menu sendiri (Izin keluar kantor),
+                  // dengan swafoto dan GPS saat keluar dan kembali.
+                  .filter(([k, a]) => a.kategori === "IZIN" && k !== "MENINGGALKAN_KANTOR")
                   .map(([k, a]) => (
                     <option key={k} value={k}>
                       {a.label}

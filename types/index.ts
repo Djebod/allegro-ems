@@ -745,3 +745,55 @@ export type SlipGaji = Omit<ItemPayrollBulanan, "id" | "payrollId" | "createdAt"
   sp?: { tingkat: number; tanggal: string }[];
   createdAt?: unknown;
 };
+
+/* ---------------- Izin meninggalkan kantor ---------------- */
+
+export type KeperluanIzinKeluar = "DINAS" | "PRIBADI";
+export type StatusIzinKeluar = "MENUNGGU" | "DISETUJUI" | "DITOLAK" | "DIBATALKAN";
+
+/** Sesi keluar/kembali, dicatat karyawan sendiri dengan swafoto dan GPS. */
+export interface SesiIzinKeluar {
+  waktu: string;
+  photoUrl: string;
+  latitude: number;
+  longitude: number;
+  akurasi: number;
+  kantorNama: string;
+  jarakMeter: number;
+  diDalamRadius: boolean;
+}
+
+/**
+ * Pengganti "Form Izin Meninggalkan Kantor Saat Jam Kerja".
+ * Dibuat oleh karyawan, DIKETAHUI oleh HR, DISETUJUI oleh Owner - semuanya
+ * di aplikasi. Jam keluar dan kembali dicatat karyawan dengan swafoto + GPS.
+ */
+export interface IzinKeluar {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  divisi: string;
+  atasanId: string;
+  tanggal: string;
+  keperluan: KeperluanIzinKeluar;
+  alasan: string;
+  /** Rencana jam keluar "HH:MM" yang ditulis saat mengajukan. */
+  rencanaKeluar: string;
+
+  keluar: SesiIzinKeluar | null;
+  kembali: SesiIzinKeluar | null;
+  /** Lama di luar kantor, menit. Terisi saat kembali. */
+  durasiMenit: number | null;
+  /** Izin pribadi lebih dari 2 jam - hanya dicatat, tanpa sanksi. */
+  lebihDuaJam: boolean;
+
+  status: StatusIzinKeluar;
+  diketahuiOleh: string | null;
+  diketahuiPada?: unknown;
+  diputuskanOleh: string | null;
+  diputuskanPada?: unknown;
+  catatanKeputusan: string;
+
+  createdAt?: unknown;
+  updatedAt?: unknown;
+}
