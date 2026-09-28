@@ -78,3 +78,21 @@ export const BATAS_INGAT_KONTRAK_HARI = 30;
 
 /** Bawaan lama cicilan kasbon bila tidak diisi. */
 export const TENOR_KASBON_BAWAAN = 1;
+
+/**
+ * Penanda tangan slip gaji, disalin dari form slip manual perusahaan.
+ * Ubah di sini kalau orang atau jabatannya berganti.
+ */
+export const PENANDATANGAN_SLIP = {
+  absensiDibuat: { nama: "FIRDA DESTRIANI, SM", jabatan: "ADMIN PROYEK" },
+  absensiMengetahui: { nama: "FREDDY SAPUTERA, ST", jabatan: "PROJECT MANAGER" },
+  gajiDibayarkan: { nama: "FIRDA DESTRIANI, SM", jabatan: "STAFF KEUANGAN" },
+  gajiMengetahui: { nama: "CHRISTIAN SENJAYA, SE", jabatan: "DIREKTUR KEUANGAN" },
+};
+
+/** Alamat di kop slip. */
+export const ALAMAT_PERUSAHAAN = [
+  "Jl. Sumber Asih 6-17, Sumber Sari Indah, Bandung 40222",
+  "allegroglobalconstruction@gmail.com",
+  "@AllegroGlobal_Construction",
+];

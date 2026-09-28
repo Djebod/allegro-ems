@@ -418,7 +418,8 @@ service cloud.firestore {
 
     // ---------- loanRepayments ----------
     match /loanRepayments/{bayarId} {
-      allow read: if isAdmin() || isFinance();
+      // Owner dan HR ikut membaca untuk bagian "Data Kasbon" di slip gaji.
+      allow read: if isAdmin() || isFinance() || isOwner() || isHR();
       allow create: if (isAdmin() || isFinance() || isOwner())
         && request.resource.data.loanId is string
         && request.resource.data.amount is number
@@ -589,6 +590,23 @@ service cloud.firestore {
         && request.resource.data.bersih == request.resource.data.kotor - request.resource.data.totalPotongan;
 
       allow delete: if urusGajiBulanan() && statusBulanan(resource.data.payrollId) == 'DRAFT';
+    }
+
+    // ---------- slipGaji ----------
+    // Slip yang sudah terbit ke karyawan. Dibuat Owner saat payroll
+    // ditandai Dibayar (atau sesudahnya), lalu tidak pernah diubah atau
+    // dihapus. Karyawan hanya bisa membaca slip miliknya sendiri.
+    match /slipGaji/{slipId} {
+      allow read: if urusGajiBulanan()
+        || isFinance()
+        || (sudahLogin() && resource.data.employeeId == karyawanSaya());
+
+      allow create: if isOwner()
+        && slipId == request.resource.data.bulan + '__' + request.resource.data.employeeId
+        && statusBulananSesudah(request.resource.data.bulan) in ['PAID', 'LOCKED']
+        && request.resource.data.bersih is number;
+
+      allow update, delete: if false;
     }
 
     // ---------- hari libur ----------

@@ -14,7 +14,7 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { dbClient } from "@/lib/firebase";
-import { tanggalHariIni } from "@/lib/absensi";
+import { keTanggal, tanggalHariIni } from "@/lib/absensi";
 import { bonBerjalan, catatPembayaranBon } from "@/lib/data";
 import { ambilBahanRekap } from "@/lib/data-rekap";
 import { hitungRekap } from "@/lib/rekap-kantor";
@@ -27,7 +27,19 @@ import {
   type IsianManual,
   type ItemBaru,
 } from "@/lib/payroll-bulanan";
-import type { GajiBulanan, ItemPayrollBulanan, PayrollBulanan, StatusPayroll } from "@/types";
+import { keSlip } from "@/lib/slip-gaji";
+import { susunLampiranSlip } from "@/lib/slip-harian";
+import type {
+  EmployeeLoan,
+  GajiBulanan,
+  ItemPayrollBulanan,
+  LoanRepayment,
+  PayrollBulanan,
+  SaldoCuti,
+  SlipGaji,
+  StatusPayroll,
+  SuratPeringatan,
+} from "@/types";
 
 /* ============================ Gaji pokok ============================ */
 
@@ -292,13 +304,142 @@ export async function majukanStatusBulanan(p: PayrollBulanan, oleh: string) {
     }
   }
 
-  await updateDoc(doc(db, "payrollBulanan", p.bulan), {
+  const batch = writeBatch(db);
+  batch.update(doc(db, "payrollBulanan", p.bulan), {
     status: baru,
     bonDiproses: p.bonDiproses || baru === "APPROVED",
     disetujuiOleh: baru === "APPROVED" ? oleh : p.disetujuiOleh ?? null,
     updatedAt: serverTimestamp(),
   });
+
+  // Begitu ditandai Dibayar, slip gaji terbit ke masing-masing karyawan -
+  // dalam batch yang sama, jadi tidak ada keadaan "sudah dibayar tapi slip
+  // belum ada".
+  if (baru === "PAID") {
+    for (const s of await susunSlip(p.bulan, oleh)) {
+      batch.set(doc(db, "slipGaji", s.id), { ...s, createdAt: serverTimestamp() });
+    }
+  }
+
+  await batch.commit();
   return baru;
+}
+
+/* ============================ Slip gaji ============================ */
+
+/**
+ * Seluruh baris payroll sebulan, dijadikan bentuk slip lengkap dengan
+ * lampiran absensi harian, sisa cuti/sakit, riwayat kasbon, dan SP -
+ * mengikuti form slip manual perusahaan.
+ */
+export async function susunSlip(bulan: string, oleh: string) {
+  const db = dbClient();
+  const tahun = Number(bulan.slice(0, 4));
+  const [itemSnap, bahan, saldoSnap, bonSnap, bayarSnap, spSnap] = await Promise.all([
+    getDocs(query(collection(db, "payrollBulananItems"), where("payrollId", "==", bulan))),
+    ambilBahanRekap(bulan),
+    getDocs(query(collection(db, "leaveBalances"), where("tahun", "==", tahun))).catch(() => null),
+    getDocs(collection(db, "employeeLoans")).catch(() => null),
+    getDocs(collection(db, "loanRepayments")).catch(() => null),
+    getDocs(collection(db, "warningLetters")).catch(() => null),
+  ]);
+
+  const karyawan = new Map(bahan.karyawan.map((k) => [k.id, k]));
+  const rekap = hitungRekap({ bulan, hariIni: tanggalHariIni(), ...bahan });
+  const rekapPer = new Map(rekap.baris.map((b) => [b.employeeId, b]));
+  const akhirBulan = rekap.tanggal[rekap.tanggal.length - 1];
+  const awalBulan = rekap.tanggal[0];
+
+  const saldo = new Map(
+    (saldoSnap?.docs || []).map((d) => {
+      const x = d.data() as SaldoCuti;
+      return [x.employeeId, x];
+    })
+  );
+  const bon = (bonSnap?.docs || []).map((d) => ({ id: d.id, ...(d.data() as Omit<EmployeeLoan, "id">) }));
+  const bayar = (bayarSnap?.docs || []).map((d) => ({ id: d.id, ...(d.data() as Omit<LoanRepayment, "id">) }));
+  const sp = (spSnap?.docs || []).map((d) => ({ id: d.id, ...(d.data() as Omit<SuratPeringatan, "id">) }));
+
+  const tanggalDari = (x: unknown): string => {
+    const t = (x as { toDate?: () => Date })?.toDate?.();
+    return t ? keTanggal(t) : "";
+  };
+
+  return itemSnap.docs
+    .map((d) => ({ id: d.id, ...(d.data() as Omit<ItemPayrollBulanan, "id">) }))
+    .sort((a, b) => a.employeeName.localeCompare(b.employeeName, "id"))
+    .map((i) => {
+      const baris = rekapPer.get(i.employeeId);
+      const lampiran = baris ? susunLampiranSlip({ hasil: rekap, baris, absen: bahan.absen, cuti: bahan.cuti }) : undefined;
+
+      const sc = saldo.get(i.employeeId);
+      const sisaCuti = sc ? sc.jatahTahunan + sc.penyesuaian - sc.tahunanTerpakai : null;
+      const sisaSakit = sc ? sc.jatahSakit - sc.sakitTerpakai : null;
+
+      // Kasbon: pinjaman sebagai debet, cicilan sebagai kredit - sampai akhir bulan ini.
+      const bonnya = bon.filter((b) => b.employeeId === i.employeeId && b.status !== "CANCELLED" && b.loanDate <= akhirBulan);
+      const idBon = new Set(bonnya.map((b) => b.id));
+      const kasbon: NonNullable<SlipGaji["kasbon"]> = [
+        ...bonnya.map((b) => ({ tanggal: b.loanDate, uraian: b.description || "Kasbon", debet: b.originalAmount, kredit: 0 })),
+        ...bayar
+          .filter((r) => idBon.has(r.loanId))
+          .map((r) => ({ tanggal: tanggalDari(r.createdAt) || akhirBulan, uraian: r.catatan, debet: 0, kredit: r.amount }))
+          .filter((r) => r.tanggal <= akhirBulan),
+      ];
+      // Selama belum disetujui, potongan bulan ini belum dibukukan; tampilkan sebagai rencana.
+      const sudahDibukukan = bayar.some((r) => r.payrollId === `BULANAN-${bulan}` && r.employeeId === i.employeeId);
+      if (i.potonganBon > 0 && !sudahDibukukan) {
+        kasbon.push({ tanggal: akhirBulan, uraian: `Potongan gaji ${bulan}`, debet: 0, kredit: i.potonganBon });
+      }
+      kasbon.sort((a, b) => a.tanggal.localeCompare(b.tanggal));
+
+      const spBerlaku = sp
+        .filter((x) => x.employeeId === i.employeeId && !x.dicabut && x.tanggalTerbit <= akhirBulan && x.berlakuSampai >= awalBulan)
+        .map((x) => ({ tingkat: x.tingkat, tanggal: x.tanggalTerbit }));
+
+      return keSlip(i, karyawan.get(i.employeeId), oleh, { lampiran, sisaCuti, sisaSakit, kasbon, sp: spBerlaku });
+    });
+}
+
+export function pantauSlipBulan(bulan: string, setData: (d: SlipGaji[]) => void, gagal: () => void) {
+  return onSnapshot(
+    query(collection(dbClient(), "slipGaji"), where("bulan", "==", bulan)),
+    (snap) => setData(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<SlipGaji, "id">) }))),
+    gagal
+  );
+}
+
+/** Slip milik karyawan yang sedang login. */
+export function pantauSlipSaya(employeeId: string, setData: (d: SlipGaji[]) => void, gagal: () => void) {
+  return onSnapshot(
+    query(collection(dbClient(), "slipGaji"), where("employeeId", "==", employeeId)),
+    (snap) =>
+      setData(
+        snap.docs
+          .map((d) => ({ id: d.id, ...(d.data() as Omit<SlipGaji, "id">) }))
+          .sort((a, b) => b.bulan.localeCompare(a.bulan))
+      ),
+    gagal
+  );
+}
+
+/**
+ * Menerbitkan slip yang belum ada, untuk payroll yang sudah Dibayar atau
+ * Dikunci. Slip yang sudah terbit tidak disentuh - slip adalah dokumen
+ * yang sudah diterima karyawan.
+ */
+export async function terbitkanSlipYangKurang(p: PayrollBulanan, sudah: SlipGaji[], oleh: string) {
+  if (p.status !== "PAID" && p.status !== "LOCKED") {
+    throw new Error("Slip baru bisa diterbitkan setelah payroll ditandai Dibayar.");
+  }
+  const ada = new Set(sudah.map((s) => s.id));
+  const kurang = (await susunSlip(p.bulan, oleh)).filter((s) => !ada.has(s.id));
+  if (!kurang.length) return 0;
+  const db = dbClient();
+  const batch = writeBatch(db);
+  kurang.forEach((s) => batch.set(doc(db, "slipGaji", s.id), { ...s, createdAt: serverTimestamp() }));
+  await batch.commit();
+  return kurang.length;
 }
 
 export async function kembalikanBulananKeDraft(p: PayrollBulanan) {

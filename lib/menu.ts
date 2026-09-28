@@ -30,6 +30,8 @@ export const MENU: GrupMenu[] = [
       { label: "Absen saya", href: "/absen", peran: ["ADMIN", "FINANCE", "HR", "OWNER", "KARYAWAN"] },
       { label: "Absen tim", href: "/mandor", peran: ["MANDOR"] },
       { label: "Cuti dan izin", href: "/cuti", peran: SEMUA },
+      // Slip gaji bulanan hanya untuk staf kantor; mandor dibayar mingguan.
+      { label: "Slip gaji", href: "/slip-gaji", peran: ["ADMIN", "FINANCE", "HR", "OWNER", "KARYAWAN"] },
       { label: "Surat peringatan", href: "/sp", peran: SEMUA },
     ],
   },

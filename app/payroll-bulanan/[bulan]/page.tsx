@@ -11,19 +11,32 @@ import { useAuth } from "@/lib/auth";
 import { tanggalHariIni } from "@/lib/absensi";
 import { bacaAngka, keRupiah, rupiahPenuh } from "@/lib/rupiah";
 import { namaBulan } from "@/lib/rekap-kantor";
-import { NAMA_STATUS, hitungAngka, peringatanItem, warnaStatus, type IsianManual } from "@/lib/payroll-bulanan";
+import {
+  NAMA_STATUS,
+  SAMARAN_GAJI,
+  bolehLihatGaji,
+  hitungAngka,
+  peringatanItem,
+  warnaStatus,
+  type IsianManual,
+} from "@/lib/payroll-bulanan";
+import TombolLihatGaji from "@/components/TombolLihatGaji";
 import {
   hapusPayrollBulanan,
   hitungUlangBulanan,
   kembalikanBulananKeDraft,
   majukanStatusBulanan,
   pantauItemBulanan,
+  pantauSlipBulan,
+  susunSlip,
+  terbitkanSlipYangKurang,
   pantauPayrollBulanan,
   statusBerikutBulanan,
   ubahItemBulanan,
 } from "@/lib/data-payroll-bulanan";
 import { eksporPayrollBulananExcel, eksporPayrollBulananPdf } from "@/lib/ekspor-payroll-bulanan";
-import type { ItemPayrollBulanan, PayrollBulanan, StatusPayroll } from "@/types";
+import { namaBerkasSlip, unduhSlipPdf } from "@/lib/slip-gaji";
+import type { ItemPayrollBulanan, PayrollBulanan, SlipGaji, StatusPayroll } from "@/types";
 
 const TOMBOL_MAJU: Record<StatusPayroll, string> = {
   DRAFT: "Ajukan untuk diperiksa",
@@ -61,6 +74,10 @@ function Isi({ bulan }: { bulan: string }) {
   const { profile } = useAuth();
   const router = useRouter();
   const adalahOwner = profile?.role === "OWNER";
+  const bolehGaji = bolehLihatGaji(profile?.role);
+  // Kolom gaji pokok selalu mulai tersamar setiap halaman dibuka.
+  const [tampilGaji, setTampilGaji] = useState(false);
+  const gaji = (n: number) => (bolehGaji && tampilGaji ? r(n) : SAMARAN_GAJI);
 
   const [p, setP] = useState<PayrollBulanan | null | undefined>(undefined);
   const [items, setItems] = useState<ItemPayrollBulanan[]>([]);
@@ -73,6 +90,21 @@ function Isi({ bulan }: { bulan: string }) {
   const [ubah, setUbah] = useState<ItemPayrollBulanan | null>(null);
   const [isian, setIsian] = useState<IsianManual | null>(null);
   const [salahForm, setSalahForm] = useState<string | null>(null);
+  const [slipTerbit, setSlipTerbit] = useState<SlipGaji[]>([]);
+
+  const sudahDibayar = p?.status === "PAID" || p?.status === "LOCKED";
+  useEffect(() => {
+    // Hanya yang berhak melihat gaji yang membaca daftar slip.
+    if (!sudahDibayar || !bolehLihatGaji(profile?.role)) return;
+    return pantauSlipBulan(bulan, setSlipTerbit, () => setSlipTerbit([]));
+  }, [bulan, sudahDibayar, profile?.role]);
+
+  /** Slip dari halaman ini: slip resmi kalau sudah dibayar, draf kalau belum. */
+  async function unduhSlip(kode?: string) {
+    const semua = await susunSlip(bulan, profile?.name || "");
+    const dipilih = kode ? semua.filter((s) => s.employeeId === kode) : semua;
+    await unduhSlipPdf({ slip: dipilih, namaBerkas: namaBerkasSlip(bulan, kode), draf: !sudahDibayar });
+  }
 
   useEffect(() => {
     const gagal = () => setSalah("Data payroll tidak bisa dibaca. Pastikan Security Rules terbaru sudah di-publish.");
@@ -124,6 +156,13 @@ function Isi({ bulan }: { bulan: string }) {
       )
         return;
     }
+    if (
+      berikut === "PAID" &&
+      !window.confirm(
+        `Tandai payroll ${namaBulan(bulan)} sudah dibayar? Slip gaji akan langsung terbit dan bisa dibuka masing-masing karyawan di menu Slip Gaji.`
+      )
+    )
+      return;
     if (berikut === "LOCKED" && !window.confirm("Kunci payroll ini? Sesudah dikunci tidak ada yang bisa mengubahnya.")) return;
     if (berikut === "REVIEW" && adaPeringatan && !window.confirm(`${adaPeringatan} karyawan masih punya peringatan. Tetap ajukan?`))
       return;
@@ -193,6 +232,17 @@ function Isi({ bulan }: { bulan: string }) {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
+            {/* Berkas ekspor memuat gaji pokok, jadi ikut dibatasi. */}
+            {bolehGaji && (
+              <>
+                <button
+                  className="btn-ringan"
+                  disabled={!!sibuk}
+                  onClick={() => jalankan("slip", () => unduhSlip())}
+                  title={sudahDibayar ? undefined : "Belum dibayar: slip diberi cap DRAF"}
+                >
+                  {sibuk === "slip" ? "Menyusun…" : sudahDibayar ? "Slip gaji (semua)" : "Pratinjau slip (draf)"}
+                </button>
             <button
               className="btn-ringan"
               disabled={!!sibuk}
@@ -211,6 +261,8 @@ function Isi({ bulan }: { bulan: string }) {
             >
               {sibuk === "pdf" ? "Menyusun…" : "Ekspor PDF"}
             </button>
+              </>
+            )}
             {p.status === "DRAFT" && (
               <>
                 <button
@@ -263,6 +315,27 @@ function Isi({ bulan }: { bulan: string }) {
           </div>
         </div>
 
+        {sudahDibayar && bolehGaji && (
+          <div className="mt-3 flex flex-wrap items-center gap-3 rounded-lg bg-allegro-50 px-3 py-2 text-xs text-allegro-700">
+            <span>
+              Slip gaji terbit ke karyawan: <b>{slipTerbit.length}</b> dari {items.length} orang.
+            </span>
+            {slipTerbit.length < items.length && adalahOwner && (
+              <button
+                className="btn-kuning"
+                disabled={!!sibuk}
+                onClick={() =>
+                  jalankan("terbit", async () => {
+                    const n = await terbitkanSlipYangKurang(p, slipTerbit, profile?.name || "");
+                    return n ? `${n} slip gaji diterbitkan.` : "Semua slip sudah terbit.";
+                  })
+                }
+              >
+                Terbitkan yang belum
+              </button>
+            )}
+          </div>
+        )}
         {!bolehMaju && berikut && (
           <p className="mt-3 text-xs text-muted">
             Menunggu Owner untuk {TOMBOL_MAJU[p.status].toLowerCase()}.
@@ -324,7 +397,10 @@ function Isi({ bulan }: { bulan: string }) {
               <th className="text-right">Hadir</th>
               <th className="text-right">Alpa</th>
               <th className="text-right">Telat</th>
-              <th className="text-right">Gaji pokok</th>
+              <th className="whitespace-nowrap text-right">
+                Gaji pokok
+                <TombolLihatGaji tampil={tampilGaji} boleh={bolehGaji} ubah={setTampilGaji} />
+              </th>
               <th className="text-right">Lembur</th>
               <th className="text-right">Kerajinan</th>
               <th className="text-right">Tambahan</th>
@@ -358,7 +434,7 @@ function Isi({ bulan }: { bulan: string }) {
                     {i.terlambatKali}
                     {i.capaiSp && <span className="ml-1 rounded bg-red-100 px-1 text-[9px] text-bahaya">SP 1</span>}
                   </td>
-                  <td className="text-right">{r(i.gajiPokok)}</td>
+                  <td className="text-right tracking-wider">{gaji(i.gajiPokok)}</td>
                   <td className="text-right">{r(i.lembur)}</td>
                   <td className="text-right">{r(i.uangKerajinan)}</td>
                   <td className="text-right">{r(i.tambahanLain)}</td>
@@ -370,10 +446,20 @@ function Isi({ bulan }: { bulan: string }) {
                   <td className={`text-right font-bold ${i.bersih < 0 ? "text-bahaya" : "text-allegro-700"}`}>
                     {r(i.bersih)}
                   </td>
-                  <td className="text-right">
+                  <td className="whitespace-nowrap text-right">
                     <button className="btn-kuning" onClick={() => bukaUbah(i)}>
                       {bisaUbah ? "Isi" : "Lihat"}
                     </button>
+                    {bolehGaji && (
+                      <button
+                        className="btn-ringan ml-1 !px-2 !py-1 !text-xs"
+                        disabled={!!sibuk}
+                        onClick={() => jalankan(`slip-${i.employeeId}`, () => unduhSlip(i.employeeId))}
+                        title={sudahDibayar ? "Unduh slip gaji" : "Pratinjau slip (cap DRAF)"}
+                      >
+                        {sibuk === `slip-${i.employeeId}` ? "…" : "Slip"}
+                      </button>
+                    )}
                   </td>
                 </tr>
               );
@@ -429,7 +515,7 @@ function Isi({ bulan }: { bulan: string }) {
             <p className="text-xs font-semibold uppercase tracking-wide text-muted">Penerimaan</p>
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="Gaji pokok">
-                <input className="input-dasar" disabled value={r(ubah.gajiPokok)} />
+                <input className="input-dasar tracking-wider" disabled value={gaji(ubah.gajiPokok)} />
               </Field>
               <Field label="Uang kerajinan" bantuan={adalahOwner ? undefined : "Hanya Owner yang bisa mengisi"}>
                 <IsianRupiah nilai={isian.uangKerajinan} ubah={set("uangKerajinan")} mati={!bisaUbah || !adalahOwner} />

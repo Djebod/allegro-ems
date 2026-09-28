@@ -428,16 +428,33 @@ function Isi() {
             ))}
           </div>
 
-          <p className="mt-3 text-xs leading-relaxed text-muted">
-            Alpa dihitung dari hari kerja yang sudah lewat (Senin–Sabtu, bukan hari libur) tanpa absen dan tanpa
-            cuti/izin yang disetujui. Pengajuan yang belum diputuskan masuk kolom Menunggu, bukan alpa — putuskan dulu
-            di Kelola Cuti supaya rekapnya final. Izin per jam (datang terlambat, pulang awal) tidak menghapus catatan
-            telatnya. Hari sebelum tanggal masuk karyawan tidak dinilai.
-            <br />
-            Denda telat mengikuti pengumuman 1 April 2025 (1–15 menit Rp15.000 · 16–30 menit Rp30.000 · 31–60 menit
-            Rp60.000 · lebih dari 60 menit Rp75.000). Telat dengan izin &quot;Datang terlambat&quot; yang disetujui bebas
-            denda. Skor {BATAS_SKOR_SP} dalam sebulan berarti SP 1 — terbitkan lewat menu Surat Peringatan.
-          </p>
+          <div className="mt-4 grid gap-4 text-xs leading-relaxed text-muted md:grid-cols-2">
+            <div>
+              <p className="mb-1 font-semibold text-ink">Cara menghitung alpa</p>
+              <ul className="list-disc space-y-1 pl-4">
+                <li>Alpa = hari kerja yang sudah lewat (Senin–Sabtu, bukan hari libur) tanpa absen dan tanpa cuti/izin yang disetujui.</li>
+                <li>
+                  Pengajuan yang belum diputuskan masuk kolom <b>Menunggu</b>, bukan alpa. Putuskan dulu di Kelola Cuti
+                  supaya rekapnya final.
+                </li>
+                <li>Izin per jam (datang terlambat, pulang awal) tidak menghapus catatan telatnya.</li>
+                <li>Hari sebelum tanggal masuk karyawan tidak dinilai.</li>
+              </ul>
+            </div>
+            <div>
+              <p className="mb-1 font-semibold text-ink">Denda telat (pengumuman 1 April 2025)</p>
+              <ul className="list-disc space-y-1 pl-4">
+                <li>1–15 menit: Rp15.000</li>
+                <li>16–30 menit: Rp30.000</li>
+                <li>31–60 menit: Rp60.000</li>
+                <li>Lebih dari 60 menit: Rp75.000</li>
+                <li>Telat dengan izin &quot;Datang terlambat&quot; yang disetujui bebas denda.</li>
+                <li>
+                  Skor {BATAS_SKOR_SP} dalam sebulan berarti SP 1 — terbitkan lewat menu Surat Peringatan.
+                </li>
+              </ul>
+            </div>
+          </div>
         </>
       ) : null}
     </>

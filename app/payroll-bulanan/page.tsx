@@ -19,7 +19,8 @@ import {
   pantauGajiBulanan,
   pasangGajiBaru,
 } from "@/lib/data-payroll-bulanan";
-import { NAMA_STATUS, warnaStatus } from "@/lib/payroll-bulanan";
+import { NAMA_STATUS, SAMARAN_GAJI, bolehLihatGaji, warnaStatus } from "@/lib/payroll-bulanan";
+import TombolLihatGaji from "@/components/TombolLihatGaji";
 import type { Employee, GajiBulanan, PayrollBulanan } from "@/types";
 
 /* ============================ Daftar ============================ */
@@ -144,6 +145,10 @@ function Daftar() {
 
 function GajiPokok() {
   const { profile } = useAuth();
+  const boleh = bolehLihatGaji(profile?.role);
+  // Selalu mulai tersamar setiap halaman dibuka.
+  const [tampil, setTampil] = useState(false);
+  const gajiTeks = (n: number) => (boleh && tampil ? rupiahPenuh(n) : SAMARAN_GAJI);
   const bulanIni = tanggalHariIni().slice(0, 7);
   const [karyawan, setKaryawan] = useState<Employee[]>([]);
   const [gaji, setGaji] = useState<GajiBulanan[]>([]);
@@ -226,6 +231,11 @@ function GajiPokok() {
             {belumAda ? `${belumAda} staf belum punya gaji pokok` : "Semua staf sudah punya gaji pokok"}
           </p>
         </div>
+        {!boleh && (
+          <p className="mt-2 text-xs font-semibold text-muted">
+            Angka gaji tersamar. Hanya Owner, Finance, dan HR yang bisa melihat dan mengisinya.
+          </p>
+        )}
         <p className="mt-2 text-xs text-muted">
           Gaji tidak pernah ditimpa. Mengubah gaji berarti menutup gaji lama di bulan sebelumnya dan membuat gaji baru,
           sehingga payroll bulan-bulan lalu tetap memakai angka yang berlaku saat itu.
@@ -249,7 +259,10 @@ function GajiPokok() {
             <tr>
               <th>Nama</th>
               <th>Divisi</th>
-              <th className="text-right">Gaji pokok</th>
+              <th className="text-right">
+                Gaji pokok
+                <TombolLihatGaji tampil={tampil} boleh={boleh} ubah={setTampil} />
+              </th>
               <th>Berlaku mulai</th>
               <th></th>
             </tr>
@@ -266,16 +279,21 @@ function GajiPokok() {
                   <td>{e.divisi || "-"}</td>
                   <td className="text-right">
                     {g ? (
-                      <span className="font-semibold text-ink">{rupiahPenuh(g.gajiPokok)}</span>
+                      <span className="font-semibold tracking-wider text-ink">{gajiTeks(g.gajiPokok)}</span>
                     ) : (
                       <span className="text-bahaya">belum diisi</span>
                     )}
                   </td>
                   <td>{g ? namaBulan(g.berlakuMulai) : "-"}</td>
                   <td className="text-right">
-                    <button className="btn-kuning" onClick={() => bukaForm(e)}>
-                      {g ? "Ubah" : "Isi"}
-                    </button>
+                    {/* Mengisi gaji berarti melihat angkanya, jadi ikut dibatasi. */}
+                    {boleh ? (
+                      <button className="btn-kuning" onClick={() => bukaForm(e)}>
+                        {g ? "Ubah" : "Isi"}
+                      </button>
+                    ) : (
+                      <span className="text-[11px] text-muted">—</span>
+                    )}
                   </td>
                 </tr>
               );
@@ -316,7 +334,7 @@ function GajiPokok() {
                 <p className="mb-2 text-xs font-semibold text-ink">Riwayat</p>
                 {riwayat(buka.id).map((g) => (
                   <p key={g.id} className="text-xs text-muted">
-                    {rupiahPenuh(g.gajiPokok)} · {namaBulan(g.berlakuMulai)} –{" "}
+                    {gajiTeks(g.gajiPokok)} · {namaBulan(g.berlakuMulai)} –{" "}
                     {g.berlakuSampai ? namaBulan(g.berlakuSampai) : "sekarang"}
                     {g.catatan ? ` · ${g.catatan}` : ""}
                   </p>

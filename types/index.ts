@@ -675,3 +675,30 @@ export interface ItemPayrollBulanan {
   createdAt?: unknown;
   updatedAt?: unknown;
 }
+
+/**
+ * Slip gaji yang sudah diterbitkan ke karyawan. Dibuat sekali saat payroll
+ * bulanan ditandai Dibayar, dan tidak pernah diubah - karyawan membaca
+ * salinan ini, bukan data payroll yang masih bisa dikelola HR.
+ * ID dokumen = "<bulan>__<kodeKaryawan>".
+ */
+export type SlipGaji = Omit<ItemPayrollBulanan, "id" | "payrollId" | "createdAt" | "updatedAt"> & {
+  id: string;
+  bulan: string;
+  bankName: string;
+  /** Hanya empat digit terakhir. Nomor lengkap tidak pernah disalin ke slip. */
+  rekeningSamar: string;
+  diterbitkanOleh: string;
+  /** Posisi dan status kepegawaian saat slip dibuat. */
+  jabatan?: string;
+  statusKepegawaian?: string;
+  /** Lampiran absensi harian seperti FORM 1 (1-2). */
+  lampiran?: import("@/lib/slip-harian").LampiranSlip | null;
+  sisaCuti?: number | null;
+  sisaSakit?: number | null;
+  /** Riwayat kasbon: pinjaman (debet) dan cicilan (kredit). */
+  kasbon?: { tanggal: string; uraian: string; debet: number; kredit: number }[];
+  /** SP yang berlaku pada bulan itu, per tingkat. */
+  sp?: { tingkat: number; tanggal: string }[];
+  createdAt?: unknown;
+};

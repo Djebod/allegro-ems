@@ -179,3 +179,17 @@ export function warnaStatus(s: StatusPayroll) {
   if (s === "PAID") return "bg-green-100 text-green-800";
   return "bg-allegro-700 text-white";
 }
+
+/**
+ * Siapa yang boleh MELIHAT angka gaji pokok. Bawaannya angka selalu
+ * tersamar (*********) dan baru tampil kalau orang yang berhak menekan
+ * "Tampilkan" - supaya gaji tidak terbaca orang yang kebetulan melihat
+ * layar. Admin sistem bisa membuka halaman payroll, tetapi tidak bisa
+ * membuka samaran ini.
+ */
+export const PERAN_LIHAT_GAJI = ["OWNER", "FINANCE", "HR"] as const;
+export const SAMARAN_GAJI = "*********";
+
+export function bolehLihatGaji(role: string | null | undefined): boolean {
+  return !!role && (PERAN_LIHAT_GAJI as readonly string[]).includes(role);
+}
