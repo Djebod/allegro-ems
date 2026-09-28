@@ -7,11 +7,13 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "uji": "tsx uji/payroll.ts && tsx uji/sp.ts && tsx uji/jadwal.ts && tsx uji/kantor.ts"
+    "uji": "tsx uji/payroll.ts && tsx uji/sp.ts && tsx uji/jadwal.ts && tsx uji/kantor.ts && tsx uji/rekap.ts && tsx uji/payroll-bulanan.ts"
   },
   "dependencies": {
     "exceljs": "^4.4.0",
     "firebase": "^12.19.0",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.8",
     "next": "^15.5.25",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"

@@ -37,6 +37,9 @@ export const MENU: GrupMenu[] = [
     judul: "Kehadiran",
     item: [
       { label: "Absensi kantor", href: "/absensi-kantor", peran: ["ADMIN", "HR", "OWNER", "FINANCE"] },
+      // Hanya pengurus kepegawaian: Finance tidak boleh membaca pengajuan cuti,
+      // sehingga cuti mereka akan tampak sebagai alpa kalau Finance ikut membuka.
+      { label: "Rekap bulanan", href: "/absensi-kantor/rekap", peran: KEPEGAWAIAN },
       { label: "Absensi lapangan", href: "/admin/absensi", peran: ["ADMIN", "FINANCE"] },
       { label: "Kantor", href: "/admin/kantor", peran: KEPEGAWAIAN },
     ],
@@ -55,6 +58,9 @@ export const MENU: GrupMenu[] = [
     item: [
       { label: "Kasbon", href: "/bon", peran: ["ADMIN", "FINANCE"] },
       { label: "Payroll mingguan", href: "/payroll", peran: ["ADMIN", "FINANCE"] },
+      // Sesuai permintaan client: hanya Owner (Ko Freddy, Ko David,
+      // Pak Christian), HR (Firda), dan Admin sistem.
+      { label: "Payroll bulanan", href: "/payroll-bulanan", peran: ["ADMIN", "HR", "OWNER"] },
     ],
   },
   {
@@ -86,5 +92,6 @@ export function menuAktif(pathname: string, href: string): boolean {
   // /admin/karyawan/impor punya menu sendiri, jadi jangan ikut menyalakan Data karyawan.
   if (href === "/admin/karyawan" && pathname.startsWith("/admin/karyawan/impor")) return false;
   if (href === "/cuti" && pathname.startsWith("/cuti/kelola")) return false;
+  if (href === "/absensi-kantor" && pathname.startsWith("/absensi-kantor/rekap")) return false;
   return pathname.startsWith(`${href}/`);
 }

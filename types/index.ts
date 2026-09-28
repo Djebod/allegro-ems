@@ -579,3 +579,89 @@ export interface AbsenKantor {
   createdAt?: unknown;
   updatedAt?: unknown;
 }
+
+/* ---------------- Payroll bulanan (staf kantor) ---------------- */
+
+/**
+ * Gaji pokok bulanan staf kantor. Sama seperti tarif harian: tidak pernah
+ * ditimpa. Gaji lama ditutup masa berlakunya, lalu gaji baru dibuat,
+ * supaya payroll bulan-bulan lalu tetap bisa ditelusuri.
+ */
+export interface GajiBulanan {
+  id: string;
+  employeeId: string;
+  gajiPokok: number;
+  /** Bulan mulai berlaku, "YYYY-MM". */
+  berlakuMulai: string;
+  /** Bulan terakhir berlaku. Kosong berarti masih berlaku. */
+  berlakuSampai: string | null;
+  catatan: string;
+  dibuatOleh: string;
+  createdAt?: unknown;
+}
+
+/** ID dokumen = bulan "YYYY-MM", jadi satu bulan tidak bisa dihitung dua kali. */
+export interface PayrollBulanan {
+  id: string;
+  bulan: string;
+  status: StatusPayroll;
+  totalKaryawan: number;
+  totalKotor: number;
+  totalPotongan: number;
+  totalBersih: number;
+  totalDendaTelat: number;
+  totalPotonganBon: number;
+  bonDiproses: boolean;
+  dibuatOleh: string;
+  disetujuiOleh?: string | null;
+  createdAt?: unknown;
+  updatedAt?: unknown;
+}
+
+/** ID dokumen = "<bulan>__<kodeKaryawan>". */
+export interface ItemPayrollBulanan {
+  id: string;
+  payrollId: string;
+  employeeId: string;
+  employeeName: string;
+  divisi: string;
+
+  /* --- salinan, tidak bisa diubah setelah tersimpan --- */
+  gajiPokok: number;
+  hariKerja: number;
+  hadir: number;
+  cuti: number;
+  sakit: number;
+  izin: number;
+  dinas: number;
+  alpa: number;
+  tidakAbsenPulang: number;
+  terlambatKali: number;
+  terlambatMenit: number;
+  skorTelat: number;
+  dendaTelat: number;
+  capaiSp: boolean;
+  /** Sisa bon saat payroll disusun, sebagai batas potongan. */
+  sisaBon: number;
+
+  /* --- diisi manual --- */
+  lembur: number;
+  lemburKet: string;
+  potonganAlpa: number;
+  /** Hanya Owner yang boleh mengisi. */
+  uangKerajinan: number;
+  tambahanLain: number;
+  tambahanLainKet: string;
+  potonganLain: number;
+  potonganLainKet: string;
+  potonganBon: number;
+  catatan: string;
+
+  /* --- hasil hitung --- */
+  kotor: number;
+  totalPotongan: number;
+  bersih: number;
+
+  createdAt?: unknown;
+  updatedAt?: unknown;
+}

@@ -380,13 +380,16 @@ service cloud.firestore {
 
     match /employeeLoans/{bonId} {
       // Karyawan tidak punya akses; bon adalah urusan Admin dan Finance.
-      allow read: if isAdmin() || isFinance() || isOwner();
+      // HR ikut membaca karena menyusun payroll bulanan (usulan potongan bon).
+      allow read: if isAdmin() || isFinance() || isOwner() || isHR();
       allow create: if (isAdmin() || isFinance()) && bonSah();
 
       // Nominal asli dan pemiliknya tidak boleh berubah. Yang boleh
       // berubah hanya sisa dan statusnya, karena itulah yang bergerak
       // setiap kali ada pembayaran.
-      allow update: if (isAdmin() || isFinance()) && bonSah()
+      // Owner ikut, karena potongan bon payroll bulanan dibukukan saat
+      // Owner menyetujui payroll itu.
+      allow update: if (isAdmin() || isFinance() || isOwner()) && bonSah()
         && request.resource.data.employeeId == resource.data.employeeId
         && request.resource.data.originalAmount == resource.data.originalAmount
         && request.resource.data.loanDate == resource.data.loanDate
@@ -410,13 +413,13 @@ service cloud.firestore {
       allow update: if false;
       // Dihapus saat bon lunas atau dibatalkan, supaya karyawan itu
       // boleh mengajukan bon berikutnya.
-      allow delete: if isAdmin() || isFinance();
+      allow delete: if isAdmin() || isFinance() || isOwner();
     }
 
     // ---------- loanRepayments ----------
     match /loanRepayments/{bayarId} {
       allow read: if isAdmin() || isFinance();
-      allow create: if (isAdmin() || isFinance())
+      allow create: if (isAdmin() || isFinance() || isOwner())
         && request.resource.data.loanId is string
         && request.resource.data.amount is number
         && request.resource.data.amount > 0;
@@ -497,6 +500,95 @@ service cloud.firestore {
 
       allow delete: if (isAdmin() || isFinance())
         && statusPayroll(resource.data.payrollId) == 'DRAFT';
+    }
+
+    // ================= PAYROLL BULANAN (staf kantor) =================
+    // Hanya Ko Freddy, Ko David, Pak Christian (OWNER), Firda (HR), dan
+    // Admin sistem. Finance tidak termasuk, sesuai permintaan client.
+    function urusGajiBulanan() {
+      return isAdmin() || isHR() || isOwner();
+    }
+
+    // ---------- gajiBulanan ----------
+    // Sama seperti salaryRates: angka tidak pernah diubah. Gaji lama
+    // ditutup masa berlakunya, gaji baru dibuat.
+    match /gajiBulanan/{gajiId} {
+      allow read: if urusGajiBulanan();
+      allow create: if urusGajiBulanan()
+        && request.resource.data.employeeId is string
+        && request.resource.data.gajiPokok is number
+        && request.resource.data.gajiPokok > 0
+        && request.resource.data.berlakuMulai is string
+        && request.resource.data.berlakuMulai.size() == 7
+        && request.resource.data.berlakuSampai == null;
+      allow update: if urusGajiBulanan()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['berlakuSampai'])
+        && request.resource.data.berlakuSampai is string
+        && request.resource.data.berlakuSampai.size() == 7;
+      allow delete: if false;
+    }
+
+    // ---------- payrollBulanan ----------
+    function statusBulanan(bulan) {
+      return get(/databases/$(database)/documents/payrollBulanan/$(bulan)).data.status;
+    }
+
+    // Dipakai saat induk dan barisnya dibuat dalam satu batch: get() masih
+    // melihat keadaan sebelum batch (induknya belum ada), getAfter() yang
+    // melihat hasilnya.
+    function statusBulananSesudah(bulan) {
+      return getAfter(/databases/$(database)/documents/payrollBulanan/$(bulan)).data.status;
+    }
+
+    match /payrollBulanan/{bulan} {
+      allow read: if urusGajiBulanan();
+
+      // ID dokumen = bulan, jadi satu bulan tidak bisa dihitung dua kali.
+      allow create: if urusGajiBulanan()
+        && request.resource.data.bulan == bulan
+        && request.resource.data.status == 'DRAFT'
+        && request.resource.data.bonDiproses == false;
+
+      allow update: if urusGajiBulanan()
+        && resource.data.status != 'LOCKED'
+        && request.resource.data.bulan == resource.data.bulan
+        && request.resource.data.status in ['DRAFT', 'REVIEW', 'APPROVED', 'PAID', 'LOCKED']
+        // Menyetujui (dan semua langkah sesudahnya) hanya oleh Owner.
+        && (request.resource.data.status in ['DRAFT', 'REVIEW'] || isOwner() || resource.data.status == request.resource.data.status)
+        // Yang sudah disetujui tidak bisa mundur.
+        && !(resource.data.status in ['APPROVED', 'PAID'] && request.resource.data.status in ['DRAFT', 'REVIEW']);
+
+      allow delete: if urusGajiBulanan() && resource.data.status == 'DRAFT';
+    }
+
+    // ---------- payrollBulananItems ----------
+    match /payrollBulananItems/{itemId} {
+      allow read: if urusGajiBulanan();
+
+      allow create: if urusGajiBulanan()
+        && statusBulananSesudah(request.resource.data.payrollId) == 'DRAFT'
+        && itemId == request.resource.data.payrollId + '__' + request.resource.data.employeeId
+        && request.resource.data.gajiPokok is number
+        && request.resource.data.bersih is number;
+
+      // Hanya isian manual dan hasil hitungnya yang boleh berubah, dan
+      // hasil hitungnya diperiksa di sini juga - jadi angka diterima tidak
+      // bisa diketik bebas. Uang kerajinan hanya boleh diubah Owner.
+      allow update: if urusGajiBulanan()
+        && statusBulanan(resource.data.payrollId) in ['DRAFT', 'REVIEW']
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+             'lembur', 'lemburKet', 'potonganAlpa', 'uangKerajinan', 'tambahanLain',
+             'tambahanLainKet', 'potonganLain', 'potonganLainKet', 'potonganBon',
+             'catatan', 'kotor', 'totalPotongan', 'bersih', 'updatedAt'])
+        && (request.resource.data.uangKerajinan == resource.data.uangKerajinan || isOwner())
+        && request.resource.data.potonganBon <= resource.data.sisaBon
+        && request.resource.data.kotor == resource.data.gajiPokok + request.resource.data.lembur
+             + request.resource.data.uangKerajinan + request.resource.data.tambahanLain
+        && request.resource.data.totalPotongan == resource.data.dendaTelat + request.resource.data.potonganAlpa
+             + request.resource.data.potonganBon + request.resource.data.potonganLain
+        && request.resource.data.bersih == request.resource.data.kotor - request.resource.data.totalPotongan;
+
+      allow delete: if urusGajiBulanan() && statusBulanan(resource.data.payrollId) == 'DRAFT';
     }
 
     // ---------- hari libur ----------
