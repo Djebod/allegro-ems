@@ -14,7 +14,7 @@ import {
   signOut,
   type User,
 } from "firebase/auth";
-import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
+import { deleteDoc, doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
 import { authClient, dbClient, providerGoogle, SUPER_ADMIN_EMAIL } from "@/lib/firebase";
 import type { AppUser, RoleOrPending } from "@/types";
 
@@ -33,7 +33,9 @@ const AuthContext = createContext<AuthState | null>(null);
 /**
  * Saat seseorang login Google untuk pertama kali, dokumen users/{uid}
  * dibuat dengan peran PENDING. Hanya email super admin yang langsung
- * mendapat peran ADMIN. Semua orang lain harus diberi peran oleh Admin.
+ * mendapat peran ADMIN. Semua orang lain harus diberi peran oleh Admin -
+ * kecuali emailnya sudah DIUNDANG: peran dan sambungan karyawannya
+ * langsung dipakai dari undangan itu, lalu undangannya dihapus.
  * Aturan yang sama ditegakkan ulang di Firestore Security Rules.
  */
 async function ambilAtauBuatProfil(user: User): Promise<AppUser> {
@@ -44,16 +46,32 @@ async function ambilAtauBuatProfil(user: User): Promise<AppUser> {
     return { uid: user.uid, ...(snap.data() as Omit<AppUser, "uid">) };
   }
 
-  const superAdmin = (user.email || "").toLowerCase() === SUPER_ADMIN_EMAIL;
+  const email = (user.email || "").toLowerCase();
+  const superAdmin = email === SUPER_ADMIN_EMAIL;
+
+  // Undangan dari Admin, bila ada. Gagal membaca = dianggap tidak diundang.
+  let undangan: { role: RoleOrPending; employeeId: string | null } | null = null;
+  if (!superAdmin && email) {
+    try {
+      const u = await getDoc(doc(dbClient(), "undangan", email));
+      if (u.exists()) {
+        const d = u.data();
+        undangan = { role: d.role as RoleOrPending, employeeId: (d.employeeId as string | null) ?? null };
+      }
+    } catch {
+      undangan = null;
+    }
+  }
+
   const baru: Omit<AppUser, "uid"> = {
     name: user.displayName || "Tanpa nama",
-    email: (user.email || "").toLowerCase(),
+    email,
     photoURL: user.photoURL || "",
-    role: superAdmin ? "ADMIN" : "PENDING",
-    status: superAdmin ? "ACTIVE" : "PENDING",
+    role: superAdmin ? "ADMIN" : undangan ? undangan.role : "PENDING",
+    status: superAdmin || undangan ? "ACTIVE" : "PENDING",
     projectIds: [],
     sectionIds: [],
-    employeeId: null,
+    employeeId: undangan?.employeeId ?? null,
   };
 
   await setDoc(ref, {
@@ -62,6 +80,10 @@ async function ambilAtauBuatProfil(user: User): Promise<AppUser> {
     updatedAt: serverTimestamp(),
     lastLoginAt: serverTimestamp(),
   });
+
+  // Undangan sekali pakai. Kalau gagal dihapus pun tidak berbahaya:
+  // akunnya sudah ada, jadi undangan itu tidak bisa dipakai lagi.
+  if (undangan) await deleteDoc(doc(dbClient(), "undangan", email)).catch(() => {});
 
   return { uid: user.uid, ...baru };
 }

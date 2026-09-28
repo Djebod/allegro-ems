@@ -1,10 +1,22 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { collection, doc, onSnapshot, query, serverTimestamp, updateDoc, where } from "firebase/firestore";
+import {
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  onSnapshot,
+  query,
+  serverTimestamp,
+  setDoc,
+  updateDoc,
+  where,
+} from "firebase/firestore";
 import Guard from "@/components/Guard";
 import Shell from "@/components/Shell";
-import { Pesan } from "@/components/Field";
+import Modal from "@/components/Modal";
+import { Field, Pesan } from "@/components/Field";
 import { useAuth } from "@/lib/auth";
 import { dbClient, SUPER_ADMIN_EMAIL } from "@/lib/firebase";
 import type { AppUser, RoleOrPending, UserStatus } from "@/types";
@@ -36,6 +48,15 @@ function warnaStatus(status: UserStatus) {
 type Urutan = "nama" | "peran" | "status";
 type SaringSambung = "SEMUA" | "SUDAH" | "BELUM";
 
+interface Undangan {
+  email: string;
+  role: RoleOrPending;
+  employeeId: string | null;
+  employeeName: string;
+  dibuatOleh: string;
+  createdAt?: { toDate?: () => Date };
+}
+
 interface KaryawanRingkas {
   id: string;
   name: string;
@@ -55,6 +76,15 @@ function DaftarPengguna() {
   const [saringSambung, setSaringSambung] = useState<SaringSambung>("SEMUA");
   const [urutan, setUrutan] = useState<Urutan>("nama");
   const [naik, setNaik] = useState(true);
+  const [undangan, setUndangan] = useState<Undangan[]>([]);
+
+  // Formulir undang pengguna
+  const [bukaUndang, setBukaUndang] = useState(false);
+  const [uEmail, setUEmail] = useState("");
+  const [uPeran, setUPeran] = useState<RoleOrPending>("KARYAWAN");
+  const [uKaryawan, setUKaryawan] = useState("");
+  const [uSalah, setUSalah] = useState<string | null>(null);
+  const [uSibuk, setUSibuk] = useState(false);
 
   useEffect(() => {
     // Seluruh karyawan aktif, untuk menyambungkan akun login dengan data
@@ -82,9 +112,21 @@ function DaftarPengguna() {
       }
     );
 
+    const lepasUndangan = onSnapshot(
+      collection(dbClient(), "undangan"),
+      (snap) =>
+        setUndangan(
+          snap.docs
+            .map((d) => d.data() as Undangan)
+            .sort((a, b) => a.email.localeCompare(b.email))
+        ),
+      () => setUndangan([])
+    );
+
     return () => {
       lepasKaryawan();
       lepasUsers();
+      lepasUndangan();
     };
   }, []);
 
@@ -96,10 +138,71 @@ function DaftarPengguna() {
    * dikunci di daftar, bukan hanya diperingatkan.
    */
   const dipakaiOleh = useMemo(() => {
-    const peta = new Map<string, AppUser>();
+    const peta = new Map<string, Pick<AppUser, "uid" | "name">>();
     users.forEach((u) => u.employeeId && peta.set(u.employeeId, u));
+    // Karyawan yang sudah disiapkan untuk undangan juga terkunci.
+    undangan.forEach(
+      (x) => x.employeeId && !peta.has(x.employeeId) && peta.set(x.employeeId, { uid: `undangan:${x.email}`, name: `undangan ${x.email}` })
+    );
     return peta;
-  }, [users]);
+  }, [users, undangan]);
+
+  function bukaFormUndang() {
+    setUEmail("");
+    setUPeran("KARYAWAN");
+    setUKaryawan("");
+    setUSalah(null);
+    setBukaUndang(true);
+  }
+
+  async function simpanUndangan() {
+    const email = uEmail.trim().toLowerCase();
+    setUSalah(null);
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return setUSalah("Alamat email belum benar.");
+    if (email === SUPER_ADMIN_EMAIL) return setUSalah("Email super admin tidak perlu diundang.");
+    if (users.some((u) => u.email?.toLowerCase() === email)) {
+      return setUSalah("Email ini sudah punya akun. Atur peran dan sambungannya langsung di tabel di bawah.");
+    }
+    if (undangan.some((x) => x.email === email)) return setUSalah("Email ini sudah diundang.");
+    if (uPeran === "PENDING") return setUSalah("Pilih perannya.");
+    if (uKaryawan && dipakaiOleh.has(uKaryawan)) {
+      return setUSalah(`Karyawan ini sudah dipakai ${dipakaiOleh.get(uKaryawan)!.name}.`);
+    }
+    if (uPeran === "ADMIN" && !window.confirm(`Undang ${email} sebagai Admin? Admin bisa membuka seluruh data.`)) return;
+
+    setUSibuk(true);
+    try {
+      const ref = doc(dbClient(), "undangan", email);
+      if ((await getDoc(ref)).exists()) throw new Error("Email ini sudah diundang.");
+      await setDoc(ref, {
+        email,
+        role: uPeran,
+        employeeId: uKaryawan || null,
+        employeeName: uKaryawan ? namaKaryawan.get(uKaryawan) || uKaryawan : "",
+        dibuatOleh: profile?.name || "",
+        createdAt: serverTimestamp(),
+      });
+      setBukaUndang(false);
+      setPesan({
+        isi: `Undangan untuk ${email} tersimpan. Begitu ia login Google dengan email itu, akunnya langsung aktif.`,
+        jenis: "berhasil",
+      });
+    } catch (e) {
+      setUSalah(e instanceof Error && e.message.includes("diundang") ? e.message : "Undangan gagal disimpan. Periksa Security Rules.");
+    } finally {
+      setUSibuk(false);
+    }
+  }
+
+  async function batalkanUndangan(x: Undangan) {
+    if (!window.confirm(`Batalkan undangan untuk ${x.email}?`)) return;
+    try {
+      await deleteDoc(doc(dbClient(), "undangan", x.email));
+      setPesan({ isi: `Undangan untuk ${x.email} dibatalkan.`, jenis: "berhasil" });
+    } catch {
+      setPesan({ isi: "Undangan gagal dibatalkan.", jenis: "gagal" });
+    }
+  }
 
   const ringkasan = useMemo(
     () => ({
@@ -200,16 +303,6 @@ function DaftarPengguna() {
 
   if (memuat) return <p className="text-muted">Memuat daftar pengguna…</p>;
 
-  if (users.length === 0)
-    return (
-      <div className="kartu text-center">
-        <p className="text-sm text-muted">
-          Belum ada pengguna lain. Minta mereka login dengan Google sekali, lalu peran bisa diberikan dari
-          halaman ini.
-        </p>
-      </div>
-    );
-
   const Pintasan = ({
     label,
     nilai,
@@ -238,6 +331,97 @@ function DaftarPengguna() {
 
   return (
     <>
+      {/* Undangan */}
+      <div className="kartu mb-4 !p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="font-semibold text-ink">Undang pengguna</p>
+            <p className="text-xs text-muted">
+              Siapkan akun sebelum orangnya login: email Gmail, peran, dan karyawan yang disambungkan. Begitu ia
+              login, akunnya langsung aktif tanpa menunggu persetujuan.
+            </p>
+          </div>
+          <button className="btn-utama" onClick={bukaFormUndang}>
+            + Undang pengguna
+          </button>
+        </div>
+
+        {undangan.length > 0 && (
+          <div className="mt-3 overflow-x-auto rounded-lg border border-line">
+            <table className="tabel-padat min-w-[640px]">
+              <thead>
+                <tr>
+                  <th>Email</th>
+                  <th>Peran</th>
+                  <th>Karyawan</th>
+                  <th>Status</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {undangan.map((x) => (
+                  <tr key={x.email}>
+                    <td className="font-semibold text-ink">{x.email}</td>
+                    <td>{NAMA_PERAN[x.role] || x.role}</td>
+                    <td>{x.employeeId ? `${x.employeeName || x.employeeId} (${x.employeeId})` : <span className="text-bahaya">belum dipilih</span>}</td>
+                    <td>
+                      <span className="label-status bg-kuning-400/40 text-allegro-700">Belum login</span>
+                    </td>
+                    <td className="text-right">
+                      <button className="btn-ringan !px-2 !py-1 !text-xs text-bahaya" onClick={() => batalkanUndangan(x)}>
+                        Batalkan
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <Modal judul="Undang pengguna" terbuka={bukaUndang} onTutup={() => setBukaUndang(false)}>
+        <div className="space-y-4">
+          <Field label="Email Gmail" wajib bantuan="Harus persis email yang nanti dipakai login Google.">
+            <input
+              className="input-dasar"
+              type="email"
+              inputMode="email"
+              autoCapitalize="none"
+              value={uEmail}
+              onChange={(e) => setUEmail(e.target.value)}
+              placeholder="nama@gmail.com"
+            />
+          </Field>
+          <Field label="Peran" wajib>
+            <select className="input-dasar" value={uPeran} onChange={(e) => setUPeran(e.target.value as RoleOrPending)}>
+              {PERAN.filter((x) => x !== "PENDING").map((x) => (
+                <option key={x} value={x}>
+                  {NAMA_PERAN[x]}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Sambungkan ke karyawan" bantuan="Wajib untuk yang absen, cuti, atau menerima slip gaji.">
+            <select className="input-dasar" value={uKaryawan} onChange={(e) => setUKaryawan(e.target.value)}>
+              <option value="">— belum dipilih —</option>
+              {karyawan.map((k) => {
+                const pemilik = dipakaiOleh.get(k.id);
+                return (
+                  <option key={k.id} value={k.id} disabled={!!pemilik}>
+                    {k.name} ({k.id}){pemilik ? ` — dipakai ${pemilik.name}` : ""}
+                  </option>
+                );
+              })}
+            </select>
+          </Field>
+          {uSalah && <Pesan jenis="gagal" isi={uSalah} />}
+          <button className="btn-utama w-full" onClick={simpanUndangan} disabled={uSibuk}>
+            {uSibuk ? "Menyimpan…" : "Simpan undangan"}
+          </button>
+        </div>
+      </Modal>
+
       {/* Pintasan saringan */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Pintasan label="Semua pengguna" nilai={ringkasan.semua} aktif={!adaSaringan} onKlik={bersihkan} />
@@ -454,8 +638,9 @@ function DaftarPengguna() {
       </div>
 
       <p className="mt-3 text-xs text-muted">
-        Satu karyawan hanya bisa tersambung ke satu akun. Karyawan yang sudah dipakai akun lain tampil
-        tetapi tidak bisa dipilih. Orang baru harus login Google sekali dulu sebelum muncul di sini.
+        Satu karyawan hanya bisa tersambung ke satu akun (termasuk yang masih berupa undangan). Karyawan yang
+        sudah dipakai tampil tetapi tidak bisa dipilih. Orang yang tidak diundang tetap bisa login, lalu masuk
+        daftar &quot;Menunggu peran&quot;.
       </p>
     </>
   );

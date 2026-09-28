@@ -71,14 +71,27 @@ service cloud.firestore {
         && request.resource.data.email == emailUser()
         && request.resource.data.projectIds.size() == 0
         && request.resource.data.sectionIds.size() == 0
+        // Sambungan karyawan menentukan data siapa yang boleh dibaca
+        // (slip, absen, cuti), jadi tidak boleh diisi sendiri saat mendaftar.
         && (
           (emailUser() == emailSuperAdmin()
             && request.resource.data.role == 'ADMIN'
-            && request.resource.data.status == 'ACTIVE')
+            && request.resource.data.status == 'ACTIVE'
+            && request.resource.data.get('employeeId', null) == null)
           ||
           (emailUser() != emailSuperAdmin()
             && request.resource.data.role == 'PENDING'
-            && request.resource.data.status == 'PENDING')
+            && request.resource.data.status == 'PENDING'
+            && request.resource.data.get('employeeId', null) == null)
+          ||
+          // Sudah diundang Admin: peran dan sambungan karyawannya harus
+          // PERSIS sama dengan undangan, jadi tidak bisa diganti sendiri.
+          (emailUser() != emailSuperAdmin()
+            && exists(/databases/$(database)/documents/undangan/$(emailUser()))
+            && request.resource.data.role == get(/databases/$(database)/documents/undangan/$(emailUser())).data.role
+            && request.resource.data.status == 'ACTIVE'
+            && request.resource.data.get('employeeId', null)
+                 == get(/databases/$(database)/documents/undangan/$(emailUser())).data.employeeId)
         );
 
       allow update: if isAdmin()
@@ -86,6 +99,22 @@ service cloud.firestore {
         && (resource.data.email != emailSuperAdmin() || emailUser() == emailSuperAdmin());
 
       allow delete: if false;
+    }
+
+    // ---------- undangan ----------
+    // Admin menyiapkan akun sebelum orangnya login: email, peran, dan
+    // karyawan yang disambungkan. ID dokumen = email huruf kecil.
+    // Dipakai sekali saat login pertama, lalu dihapus pemiliknya.
+    match /undangan/{email} {
+      allow read: if isAdmin() || (sudahLogin() && email == emailUser());
+      allow create: if isAdmin()
+        && email == email.lower()
+        && email != emailSuperAdmin()
+        && request.resource.data.email == email
+        && request.resource.data.role in ['ADMIN', 'HR', 'OWNER', 'FINANCE', 'MANDOR', 'KARYAWAN']
+        && (request.resource.data.employeeId == null || request.resource.data.employeeId is string);
+      allow update: if false;
+      allow delete: if isAdmin() || (sudahLogin() && email == emailUser());
     }
 
     // ---------- projects ----------
