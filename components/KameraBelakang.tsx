@@ -1,13 +1,16 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { fotoMasihBaru, perangkatSeluler } from "@/lib/kamera";
 
 /**
- * Kamera belakang untuk foto absensi.
+ * Kamera untuk foto absensi (swafoto maupun foto tim).
  *
- * Jalur utama memakai aliran kamera langsung supaya mandor tidak bisa
- * memilih foto lama dari galeri. Kalau browser menolak (beberapa HP dan
- * iOS lama), dipakai jalur cadangan: tombol kamera bawaan sistem.
+ * Jalur utama memakai aliran kamera langsung di halaman, sehingga tidak ada
+ * pilihan galeri sama sekali. Jalur cadangan "kamera bawaan HP" hanya muncul
+ * bila kamera langsung gagal DAN perangkatnya HP. Di komputer jalur itu
+ * membuka jendela pilih berkas, jadi tidak pernah ditampilkan. Foto dari
+ * jalur cadangan juga ditolak bila bukan baru saja diambil.
  */
 export default function KameraBelakang({
   terbuka,
@@ -28,6 +31,12 @@ export default function KameraBelakang({
   const cadangan = useRef<HTMLInputElement>(null);
   const [siap, setSiap] = useState(false);
   const [gagal, setGagal] = useState<string | null>(null);
+  const [cobaLagi, setCobaLagi] = useState(0);
+  const [seluler, setSeluler] = useState(false);
+
+  useEffect(() => {
+    setSeluler(perangkatSeluler(navigator.userAgent, navigator.maxTouchPoints || 0));
+  }, []);
 
   useEffect(() => {
     if (!terbuka) return;
@@ -52,7 +61,11 @@ export default function KameraBelakang({
         }
         setSiap(true);
       } catch {
-        setGagal("Kamera tidak bisa dibuka langsung. Pakai tombol di bawah.");
+        setGagal(
+          perangkatSeluler(navigator.userAgent, navigator.maxTouchPoints || 0)
+            ? "Kamera tidak bisa dibuka langsung. Izinkan akses kamera untuk browser ini, lalu coba lagi. Kalau tetap gagal, pakai tombol kamera bawaan HP."
+            : "Kamera komputer tidak bisa dibuka. Klik ikon gembok di sebelah alamat situs, izinkan Kamera, lalu tekan Coba lagi. Kalau komputer tidak punya kamera, absen memakai HP."
+        );
       }
     })();
 
@@ -61,7 +74,7 @@ export default function KameraBelakang({
       aliran.current?.getTracks().forEach((t) => t.stop());
       aliran.current = null;
     };
-  }, [terbuka, arah]);
+  }, [terbuka, arah, cobaLagi]);
 
   function ambil() {
     const v = video.current;
@@ -112,24 +125,37 @@ export default function KameraBelakang({
           </button>
         )}
 
-        <input
-          ref={cadangan}
-          type="file"
-          accept="image/*"
-          capture={arah === "depan" ? "user" : "environment"}
-          className="hidden"
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) onFoto(f);
-            e.target.value = "";
-          }}
-        />
-        <button
-          className={siap ? "btn-ringan w-full" : "btn-lapangan"}
-          onClick={() => cadangan.current?.click()}
-        >
-          Pakai kamera bawaan HP
-        </button>
+        {gagal && (
+          <button className="btn-ringan w-full" onClick={() => setCobaLagi((n) => n + 1)}>
+            Coba nyalakan kamera lagi
+          </button>
+        )}
+
+        {/* Cadangan hanya untuk HP yang kamera langsungnya gagal. */}
+        {gagal && seluler && (
+          <>
+            <input
+              ref={cadangan}
+              type="file"
+              accept="image/*"
+              capture={arah === "depan" ? "user" : "environment"}
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                e.target.value = "";
+                if (!f) return;
+                if (!f.type.startsWith("image/") || !fotoMasihBaru(f.lastModified, Date.now())) {
+                  setGagal("Foto harus diambil langsung dengan kamera saat ini juga, bukan dipilih dari galeri.");
+                  return;
+                }
+                onFoto(f);
+              }}
+            />
+            <button className="btn-lapangan" onClick={() => cadangan.current?.click()}>
+              Pakai kamera bawaan HP
+            </button>
+          </>
+        )}
       </div>
     </div>
   );

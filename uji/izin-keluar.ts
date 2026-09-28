@@ -1,4 +1,5 @@
 import { durasiMenit, keadaanIzin, lebihDuaJam, teksDurasi } from "@/lib/izin-keluar";
+import { fotoMasihBaru, perangkatSeluler } from "@/lib/kamera";
 
 let lolos = 0, gagal = 0;
 function cek(nama: string, dapat: unknown, harap: unknown) {
@@ -22,6 +23,18 @@ cek("disetujui", keadaanIzin({ ...dasar, status: "DISETUJUI" }), "Disetujui");
 cek("sedang di luar", keadaanIzin({ ...dasar, keluar: {} }), "Sedang di luar");
 cek("sudah kembali", keadaanIzin({ ...dasar, keluar: {}, kembali: {} }), "Sudah kembali");
 cek("ditolak menang", keadaanIzin({ ...dasar, status: "DITOLAK", keluar: {} }), "Ditolak");
+
+console.log("\n== Pengaman foto: hanya dari kamera ==");
+const kini = Date.parse("2026-09-28T08:00:00Z");
+cek("foto baru saja diambil", fotoMasihBaru(kini - 5_000, kini), true);
+cek("foto galeri kemarin ditolak", fotoMasihBaru(kini - 86_400_000, kini), false);
+cek("foto 3 menit lalu ditolak", fotoMasihBaru(kini - 180_000, kini), false);
+cek("tanpa tanggal ditolak", fotoMasihBaru(0, kini), false);
+cek("jam HP sedikit mendahului masih diterima", fotoMasihBaru(kini + 20_000, kini), true);
+cek("komputer Windows bukan HP", perangkatSeluler("Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/140", 0), false);
+cek("Android adalah HP", perangkatSeluler("Mozilla/5.0 (Linux; Android 14; 23127PN0CG) Mobile Safari", 5), true);
+cek("iPad modern (mengaku Mac, layar sentuh)", perangkatSeluler("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)", 5), true);
+cek("Mac biasa bukan HP", perangkatSeluler("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)", 0), false);
 
 console.log(`\n==== ${lolos} lolos, ${gagal} gagal ====`);
 process.exit(gagal ? 1 : 0);

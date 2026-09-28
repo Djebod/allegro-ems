@@ -82,6 +82,10 @@ Pengecualian: tanggal yang **dibaca dari sel Excel** justru harus memakai `getUT
 
 Pakai **`jamWIB()`** di `lib/kantor.ts`, yang zona waktunya dikunci ke Asia/Jakarta. Selisih jam (jam kerja lapangan) aman karena dihitung dari dua waktu penuh, bukan dari teks jamnya.
 
+### 5.1c Foto absensi hanya dari kamera
+
+Semua foto absensi (absen kantor, izin keluar, absensi lapangan) lewat `components/KameraBelakang.tsx`. Jangan pernah menambah `<input type="file">` untuk foto absensi: di komputer atribut `capture` diabaikan dan jendela pilih berkas terbuka, sehingga foto lama bisa diunggah (terjadi 28 Sep 2026). Jalur cadangan hanya untuk HP (`perangkatSeluler`) dan menolak foto yang bukan baru diambil (`fotoMasihBaru`, `lib/kamera.ts`).
+
 ### 5.2 Firestore Rules: dokumen yang belum ada
 
 Membaca dokumen yang belum ada membuat `resource` bernilai `null`. Menulis `resource.data.x == y` pada keadaan itu bukan menghasilkan "salah", melainkan **galat** — dan Firestore menerjemahkan galat jadi penolakan izin.
