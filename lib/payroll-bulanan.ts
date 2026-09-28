@@ -1,5 +1,5 @@
 import type { BarisRekap } from "@/lib/rekap-kantor";
-import type { EmployeeLoan, GajiBulanan, ItemPayrollBulanan, StatusPayroll } from "@/types";
+import type { BarisTunjangan, EmployeeLoan, GajiBulanan, ItemPayrollBulanan, JenisTunjangan, StatusPayroll } from "@/types";
 
 /**
  * PAYROLL BULANAN STAF KANTOR - perhitungan murni.
@@ -7,7 +7,8 @@ import type { EmployeeLoan, GajiBulanan, ItemPayrollBulanan, StatusPayroll } fro
  * Tidak membaca Firestore dan tidak menyentuh layar, supaya bisa diuji
  * dengan `npm run uji`.
  *
- *   Kotor     = gaji pokok + lembur + uang kerajinan + tambahan lain
+ *   Kotor     = gaji pokok + tunjangan + bonus + lembur + uang kerajinan
+ *               + tambahan lain
  *   Potongan  = denda telat + potongan alpa + potongan bon + potongan lain
  *   Diterima  = kotor - potongan
  *
@@ -23,6 +24,7 @@ import type { EmployeeLoan, GajiBulanan, ItemPayrollBulanan, StatusPayroll } fro
  */
 
 export const KOLOM_MANUAL = [
+  "bonus",
   "lembur",
   "lemburKet",
   "potonganAlpa",
@@ -38,6 +40,27 @@ export const KOLOM_MANUAL = [
 export type IsianManual = Pick<ItemPayrollBulanan, (typeof KOLOM_MANUAL)[number]>;
 
 export type ItemBaru = Omit<ItemPayrollBulanan, "id" | "payrollId" | "createdAt" | "updatedAt">;
+
+/**
+ * Tunjangan tetap bulan itu. Semua jenis yang aktif ikut dicantumkan,
+ * yang tidak didapat bernilai nol - supaya slip mencetak barisnya lengkap
+ * seperti form lama. Tunjangan harian dikali hari masuk kerja (hadir +
+ * dinas luar), karena dinas tetap bekerja.
+ */
+export function hitungTunjangan(
+  jenis: JenisTunjangan[],
+  gaji: GajiBulanan | null,
+  hariMasuk: number
+): BarisTunjangan[] {
+  return jenis
+    .filter((j) => j.aktif)
+    .sort((a, b) => a.urutan - b.urutan || a.nama.localeCompare(b.nama))
+    .map((j) => {
+      const tarif = Math.max(0, Math.round(gaji?.tunjangan?.[j.id] || 0));
+      const jumlahSatuan = tarif ? (j.satuan === "HARI" ? hariMasuk : 1) : 0;
+      return { jenisId: j.id, nama: j.nama, satuan: j.satuan, tarif, jumlahSatuan, total: tarif * jumlahSatuan };
+    });
+}
 
 const bulat = (n: unknown) => {
   const x = Math.round(Number(n) || 0);
@@ -68,13 +91,15 @@ export function usulanPotonganBon(bon: EmployeeLoan | undefined, bulan: string):
 
 /** Menghitung ulang kotor, potongan, dan diterima dari isian yang ada. */
 export function hitungAngka<T extends ItemBaru>(item: T): T {
+  const bonus = bulat(item.bonus);
+  const totalTunjangan = item.totalTunjangan || 0;
   const lembur = bulat(item.lembur);
   const uangKerajinan = bulat(item.uangKerajinan);
   const tambahanLain = bulat(item.tambahanLain);
   const potonganAlpa = bulat(item.potonganAlpa);
   const potonganLain = bulat(item.potonganLain);
 
-  const kotor = item.gajiPokok + lembur + uangKerajinan + tambahanLain;
+  const kotor = item.gajiPokok + totalTunjangan + bonus + lembur + uangKerajinan + tambahanLain;
   const potonganNonBon = item.dendaTelat + potonganAlpa + potonganLain;
   const ruangBon = Math.max(0, kotor - potonganNonBon);
   const potonganBon = Math.min(bulat(item.potonganBon), item.sisaBon, ruangBon);
@@ -82,6 +107,7 @@ export function hitungAngka<T extends ItemBaru>(item: T): T {
 
   return {
     ...item,
+    bonus,
     lembur,
     uangKerajinan,
     tambahanLain,
@@ -99,11 +125,14 @@ export function susunItemBulanan(opsi: {
   rekap: BarisRekap;
   gaji: GajiBulanan | null;
   bon: EmployeeLoan | undefined;
+  /** Jenis tunjangan yang diatur di aplikasi. Kosong = tanpa tunjangan. */
+  jenisTunjangan?: JenisTunjangan[];
   /** Isian manual dari hitungan sebelumnya, supaya hitung ulang tidak menghapusnya. */
   lama?: Partial<IsianManual>;
 }): ItemBaru {
   const r = opsi.rekap;
   const lama = opsi.lama || {};
+  const tunjangan = hitungTunjangan(opsi.jenisTunjangan || [], opsi.gaji, r.hadir + r.dinas);
   return hitungAngka({
     employeeId: r.employeeId,
     employeeName: r.nama,
@@ -124,7 +153,10 @@ export function susunItemBulanan(opsi: {
     dendaTelat: r.dendaTelat,
     capaiSp: r.capaiSp,
     sisaBon: opsi.bon?.remainingAmount || 0,
+    tunjangan,
+    totalTunjangan: tunjangan.reduce((t, x) => t + x.total, 0),
 
+    bonus: lama.bonus ?? 0,
     lembur: lama.lembur ?? 0,
     lemburKet: lama.lemburKet ?? "",
     potonganAlpa: lama.potonganAlpa ?? 0,

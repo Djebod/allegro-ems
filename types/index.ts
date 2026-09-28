@@ -113,6 +113,13 @@ export interface Employee {
   kantorId?: string;
 
   /**
+   * Direksi/owner tidak wajib absen (keputusan client, 28 Sep 2026).
+   * Kosong atau false berarti WAJIB absen - jadi data lama tidak perlu diubah.
+   * Yang tidak wajib absen tidak masuk rekap dan tidak pernah dihitung alpa.
+   */
+  tidakWajibAbsen?: boolean;
+
+  /**
    * Atasan langsung, berisi kode karyawan. Dipakai supaya atasan bisa
    * melihat kehadiran bawahannya. Untuk tukang dan kenek, isinya kode
    * mandornya.
@@ -597,10 +604,41 @@ export interface AbsenKantor {
  * ditimpa. Gaji lama ditutup masa berlakunya, lalu gaji baru dibuat,
  * supaya payroll bulan-bulan lalu tetap bisa ditelusuri.
  */
+/**
+ * Jenis tunjangan diatur HR/Finance/Owner di aplikasi (tab Tunjangan),
+ * bukan di kode. Satuan menentukan cara menghitung:
+ *  - BULAN: nominal tetap sebulan (mis. tunjangan jabatan, pulsa)
+ *  - HARI : nominal x hari masuk kerja (mis. uang makan, transport)
+ */
+export type SatuanTunjangan = "BULAN" | "HARI";
+
+export interface JenisTunjangan {
+  id: string;
+  nama: string;
+  satuan: SatuanTunjangan;
+  /** Urutan tampil di slip. */
+  urutan: number;
+  aktif: boolean;
+  createdAt?: unknown;
+  updatedAt?: unknown;
+}
+
+/** Satu baris tunjangan yang sudah dihitung di payroll. */
+export interface BarisTunjangan {
+  jenisId: string;
+  nama: string;
+  satuan: SatuanTunjangan;
+  tarif: number;
+  jumlahSatuan: number;
+  total: number;
+}
+
 export interface GajiBulanan {
   id: string;
   employeeId: string;
   gajiPokok: number;
+  /** Nominal tunjangan per jenis (id jenis -> rupiah per satuan). */
+  tunjangan?: Record<string, number>;
   /** Bulan mulai berlaku, "YYYY-MM". */
   berlakuMulai: string;
   /** Bulan terakhir berlaku. Kosong berarti masih berlaku. */
@@ -653,8 +691,13 @@ export interface ItemPayrollBulanan {
   capaiSp: boolean;
   /** Sisa bon saat payroll disusun, sebagai batas potongan. */
   sisaBon: number;
+  /** Tunjangan tetap, dihitung dari data gaji karyawan. Salinan. */
+  tunjangan?: BarisTunjangan[];
+  totalTunjangan?: number;
 
   /* --- diisi manual --- */
+  /** Bonus bulanan: berbeda tiap bulan, jadi diisi manual. */
+  bonus?: number;
   lembur: number;
   lemburKet: string;
   potonganAlpa: number;

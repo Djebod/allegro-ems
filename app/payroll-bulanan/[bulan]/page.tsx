@@ -175,6 +175,7 @@ function Isi({ bulan }: { bulan: string }) {
   function bukaUbah(i: ItemPayrollBulanan) {
     setUbah(i);
     setIsian({
+      bonus: i.bonus || 0,
       lembur: i.lembur,
       lemburKet: i.lemburKet,
       potonganAlpa: i.potonganAlpa,
@@ -390,7 +391,7 @@ function Isi({ bulan }: { bulan: string }) {
       </div>
 
       <div className="mt-3 overflow-x-auto rounded-xl border border-line bg-white">
-        <table className="tabel-padat min-w-[1280px]">
+        <table className="tabel-padat min-w-[1420px]">
           <thead>
             <tr>
               <th>Nama</th>
@@ -401,6 +402,8 @@ function Isi({ bulan }: { bulan: string }) {
                 Gaji pokok
                 <TombolLihatGaji tampil={tampilGaji} boleh={bolehGaji} ubah={setTampilGaji} />
               </th>
+              <th className="text-right">Tunjangan</th>
+              <th className="text-right">Bonus</th>
               <th className="text-right">Lembur</th>
               <th className="text-right">Kerajinan</th>
               <th className="text-right">Tambahan</th>
@@ -435,6 +438,8 @@ function Isi({ bulan }: { bulan: string }) {
                     {i.capaiSp && <span className="ml-1 rounded bg-red-100 px-1 text-[9px] text-bahaya">SP 1</span>}
                   </td>
                   <td className="text-right tracking-wider">{gaji(i.gajiPokok)}</td>
+                  <td className="text-right">{r(i.totalTunjangan || 0)}</td>
+                  <td className="text-right">{r(i.bonus || 0)}</td>
                   <td className="text-right">{r(i.lembur)}</td>
                   <td className="text-right">{r(i.uangKerajinan)}</td>
                   <td className="text-right">{r(i.tambahanLain)}</td>
@@ -513,9 +518,29 @@ function Isi({ bulan }: { bulan: string }) {
             </div>
 
             <p className="text-xs font-semibold uppercase tracking-wide text-muted">Penerimaan</p>
+            {(ubah.tunjangan || []).length > 0 && (
+              <div className="rounded-lg border border-line p-3 text-xs">
+                <p className="mb-1 font-semibold text-ink">Tunjangan tetap (dari data gaji, otomatis)</p>
+                {(ubah.tunjangan || []).map((t) => (
+                  <div key={t.jenisId} className="flex justify-between gap-2 py-0.5">
+                    <span className="text-muted">
+                      {t.nama}
+                      {t.tarif ? ` · ${t.jumlahSatuan} ${t.satuan === "HARI" ? "hari" : "bln"} × ${bolehGaji && tampilGaji ? r(t.tarif) : "•••"}` : ""}
+                    </span>
+                    <span className="tracking-wider text-ink">{t.total ? (bolehGaji && tampilGaji ? r(t.total) : SAMARAN_GAJI) : "-"}</span>
+                  </div>
+                ))}
+                <p className="mt-1 text-[11px] text-muted">
+                  Untuk mengubah nominalnya, ubah data di tab Gaji pokok lalu tekan Hitung ulang.
+                </p>
+              </div>
+            )}
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="Gaji pokok">
                 <input className="input-dasar tracking-wider" disabled value={gaji(ubah.gajiPokok)} />
+              </Field>
+              <Field label="Bonus bulanan">
+                <IsianRupiah nilai={isian.bonus || 0} ubah={set("bonus")} mati={!bisaUbah} />
               </Field>
               <Field label="Uang kerajinan" bantuan={adalahOwner ? undefined : "Hanya Owner yang bisa mengisi"}>
                 <IsianRupiah nilai={isian.uangKerajinan} ubah={set("uangKerajinan")} mati={!bisaUbah || !adalahOwner} />
@@ -595,7 +620,7 @@ export default function HalamanRincianPayrollBulanan() {
   const bulan = decodeURIComponent(String(params.bulan));
   const sah = /^\d{4}-\d{2}$/.test(bulan);
   return (
-    <Guard izinkan={["ADMIN", "HR", "OWNER"]}>
+    <Guard izinkan={["ADMIN", "HR", "OWNER", "FINANCE"]}>
       <Shell
         judul={sah ? `Payroll ${namaBulan(bulan)}` : "Payroll Bulanan"}
         keterangan="Gaji staf kantor. Isian manual bisa diubah selama Draft atau Diperiksa."

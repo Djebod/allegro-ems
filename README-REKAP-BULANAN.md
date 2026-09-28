@@ -79,12 +79,16 @@ Karyawan aktif yang berposisi **Staf/PIC** atau punya **kantor penempatan**,
 ditambah siapa pun yang punya catatan absen kantor bulan itu. Mandor, tukang,
 dan kenek tidak masuk — mereka absen di proyek.
 
-## Kenapa Finance belum bisa membuka
+## Finance
 
-Security Rules tidak mengizinkan Finance membaca pengajuan cuti. Kalau
-Finance membuka rekap ini, semua cuti akan tampak sebagai alpa. Nanti saat
-payroll bulanan dibangun, izin baca itu dibuka dulu, baru Finance
-ditambahkan.
+Sejak 28 September 2026 Finance boleh membuka rekap ini (merangkap mengurus
+payroll). Security Rules memberi Finance izin **membaca** pengajuan cuti,
+saldo cuti, dan surat peringatan - tidak mengubah.
+
+## Direksi yang tidak wajib absen
+
+Karyawan yang ditandai **Tidak wajib absen** (di data karyawan, bagian
+Jadwal kerja) tidak masuk rekap sama sekali dan tidak pernah dihitung alpa.
 
 ## Pustaka baru
 

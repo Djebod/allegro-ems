@@ -254,7 +254,9 @@ function Isi() {
             </div>
           </div>
 
-          {mandor ? (
+          {karyawan.tidakWajibAbsen ? (
+            <div className="rounded-xl bg-allegro-50 px-5 py-3 text-sm text-allegro-700">Tidak wajib absen</div>
+          ) : mandor ? (
             <Link href="/mandor" className="btn-lapangan max-w-[14rem]">
               Absen tim hari ini
             </Link>

@@ -166,7 +166,7 @@ function halamanAbsensi(doc: JsPDF, s: DataSlip, logoUrl: string | null, autoTab
   const lamp = s.lampiran;
   if (!lamp) {
     doc.setFontSize(9);
-    doc.text("Data absensi harian tidak tersedia untuk slip ini.", 14, 50);
+    doc.text("Karyawan ini tidak wajib absen, jadi tidak ada lampiran absensi harian.", 14, 50);
     return;
   }
 
@@ -282,12 +282,24 @@ function halamanGaji(doc: JsPDF, s: DataSlip, logoUrl: string | null, autoTable:
   y += 5;
   doc.setFont("helvetica", "normal");
   const tanpa = (l: string, satuan: string) => barisGaji(l, "-", "", satuan, "-", false, false);
-  tanpa("Tunjangan Jabatan", "/bln");
-  tanpa("Uang Makan", "/hari");
-  tanpa("Uang Transport", "/hari");
-  barisGaji("Bonus Bulanan", "", "", "", "-", false, false);
-  tanpa("Tunjangan Tempat Tinggal", "/bln");
-  tanpa("Uang Pulsa", "/bln");
+  // Jenis tunjangan diatur di aplikasi. Yang tidak didapat tetap dicetak "-"
+  // supaya bentuknya sama dengan form lama. Kalau belum ada yang diatur,
+  // dicetak daftar dari form lama.
+  const tunjangan = s.tunjangan?.length
+    ? s.tunjangan
+    : [
+        ["Tunjangan Jabatan", "BULAN"],
+        ["Uang Makan", "HARI"],
+        ["Uang Transport", "HARI"],
+        ["Tunjangan Tempat Tinggal", "BULAN"],
+        ["Uang Pulsa", "BULAN"],
+      ].map(([nama, satuan]) => ({ jenisId: nama, nama, satuan: satuan as "BULAN" | "HARI", tarif: 0, jumlahSatuan: 0, total: 0 }));
+  tunjangan.forEach((t) => {
+    const sat = t.satuan === "HARI" ? "/hari" : "/bln";
+    if (t.total) barisGaji(t.nama.slice(0, 30), String(t.jumlahSatuan), ribu(t.tarif), sat, ribu(t.total), false, false);
+    else tanpa(t.nama.slice(0, 30), sat);
+  });
+  barisGaji("Bonus Bulanan", "", "", "", ribu(s.bonus || 0), false, false);
   if (s.uangKerajinan) barisGaji("Uang Rajin", "1", ribu(s.uangKerajinan), "/bln", ribu(s.uangKerajinan), false, false);
   else tanpa("Uang Rajin", "/bln");
   doc.setFontSize(7.5);

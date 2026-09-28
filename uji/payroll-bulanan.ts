@@ -1,4 +1,4 @@
-import { gajiUntukBulan, hitungAngka, peringatanItem, susunItemBulanan, usulanPotonganBon } from "@/lib/payroll-bulanan";
+import { gajiUntukBulan, hitungAngka, hitungTunjangan, peringatanItem, susunItemBulanan, usulanPotonganBon } from "@/lib/payroll-bulanan";
 import type { BarisRekap } from "@/lib/rekap-kantor";
 import type { EmployeeLoan, GajiBulanan } from "@/types";
 
@@ -68,6 +68,29 @@ cek("isian manual tetap", [ulang.lembur, ulang.uangKerajinan, ulang.potonganBon,
 console.log("\n== Peringatan ==");
 cek("alpa tanpa potongan", peringatanItem(item).includes("2 hari alpa, potongan alpa belum diisi"), true);
 cek("gaji kosong", peringatanItem({ ...item, gajiPokok: 0 }).includes("Gaji pokok belum diisi"), true);
+
+console.log("\n== Tunjangan diatur di aplikasi ==");
+const jenis: any[] = [
+  { id: "jab", nama: "Tunjangan Jabatan", satuan: "BULAN", urutan: 1, aktif: true },
+  { id: "mkn", nama: "Uang Makan", satuan: "HARI", urutan: 2, aktif: true },
+  { id: "trp", nama: "Uang Transport", satuan: "HARI", urutan: 3, aktif: true },
+  { id: "pls", nama: "Uang Pulsa", satuan: "BULAN", urutan: 5, aktif: true },
+  { id: "lama", nama: "Tunjangan Lama", satuan: "BULAN", urutan: 9, aktif: false },
+];
+const gajiT: any = { gajiPokok: 4_500_000, tunjangan: { jab: 500_000, mkn: 20_000, pls: 100_000, lama: 999 } };
+const t = hitungTunjangan(jenis, gajiT, 22);
+cek("jenis nonaktif tidak ikut", t.map((x) => x.jenisId), ["jab", "mkn", "trp", "pls"]);
+cek("per bulan dikali 1", t[0].total, 500_000);
+cek("per hari dikali hari masuk", [t[1].jumlahSatuan, t[1].total], [22, 440_000]);
+cek("tidak dapat = nol, tetap tercantum", [t[2].tarif, t[2].total], [0, 0]);
+
+const it = susunItemBulanan({ bulan: "2026-09", rekap: { ...rekap, hadir: 20, dinas: 2 }, gaji: gajiT, bon: undefined, jenisTunjangan: jenis });
+cek("total tunjangan", it.totalTunjangan, 500_000 + 440_000 + 100_000);
+cek("kotor termasuk tunjangan", it.kotor, 4_500_000 + 1_040_000);
+const denganBonus = hitungAngka({ ...it, bonus: 250_000 });
+cek("bonus menambah kotor", denganBonus.kotor, 4_500_000 + 1_040_000 + 250_000);
+cek("hitung ulang mempertahankan bonus", susunItemBulanan({ bulan: "2026-09", rekap, gaji: gajiT, bon: undefined, jenisTunjangan: jenis, lama: { bonus: 250_000 } }).bonus, 250_000);
+cek("tanpa jenis tunjangan tetap jalan", susunItemBulanan({ bulan: "2026-09", rekap, gaji: gajiT, bon: undefined }).totalTunjangan, 0);
 
 console.log(`\n==== ${lolos} lolos, ${gagal} gagal ====`);
 process.exit(gagal ? 1 : 0);

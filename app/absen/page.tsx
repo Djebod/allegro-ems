@@ -165,6 +165,16 @@ function Isi() {
 
   if (!karyawan) return <Pesan jenis="gagal" isi="Data karyawan Anda tidak ditemukan." />;
 
+  if (karyawan.tidakWajibAbsen)
+    return (
+      <div className="kartu text-center">
+        <p className="font-semibold text-ink">Anda tidak wajib absen.</p>
+        <p className="mt-1 text-sm text-muted">
+          Data karyawan Anda ditandai tidak wajib absen, jadi tidak ada catatan kehadiran yang perlu diisi.
+        </p>
+      </div>
+    );
+
   const jadwal = jadwalUntuk(karyawan, tanggal);
   const efektif = absen ? jamEfektifKantor(absen) : null;
   const hitung = efektif

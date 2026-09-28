@@ -34,6 +34,8 @@ const KOLOM: Kolom[] = [
   { judul: "Alpa", pendek: "Alpa", ambil: (i) => i.alpa, lebar: 6, jumlah: true },
   { judul: "Telat (kali)", pendek: "Telat", ambil: (i) => i.terlambatKali, lebar: 7, jumlah: true },
   { judul: "Gaji pokok", pendek: "Gaji pokok", ambil: (i) => i.gajiPokok, lebar: 13, uang: true, jumlah: true },
+  { judul: "Tunjangan", pendek: "Tunjangan", ambil: (i) => i.totalTunjangan || 0, lebar: 12, uang: true, jumlah: true },
+  { judul: "Bonus", pendek: "Bonus", ambil: (i) => i.bonus || 0, lebar: 11, uang: true, jumlah: true },
   { judul: "Lembur", pendek: "Lembur", ambil: (i) => i.lembur, lebar: 11, uang: true, jumlah: true },
   { judul: "Uang kerajinan", pendek: "Kerajinan", ambil: (i) => i.uangKerajinan, lebar: 11, uang: true, jumlah: true },
   { judul: "Tambahan lain", pendek: "Tambahan", ambil: (i) => i.tambahanLain, lebar: 11, uang: true, jumlah: true },
@@ -124,7 +126,7 @@ export async function eksporPayrollBulananExcel(opsi: {
       if (urut % 2 === 1) sel.fill = { type: "pattern", pattern: "solid", fgColor: { argb: `FF${ABU}` } };
     });
     row.getCell(semua.length).alignment = { wrapText: true, vertical: "middle" };
-    row.getCell(18).font = { size: 10, bold: true, color: { argb: item.bersih < 0 ? "FFB3261E" : `FF${TEAL}` } };
+    row.getCell(KOLOM.length).font = { size: 10, bold: true, color: { argb: item.bersih < 0 ? "FFB3261E" : `FF${TEAL}` } };
   });
 
   const total = ws.addRow(
@@ -207,15 +209,15 @@ export async function eksporPayrollBulananPdf(opsi: {
       ),
     ],
     theme: "grid",
-    styles: { fontSize: 6.8, cellPadding: 1.1, lineColor: [218, 216, 210], lineWidth: 0.1, valign: "middle" },
+    styles: { fontSize: 6.2, cellPadding: 0.9, lineColor: [218, 216, 210], lineWidth: 0.1, valign: "middle" },
     headStyles: { fillColor: rgb(TEAL), textColor: 255, fontStyle: "bold", halign: "center", fontSize: 6.5 },
     footStyles: { fillColor: rgb(KUNING), textColor: rgb(TEAL), fontStyle: "bold", halign: "right" },
     alternateRowStyles: { fillColor: rgb(ABU) },
     columnStyles: {
       0: { halign: "center", cellWidth: 7 },
       1: { cellWidth: 15 },
-      2: { cellWidth: 34 },
-      3: { cellWidth: 16 },
+      2: { cellWidth: 30 },
+      3: { cellWidth: 14 },
       4: { halign: "center", cellWidth: 11 },
       5: { halign: "center", cellWidth: 8 },
       6: { halign: "center", cellWidth: 8 },

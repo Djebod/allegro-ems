@@ -2,7 +2,7 @@ rules_version = '2';
 
 // ============================================================
 //  ABSENSI & PAYROLL PROYEK — Allegro Global Construction
-//  Security Rules — Tahap 16 (atasan melihat bawahannya)
+//  Security Rules — Tahap 18 (tunjangan diatur di aplikasi)
 //  users, projects, sections, employees, employeePrivate,
 //  salaryRates, employeeAssignments, attendance, attendanceCorrections,
 //  employeeLoans, loanLocks, loanRepayments, payroll, payrollItems
@@ -533,10 +533,11 @@ service cloud.firestore {
     }
 
     // ================= PAYROLL BULANAN (staf kantor) =================
-    // Hanya Ko Freddy, Ko David, Pak Christian (OWNER), Firda (HR), dan
-    // Admin sistem. Finance tidak termasuk, sesuai permintaan client.
+    // Owner (Ko Freddy, Ko David, Pak Christian), HR (Firda), Finance
+    // (merangkap, keputusan client 28 Sep 2026), dan Admin sistem.
+    // Menyetujui, menandai dibayar, dan mengunci tetap hanya Owner.
     function urusGajiBulanan() {
-      return isAdmin() || isHR() || isOwner();
+      return isAdmin() || isHR() || isOwner() || isFinance();
     }
 
     // ---------- gajiBulanan ----------
@@ -550,11 +551,25 @@ service cloud.firestore {
         && request.resource.data.gajiPokok > 0
         && request.resource.data.berlakuMulai is string
         && request.resource.data.berlakuMulai.size() == 7
-        && request.resource.data.berlakuSampai == null;
+        && request.resource.data.berlakuSampai == null
+        && (!('tunjangan' in request.resource.data) || request.resource.data.tunjangan is map);
       allow update: if urusGajiBulanan()
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['berlakuSampai'])
         && request.resource.data.berlakuSampai is string
         && request.resource.data.berlakuSampai.size() == 7;
+      allow delete: if false;
+    }
+
+    // ---------- jenisTunjangan ----------
+    // Daftar tunjangan diatur di aplikasi, bukan di kode. Tidak dihapus,
+    // cukup dinonaktifkan, supaya payroll lama tetap terbaca.
+    match /jenisTunjangan/{jenisId} {
+      allow read: if urusGajiBulanan();
+      allow create, update: if urusGajiBulanan()
+        && request.resource.data.nama is string && request.resource.data.nama.size() > 0
+        && request.resource.data.satuan in ['BULAN', 'HARI']
+        && request.resource.data.urutan is number
+        && request.resource.data.aktif is bool;
       allow delete: if false;
     }
 
@@ -607,12 +622,15 @@ service cloud.firestore {
       allow update: if urusGajiBulanan()
         && statusBulanan(resource.data.payrollId) in ['DRAFT', 'REVIEW']
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-             'lembur', 'lemburKet', 'potonganAlpa', 'uangKerajinan', 'tambahanLain',
+             'bonus', 'lembur', 'lemburKet', 'potonganAlpa', 'uangKerajinan', 'tambahanLain',
              'tambahanLainKet', 'potonganLain', 'potonganLainKet', 'potonganBon',
              'catatan', 'kotor', 'totalPotongan', 'bersih', 'updatedAt'])
         && (request.resource.data.uangKerajinan == resource.data.uangKerajinan || isOwner())
         && request.resource.data.potonganBon <= resource.data.sisaBon
-        && request.resource.data.kotor == resource.data.gajiPokok + request.resource.data.lembur
+        // Tunjangan tetap adalah salinan (tidak bisa diubah); bonus diisi manual.
+        && request.resource.data.kotor == resource.data.gajiPokok
+             + resource.data.get('totalTunjangan', 0) + request.resource.data.get('bonus', 0)
+             + request.resource.data.lembur
              + request.resource.data.uangKerajinan + request.resource.data.tambahanLain
         && request.resource.data.totalPotongan == resource.data.dendaTelat + request.resource.data.potonganAlpa
              + request.resource.data.potonganBon + request.resource.data.potonganLain
@@ -664,8 +682,10 @@ service cloud.firestore {
     }
 
     match /leaveBalances/{saldoId} {
-      // Karyawan hanya boleh melihat saldonya sendiri.
+      // Karyawan hanya boleh melihat saldonya sendiri. Finance membaca
+      // untuk sisa cuti di slip gaji.
       allow read: if urusKepegawaian()
+        || isFinance()
         || (sudahLogin()
             && (resource == null || resource.data.employeeId == karyawanSaya()));
 
@@ -691,7 +711,9 @@ service cloud.firestore {
     }
 
     match /leaveRequests/{pengajuanId} {
+      // Finance membaca (tidak mengubah) untuk rekap bulanan dan payroll.
       allow read: if urusKepegawaian()
+        || isFinance()
         || (sudahLogin()
             && (resource == null || resource.data.employeeId == karyawanSaya()))
         || (sudahLogin() && resource != null && resource.data.atasanId == karyawanSaya());
@@ -748,7 +770,9 @@ service cloud.firestore {
 
     match /warningLetters/{spId} {
       // Karyawan boleh membaca surat peringatan atas namanya sendiri.
+      // Finance membaca untuk kolom SP di slip gaji.
       allow read: if urusKepegawaian()
+        || isFinance()
         || (sudahLogin()
             && (resource == null || resource.data.employeeId == karyawanSaya()));
 

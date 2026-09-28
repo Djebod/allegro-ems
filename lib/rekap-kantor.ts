@@ -122,14 +122,18 @@ function hariMinggu(tanggal: string): boolean {
  */
 export function pesertaRekap(karyawan: Employee[], absen: AbsenKantor[]): Employee[] {
   const punyaAbsen = new Set(absen.map((a) => a.employeeId));
+  // Direksi yang tidak wajib absen tidak masuk rekap sama sekali,
+  // walaupun sesekali ia absen.
+  const dilewati = new Set(karyawan.filter((e) => e.tidakWajibAbsen).map((e) => e.id));
   const peta = new Map<string, Employee>();
   karyawan.forEach((e) => {
+    if (dilewati.has(e.id)) return;
     const kantoran = e.status === "ACTIVE" && (!!e.kantorId || POSISI_KANTOR.has(e.position));
     if (kantoran || punyaAbsen.has(e.id)) peta.set(e.id, e);
   });
   // Catatan absen yang karyawannya tidak terbaca (mis. sudah dihapus).
   absen.forEach((a) => {
-    if (!peta.has(a.employeeId)) {
+    if (!peta.has(a.employeeId) && !dilewati.has(a.employeeId)) {
       peta.set(a.employeeId, {
         id: a.employeeId,
         employeeCode: a.employeeId,
@@ -297,4 +301,41 @@ const NAMA_BULAN = [
 export function namaBulan(bulan: string): string {
   const [t, b] = bulan.split("-").map(Number);
   return `${NAMA_BULAN[b - 1]} ${t}`;
+}
+
+/**
+ * Baris kosong untuk karyawan yang tidak wajib absen (direksi): semua
+ * angka kehadiran nol, tanpa alpa. Dipakai payroll bulanan supaya gajinya
+ * tetap bisa dihitung.
+ */
+export function barisTanpaAbsen(e: Employee): BarisRekap {
+  return {
+    employeeId: e.id,
+    nama: e.name,
+    divisi: e.divisi || "",
+    hariKerja: 0,
+    hadir: 0,
+    terlambatKali: 0,
+    terlambatMenit: 0,
+    terlambatBerizin: 0,
+    terlambatMenungguIzin: 0,
+    skorTelat: 0,
+    dendaTelat: 0,
+    capaiSp: false,
+    pulangCepatMenit: 0,
+    tidakAbsenPulang: 0,
+    istirahatLebihKali: 0,
+    istirahatLebihMenit: 0,
+    istirahatTerbuka: 0,
+    cuti: 0,
+    sakit: 0,
+    izin: 0,
+    dinas: 0,
+    menunggu: 0,
+    alpa: 0,
+    masukHariLibur: 0,
+    jamKerja: 0,
+    persenHadir: 0,
+    harian: {},
+  };
 }

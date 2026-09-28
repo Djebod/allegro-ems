@@ -595,8 +595,23 @@ function Isi({ kode }: { kode: string }) {
           <div className="rounded-lg border border-line p-4">
             <p className="mb-3 text-sm font-medium text-ink">Jadwal kerja kantor</p>
             <p className="mb-3 text-xs text-muted">
-              Dipakai menafsirkan cap waktu mesin: menentukan telat dan pulang cepat.
+              Dipakai menentukan telat dan pulang cepat.
             </p>
+            <label className="mb-3 flex items-start gap-2 rounded-lg bg-surface p-3 text-sm text-ink">
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={!!uData.tidakWajibAbsen}
+                onChange={(e) => setUData({ ...uData, tidakWajibAbsen: e.target.checked })}
+              />
+              <span>
+                <b>Tidak wajib absen</b>
+                <span className="block text-xs text-muted">
+                  Untuk direksi/owner. Tidak masuk rekap absensi dan tidak pernah dihitung alpa, tetapi tetap bisa
+                  digaji lewat payroll bulanan.
+                </span>
+              </span>
+            </label>
             <div className="grid gap-4 sm:grid-cols-3">
               <Field label="Jam masuk">
                 <input
@@ -728,6 +743,7 @@ function Isi({ kode }: { kode: string }) {
                   jamMasuk: uData.jamMasuk || "",
                   jamPulang: uData.jamPulang || "",
                   jamPulangSabtu: uData.jamPulangSabtu || "",
+                  tidakWajibAbsen: !!uData.tidakWajibAbsen,
                   statusPtkp: uData.statusPtkp || "",
                   npwp: uData.npwp || "",
                   bpjsKesehatan: uData.bpjsKesehatan || "",

@@ -17,7 +17,7 @@ import { dbClient } from "@/lib/firebase";
 import { keTanggal, tanggalHariIni } from "@/lib/absensi";
 import { bonBerjalan, catatPembayaranBon } from "@/lib/data";
 import { ambilBahanRekap } from "@/lib/data-rekap";
-import { hitungRekap } from "@/lib/rekap-kantor";
+import { barisTanpaAbsen, hitungRekap } from "@/lib/rekap-kantor";
 import {
   KOLOM_MANUAL,
   gajiUntukBulan,
@@ -32,6 +32,8 @@ import { susunLampiranSlip } from "@/lib/slip-harian";
 import type {
   EmployeeLoan,
   GajiBulanan,
+  JenisTunjangan,
+  SatuanTunjangan,
   ItemPayrollBulanan,
   LoanRepayment,
   PayrollBulanan,
@@ -40,6 +42,64 @@ import type {
   StatusPayroll,
   SuratPeringatan,
 } from "@/types";
+
+/* ========================= Jenis tunjangan ========================== */
+
+export function pantauJenisTunjangan(setData: (d: JenisTunjangan[]) => void, gagal: () => void) {
+  return onSnapshot(
+    collection(dbClient(), "jenisTunjangan"),
+    (snap) =>
+      setData(
+        snap.docs
+          .map((d) => ({ id: d.id, ...(d.data() as Omit<JenisTunjangan, "id">) }))
+          .sort((a, b) => a.urutan - b.urutan || a.nama.localeCompare(b.nama))
+      ),
+    gagal
+  );
+}
+
+/** Menambah atau mengubah jenis tunjangan. Tidak pernah dihapus, cukup dinonaktifkan. */
+export async function simpanJenisTunjangan(opsi: {
+  id?: string;
+  nama: string;
+  satuan: SatuanTunjangan;
+  urutan: number;
+  aktif: boolean;
+}) {
+  const nama = opsi.nama.trim();
+  if (!nama) throw new Error("Nama tunjangan wajib diisi.");
+  const db = dbClient();
+  const data = { nama, satuan: opsi.satuan, urutan: Math.round(opsi.urutan) || 0, aktif: opsi.aktif, updatedAt: serverTimestamp() };
+  if (opsi.id) await updateDoc(doc(db, "jenisTunjangan", opsi.id), data);
+  else {
+    const batch = writeBatch(db);
+    batch.set(doc(collection(db, "jenisTunjangan")), { ...data, createdAt: serverTimestamp() });
+    await batch.commit();
+  }
+}
+
+/** Isi awal sesuai form slip lama perusahaan. Hanya dipakai bila daftar masih kosong. */
+export async function isiJenisTunjanganBawaan() {
+  const db = dbClient();
+  const batch = writeBatch(db);
+  [
+    ["Tunjangan Jabatan", "BULAN"],
+    ["Uang Makan", "HARI"],
+    ["Uang Transport", "HARI"],
+    ["Tunjangan Tempat Tinggal", "BULAN"],
+    ["Uang Pulsa", "BULAN"],
+  ].forEach(([nama, satuan], i) =>
+    batch.set(doc(collection(db, "jenisTunjangan")), {
+      nama,
+      satuan,
+      urutan: i + 1,
+      aktif: true,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    })
+  );
+  await batch.commit();
+}
 
 /* ============================ Gaji pokok ============================ */
 
@@ -70,6 +130,8 @@ export function bulanSebelum(bulan: string): string {
 export async function pasangGajiBaru(opsi: {
   employeeId: string;
   gajiPokok: number;
+  /** Nominal per jenis tunjangan. Yang nol tidak disimpan. */
+  tunjangan?: Record<string, number>;
   berlakuMulai: string;
   catatan: string;
   semua: GajiBulanan[];
@@ -80,11 +142,19 @@ export async function pasangGajiBaru(opsi: {
   if (!/^\d{4}-\d{2}$/.test(opsi.berlakuMulai)) throw new Error("Bulan mulai berlaku belum dipilih.");
 
   const berjalan = opsi.semua.find((g) => g.employeeId === opsi.employeeId && g.berlakuSampai === null);
-  if (berjalan && opsi.berlakuMulai <= berjalan.berlakuMulai) {
+  // Bulan yang sama boleh: dianggap membetulkan isian. Catatan lama ditutup
+  // sebelum masa berlakunya, sehingga tidak pernah terpakai lagi, tetapi
+  // tetap tersimpan sebagai jejak.
+  if (berjalan && opsi.berlakuMulai < berjalan.berlakuMulai) {
     throw new Error(
-      `Gaji yang sekarang berlaku mulai ${berjalan.berlakuMulai}. Gaji baru harus berlaku setelah bulan itu.`
+      `Gaji yang sekarang berlaku mulai ${berjalan.berlakuMulai}. Gaji baru tidak boleh berlaku sebelum bulan itu.`
     );
   }
+  const tunjangan: Record<string, number> = {};
+  Object.entries(opsi.tunjangan || {}).forEach(([k, v]) => {
+    const n = Math.round(Number(v) || 0);
+    if (n > 0) tunjangan[k] = n;
+  });
 
   const db = dbClient();
   const batch = writeBatch(db);
@@ -94,6 +164,7 @@ export async function pasangGajiBaru(opsi: {
   batch.set(doc(collection(db, "gajiBulanan")), {
     employeeId: opsi.employeeId,
     gajiPokok: gaji,
+    tunjangan,
     berlakuMulai: opsi.berlakuMulai,
     berlakuSampai: null,
     catatan: opsi.catatan.trim(),
@@ -156,20 +227,28 @@ export function pantauItemBulanan(
  * "hitung ulang", supaya keduanya mustahil memakai aturan berbeda.
  */
 async function susunSemua(bulan: string, lama: Map<string, Partial<IsianManual>> = new Map()) {
-  const [bahan, gajiSnap, bon] = await Promise.all([
+  const [bahan, gajiSnap, bon, jenisSnap] = await Promise.all([
     ambilBahanRekap(bulan),
     getDocs(collection(dbClient(), "gajiBulanan")),
     bonBerjalan(),
+    getDocs(collection(dbClient(), "jenisTunjangan")).catch(() => null),
   ]);
   const gaji = gajiSnap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<GajiBulanan, "id">) }));
+  const jenisTunjangan = (jenisSnap?.docs || []).map((d) => ({ id: d.id, ...(d.data() as Omit<JenisTunjangan, "id">) }));
   const rekap = hitungRekap({ bulan, hariIni: tanggalHariIni(), ...bahan });
 
-  const items = rekap.baris.map((r) =>
+  // Direksi yang tidak wajib absen tetap digaji kalau gaji pokoknya ada.
+  const tanpaAbsen = bahan.karyawan
+    .filter((e) => e.tidakWajibAbsen && e.status === "ACTIVE" && gajiUntukBulan(gaji, e.id, bulan))
+    .map(barisTanpaAbsen);
+
+  const items = [...rekap.baris, ...tanpaAbsen].map((r) =>
     susunItemBulanan({
       bulan,
       rekap: r,
       gaji: gajiUntukBulan(gaji, r.employeeId, bulan),
       bon: bon.find((b) => b.employeeId === r.employeeId),
+      jenisTunjangan,
       lama: lama.get(r.employeeId),
     })
   );

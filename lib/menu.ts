@@ -39,9 +39,8 @@ export const MENU: GrupMenu[] = [
     judul: "Kehadiran",
     item: [
       { label: "Absensi kantor", href: "/absensi-kantor", peran: ["ADMIN", "HR", "OWNER", "FINANCE"] },
-      // Hanya pengurus kepegawaian: Finance tidak boleh membaca pengajuan cuti,
-      // sehingga cuti mereka akan tampak sebagai alpa kalau Finance ikut membuka.
-      { label: "Rekap bulanan", href: "/absensi-kantor/rekap", peran: KEPEGAWAIAN },
+      // Finance ikut karena merangkap mengurus payroll bulanan.
+      { label: "Rekap bulanan", href: "/absensi-kantor/rekap", peran: ["ADMIN", "HR", "OWNER", "FINANCE"] },
       { label: "Absensi lapangan", href: "/admin/absensi", peran: ["ADMIN", "FINANCE"] },
       { label: "Kantor", href: "/admin/kantor", peran: KEPEGAWAIAN },
     ],
@@ -60,9 +59,8 @@ export const MENU: GrupMenu[] = [
     item: [
       { label: "Kasbon", href: "/bon", peran: ["ADMIN", "FINANCE"] },
       { label: "Payroll mingguan", href: "/payroll", peran: ["ADMIN", "FINANCE"] },
-      // Sesuai permintaan client: hanya Owner (Ko Freddy, Ko David,
-      // Pak Christian), HR (Firda), dan Admin sistem.
-      { label: "Payroll bulanan", href: "/payroll-bulanan", peran: ["ADMIN", "HR", "OWNER"] },
+      // Owner, HR, Finance (merangkap), dan Admin sistem.
+      { label: "Payroll bulanan", href: "/payroll-bulanan", peran: ["ADMIN", "HR", "OWNER", "FINANCE"] },
     ],
   },
   {

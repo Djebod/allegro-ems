@@ -47,6 +47,8 @@ const p = pesertaRekap(
   [absen("X", "2026-09-01")]
 );
 cek("staf kantor ikut, tukang tidak", p.map((e) => e.id).sort(), ["A", "B", "X"]);
+const pd = pesertaRekap([kar("A"), kar("DIR", { tidakWajibAbsen: true })], [absen("DIR", "2026-09-01")]);
+cek("direksi tidak wajib absen tidak masuk rekap, walau sempat absen", pd.map((e) => e.id), ["A"]);
 
 console.log("\n== Kode per hari (hari ini 2026-09-18, Jumat) ==");
 // Sep 2026: 1 = Selasa, 6 = Minggu, 13 = Minggu, 16 = libur contoh

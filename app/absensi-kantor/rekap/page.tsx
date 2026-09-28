@@ -463,7 +463,7 @@ function Isi() {
 
 export default function RekapBulanan() {
   return (
-    <Guard izinkan={["ADMIN", "HR", "OWNER"]}>
+    <Guard izinkan={["ADMIN", "HR", "OWNER", "FINANCE"]}>
       <Shell judul="Rekap Bulanan Absensi Kantor" keterangan="Kehadiran, keterlambatan, cuti, dan alpa per karyawan." lebar>
         <Isi />
       </Shell>
