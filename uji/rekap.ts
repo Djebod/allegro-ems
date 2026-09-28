@@ -142,5 +142,19 @@ cek("telat berizin", d.terlambatBerizin, 1);
 cek("telat menunggu izin", d.terlambatMenungguIzin, 1);
 cek("tetap tercatat 6 kali telat", d.terlambatKali, 6);
 
+console.log("\n== Istirahat dalam rekap ==");
+const ist = hitungRekap({
+  bulan: "2026-09", hariIni: "2026-09-10", karyawan: [kar("A")], libur: [], cuti: [],
+  absen: [
+    absen("A", "2026-09-01", { istirahatLebihMenit: 20 }),
+    absen("A", "2026-09-02", { istirahatLebihMenit: 15 }),
+    absen("A", "2026-09-03", { istirahatTerbuka: true }),              // hari sudah lewat
+    absen("A", "2026-09-10", { istirahatTerbuka: true, pulang: null }), // hari ini, sedang istirahat
+  ],
+}).baris[0];
+cek("istirahat lebih dicatat", [ist.istirahatLebihKali, ist.istirahatLebihMenit], [2, 35]);
+cek("istirahat terbuka hanya yang harinya lewat", ist.istirahatTerbuka, 1);
+cek("istirahat lebih tidak menambah denda", ist.dendaTelat, 0);
+
 console.log(`\n==== ${lolos} lolos, ${gagal} gagal ====`);
 process.exit(gagal ? 1 : 0);

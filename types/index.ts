@@ -553,6 +553,9 @@ export interface AbsenKantor {
   date: string;
 
   masuk: EventAbsenKantor | null;
+  /** Kosong pada catatan lama (sebelum 28 Sep 2026) dan hari Sabtu. */
+  istirahat?: EventAbsenKantor | null;
+  selesaiIstirahat?: EventAbsenKantor | null;
   pulang: EventAbsenKantor | null;
 
   jadwalMasuk: string;
@@ -564,6 +567,11 @@ export interface AbsenKantor {
   workHours: number;
   terlambatMenit: number;
   pulangCepatMenit: number;
+  istirahatMenit?: number;
+  /** Istirahat lebih dari 1 jam - hanya dicatat, tanpa sanksi. */
+  istirahatLebihMenit?: number;
+  /** Sudah absen istirahat, belum selesai istirahat. Admin memutuskan. */
+  istirahatTerbuka?: boolean;
   status: StatusAbsenKantor;
 
   /** Ada sesi di luar radius yang menunggu keputusan Admin. */
@@ -573,6 +581,8 @@ export interface AbsenKantor {
 
   koreksiMasuk?: string | null;
   koreksiPulang?: string | null;
+  koreksiIstirahat?: string | null;
+  koreksiSelesaiIstirahat?: string | null;
   alasanKoreksi?: string;
   isOverridden: boolean;
 

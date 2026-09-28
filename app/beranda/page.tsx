@@ -17,7 +17,7 @@ import { pantauSP } from "@/lib/data-sp";
 import { pantauAbsenBawahan, pantauAbsenKantor } from "@/lib/data-kantor";
 import { masihBerlaku } from "@/lib/sp";
 import { sisaSakit, sisaTahunan, JENIS_CUTI } from "@/lib/cuti";
-import { jadwalUntuk } from "@/lib/jadwal";
+import { hariSabtu, jadwalUntuk } from "@/lib/jadwal";
 import { jamEfektifKantor } from "@/lib/kantor";
 import { cloudinarySiap, unggahFoto } from "@/lib/cloudinary";
 import { hitungJam, jamDari, tanggalHariIni, tanggalPendek } from "@/lib/absensi";
@@ -231,6 +231,15 @@ function Isi() {
                 </p>
               )}
             </div>
+            {absenHariIni?.istirahat && (
+              <div>
+                <p className="text-[11px] text-muted">Istirahat</p>
+                <p className="text-xl font-bold leading-tight text-ink">
+                  {jamDari(absenHariIni.istirahat.waktu)}–
+                  {absenHariIni.selesaiIstirahat ? jamDari(absenHariIni.selesaiIstirahat.waktu) : "…"}
+                </p>
+              </div>
+            )}
             <div>
               <p className="text-[11px] text-muted">Pulang</p>
               <p className="text-xl font-bold leading-tight text-ink">
@@ -262,9 +271,13 @@ function Isi() {
             <Link href="/absen" className="btn-lapangan max-w-[14rem]">
               {!absenHariIni?.masuk
                 ? "Absen masuk"
-                : !absenHariIni?.pulang
-                ? "Absen pulang"
-                : "Absen sudah lengkap"}
+                : absenHariIni?.pulang
+                ? "Absen sudah lengkap"
+                : absenHariIni?.istirahat && !absenHariIni?.selesaiIstirahat
+                ? "Selesai istirahat"
+                : !absenHariIni?.istirahat && !hariSabtu(hariIni)
+                ? "Istirahat atau pulang"
+                : "Absen pulang"}
             </Link>
           )}
         </div>

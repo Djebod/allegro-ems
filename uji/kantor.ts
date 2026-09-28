@@ -1,4 +1,4 @@
-import { cariKantorTerdekat, hitungKantor, jamDibayar, jamWIB } from "@/lib/kantor";
+import { cariKantorTerdekat, hitungKantor, jamDibayar, jamWIB, tambahMenit } from "@/lib/kantor";
 import type { Kantor } from "@/types";
 
 let lolos = 0, gagal = 0;
@@ -72,6 +72,29 @@ cek("telat dihitung dari jam WIB", hitungKantor({ masuk: jamWIB("2026-09-26T08:1
 cek("07.55 WIB tidak telat", hitungKantor({ masuk: jamWIB("2026-09-26T00:55:00.000Z"), pulang: null, ...jadwal }).terlambatMenit, 0);
 cek("lewat tengah malam UTC", jamWIB("2026-09-25T17:30:00.000Z"), "00:30");
 cek("waktu kosong", jamWIB(null), null);
+
+console.log("\n== Absen istirahat (28 Sep 2026) ==");
+let i = hitungKantor({ masuk: "08:00", istirahat: "12:00", selesaiIstirahat: "12:45", pulang: "17:00", ...jadwal });
+cek("istirahat 45 menit dipotong 45 menit", i.workHours, 8.25);
+cek("lama istirahat tercatat", [i.istirahatMenit, i.istirahatLebihMenit, i.istirahatTerbuka], [45, 0, false]);
+
+i = hitungKantor({ masuk: "08:00", istirahat: "12:00", selesaiIstirahat: "13:30", pulang: "17:00", ...jadwal });
+cek("istirahat 90 menit dipotong 90 menit", i.workHours, 7.5);
+cek("kelebihan 30 menit hanya dicatat", i.istirahatLebihMenit, 30);
+cek("kelebihan istirahat tidak menambah telat", i.terlambatMenit, 0);
+
+i = hitungKantor({ masuk: "08:00", istirahat: "12:00", selesaiIstirahat: null, pulang: "17:00", ...jadwal });
+cek("istirahat tidak ditutup ditandai", i.istirahatTerbuka, true);
+cek("sementara dipotong 1 jam", i.workHours, 8);
+
+i = hitungKantor({ masuk: "08:00", istirahat: null, selesaiIstirahat: null, pulang: "17:00", ...jadwal });
+cek("tidak absen istirahat tetap dipotong 1 jam", i.workHours, 8);
+cek("tidak absen istirahat bukan terbuka", i.istirahatTerbuka, false);
+
+i = hitungKantor({ masuk: "08:00", istirahat: "12:00", selesaiIstirahat: null, pulang: null, ...jadwal });
+cek("sedang istirahat: belum ada jam kerja", i.workHours, 0);
+cek("keputusan Admin: selesai 13.00", hitungKantor({ masuk: "08:00", istirahat: "12:00", selesaiIstirahat: tambahMenit("12:00", 60), pulang: "17:00", ...jadwal }).workHours, 8);
+cek("tambah menit melewati jam", tambahMenit("12:30", 45), "13:15");
 
 console.log(`\n==== ${lolos} lolos, ${gagal} gagal ====`);
 process.exit(gagal ? 1 : 0);

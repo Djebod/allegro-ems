@@ -36,7 +36,17 @@ Ada tombol **Periksa lokasi saya** untuk memastikan sudah di dalam jangkauan seb
 
 ## Keputusan rancangan
 
-**Istirahat tidak diabsenkan.** Satu jam dipotong otomatis untuk hari yang lebih panjang dari enam jam. Alasannya dari data: pada mesin fingerprint lama, cap istirahat hampir tidak pernah diisi tertib — dari 87 cap tengah, hanya 17 yang jatuh di jam istirahat. Menuntut dua scan tambahan cuma akan menghasilkan data bolong dan jam kerja kelebihan satu jam.
+**Absen istirahat (sejak 28 September 2026).** Atas permintaan client, istirahat sekarang diabsenkan: tombol **Mulai istirahat** dan **Selesai istirahat**, dengan swafoto dan GPS seperti masuk-pulang.
+
+| Keadaan | Akibatnya |
+|---|---|
+| Istirahat dan selesai istirahat diabsenkan | jam kerja dipotong lama istirahat sebenarnya |
+| Istirahat lebih dari 1 jam | **hanya dicatat**, tanpa denda |
+| Absen istirahat, lupa absen selesai | ditandai, **Admin menentukan** jam selesainya lewat koreksi (ada tombol "anggap istirahat 1 jam"); sementara dipotong 1 jam |
+| Tidak absen istirahat sama sekali | tetap dipotong 1 jam untuk hari lebih dari 6 jam, seperti dulu |
+| Hari Sabtu | tidak ada absen istirahat |
+
+Catatan dari masa mesin fingerprint tetap relevan: cap istirahat dulu jarang diisi tertib (17 dari 87). Karena itu yang lupa absen istirahat tidak diuntungkan — tetap dipotong satu jam.
 
 **Swafoto wajib.** Tanpa sidik jari, foto adalah satu-satunya yang membuktikan orangnya sendiri yang absen, bukan menitip HP ke teman. Kamera depan, bukan belakang seperti absensi lapangan.
 

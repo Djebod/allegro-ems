@@ -19,7 +19,7 @@ const bon = (sisa: number, cicilan: number, mulai = "2026-09"): EmployeeLoan =>
 const rekap: BarisRekap = {
   employeeId: "A", nama: "Andi", divisi: "Admin", hariKerja: 25, hadir: 22, terlambatKali: 3, terlambatMenit: 50,
   terlambatBerizin: 0, terlambatMenungguIzin: 0, skorTelat: 50, dendaTelat: 105_000, capaiSp: false,
-  pulangCepatMenit: 0, tidakAbsenPulang: 0, cuti: 1, sakit: 0, izin: 0, dinas: 0, menunggu: 0, alpa: 2,
+  pulangCepatMenit: 0, tidakAbsenPulang: 0, istirahatLebihKali: 0, istirahatLebihMenit: 0, istirahatTerbuka: 0, cuti: 1, sakit: 0, izin: 0, dinas: 0, menunggu: 0, alpa: 2,
   masukHariLibur: 0, jamKerja: 176, persenHadir: 88, harian: {},
 };
 

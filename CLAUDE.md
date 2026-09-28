@@ -220,7 +220,12 @@ GPS wajib, radius per proyek (bawaan 1.000 m), foto wajib dari kamera belakang, 
 
 Mesin fingerprint **tidak dipakai lagi**. Staf kantor absen sendiri lewat HP:
 
-- Hanya **masuk dan pulang**. Istirahat tidak diabsenkan — satu jam dipotong otomatis untuk hari lebih panjang dari enam jam
+- Empat sesi: **masuk, istirahat, selesai istirahat, pulang** — semuanya swafoto + GPS (diubah 28 Sep 2026; sebelumnya istirahat tidak diabsenkan)
+- Jam kerja dipotong lama istirahat yang diabsenkan. Istirahat **lebih dari 1 jam hanya dicatat** (`istirahatLebihMenit`), tanpa denda
+- Absen istirahat tanpa absen selesai → ditandai `istirahatTerbuka`, **Admin yang memutuskan** jam selesainya lewat koreksi; sementara dipotong 1 jam
+- Tidak absen istirahat sama sekali → tetap dipotong 1 jam untuk hari lebih dari 6 jam
+- Hari Sabtu tidak ada absen istirahat
+- Absen pulang tetap bisa kapan saja sesudah masuk
 - **Swafoto wajib** (kamera depan). Tanpa sidik jari, foto adalah satu-satunya bukti orangnya sendiri yang absen
 - GPS diukur ke **seluruh kantor aktif**, dipakai yang terdekat. Orang Bandung yang sedang di kantor Jakarta tetap terhitung di kantor
 - Di luar jangkauan **boleh**, wajib alasan, lalu ditandai untuk diputuskan Admin

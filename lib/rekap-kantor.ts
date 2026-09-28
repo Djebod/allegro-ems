@@ -77,6 +77,11 @@ export interface BarisRekap {
   capaiSp: boolean;
   pulangCepatMenit: number;
   tidakAbsenPulang: number;
+  /** Istirahat lebih dari 1 jam: hanya dicatat, tanpa sanksi. */
+  istirahatLebihKali: number;
+  istirahatLebihMenit: number;
+  /** Istirahat tanpa absen selesai yang belum diputuskan Admin. */
+  istirahatTerbuka: number;
   cuti: number;
   sakit: number;
   izin: number;
@@ -186,6 +191,9 @@ export function hitungRekap(opsi: {
       capaiSp: false,
       pulangCepatMenit: 0,
       tidakAbsenPulang: 0,
+      istirahatLebihKali: 0,
+      istirahatLebihMenit: 0,
+      istirahatTerbuka: 0,
       cuti: 0,
       sakit: 0,
       izin: 0,
@@ -218,6 +226,13 @@ export function hitungRekap(opsi: {
         r.hariKerja++;
         r.hadir++;
         r.pulangCepatMenit += a.pulangCepatMenit || 0;
+        if ((a.istirahatLebihMenit || 0) > 0) {
+          r.istirahatLebihKali++;
+          r.istirahatLebihMenit += a.istirahatLebihMenit || 0;
+        }
+        // Hari ini masih mungkin sedang istirahat; baru dihitung kalau
+        // harinya sudah lewat atau orangnya sudah pulang.
+        if (a.istirahatTerbuka && (t < opsi.hariIni || a.pulang)) r.istirahatTerbuka++;
         if (a.terlambatMenit > 0) {
           r.terlambatKali++;
           r.terlambatMenit += a.terlambatMenit;

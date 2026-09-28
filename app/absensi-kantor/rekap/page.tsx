@@ -90,7 +90,7 @@ function Isi() {
     const arah = naik ? 1 : -1;
     return hasil.baris
       .filter((b) => divisi === "SEMUA" || b.divisi === divisi)
-      .filter((b) => !hanyaMasalah || b.alpa > 0 || b.terlambatKali > 0 || b.tidakAbsenPulang > 0 || b.menunggu > 0 || b.capaiSp)
+      .filter((b) => !hanyaMasalah || b.alpa > 0 || b.terlambatKali > 0 || b.tidakAbsenPulang > 0 || b.menunggu > 0 || b.capaiSp || b.istirahatTerbuka > 0)
       .filter((b) => !kata || `${b.nama} ${b.employeeId} ${b.divisi}`.toLowerCase().includes(kata))
       .sort((a, b) => {
         const nama = a.nama.localeCompare(b.nama, "id");
@@ -352,6 +352,14 @@ function Isi() {
                                 {b.terlambatBerizin > 0 && `${b.terlambatBerizin} kali telat berizin (bebas denda). `}
                                 {b.terlambatMenungguIzin > 0 &&
                                   `${b.terlambatMenungguIzin} kali telat izinnya masih diajukan — denda ditahan sampai diputuskan.`}
+                              </p>
+                            )}
+                            {(b.istirahatLebihKali > 0 || b.istirahatTerbuka > 0) && (
+                              <p className="mt-2 text-[11px] text-muted">
+                                {b.istirahatLebihKali > 0 &&
+                                  `Istirahat lebih dari 1 jam ${b.istirahatLebihKali} kali (total lebih ${b.istirahatLebihMenit} menit) — dicatat saja. `}
+                                {b.istirahatTerbuka > 0 &&
+                                  `${b.istirahatTerbuka} kali istirahat tidak ditutup — tentukan jamnya di Absensi Kantor.`}
                               </p>
                             )}
                             {b.masukHariLibur > 0 && (

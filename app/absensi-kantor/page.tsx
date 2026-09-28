@@ -8,7 +8,7 @@ import Modal from "@/components/Modal";
 import { Field, Pesan } from "@/components/Field";
 import { useAuth } from "@/lib/auth";
 import { koreksiAbsenKantor, pantauAbsenKantor, putuskanAbsenLuar } from "@/lib/data-kantor";
-import { jamEfektifKantor } from "@/lib/kantor";
+import { ISTIRAHAT_BAKU_MENIT, jamEfektifKantor, jamWIB, tambahMenit } from "@/lib/kantor";
 import { fotoKecil } from "@/lib/cloudinary";
 import { jamDari, tanggalHariIni, tanggalPendek } from "@/lib/absensi";
 import type { AbsenKantor } from "@/types";
@@ -33,6 +33,8 @@ function Isi() {
   const [rincian, setRincianId] = useState<string | null>(null);
   const [kMasuk, setKMasuk] = useState("");
   const [kPulang, setKPulang] = useState("");
+  const [kIstirahat, setKIstirahat] = useState("");
+  const [kSelesaiIstirahat, setKSelesaiIstirahat] = useState("");
   const [kAlasan, setKAlasan] = useState("");
   const [catatanValidasi, setCatatanValidasi] = useState("");
 
@@ -44,8 +46,12 @@ function Isi() {
 
   const buka = useMemo(() => data.find((a) => a.id === rincian) || null, [data, rincian]);
 
+  const perluPeriksa = (a: AbsenKantor) =>
+    a.perluValidasi || !a.pulang || (!!a.istirahatTerbuka && (!!a.pulang || a.date < tanggalHariIni()));
+
   const terlihat = useMemo(
-    () => (hanyaPerluPeriksa ? data.filter((a) => a.perluValidasi || !a.pulang) : data),
+    () => (hanyaPerluPeriksa ? data.filter(perluPeriksa) : data),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [data, hanyaPerluPeriksa]
   );
 
@@ -54,7 +60,7 @@ function Isi() {
       catatan: data.length,
       telat: data.filter((a) => a.terlambatMenit > 0).length,
       menitTelat: data.reduce((t, a) => t + a.terlambatMenit, 0),
-      perluPeriksa: data.filter((a) => a.perluValidasi || !a.pulang).length,
+      perluPeriksa: data.filter(perluPeriksa).length,
     }),
     [data]
   );
@@ -126,6 +132,7 @@ function Isi() {
                 <th>Tanggal</th>
                 <th>Jadwal</th>
                 <th>Masuk</th>
+                <th>Istirahat</th>
                 <th>Pulang</th>
                 <th className="text-right">Jam</th>
                 <th className="text-right">Telat</th>
@@ -151,6 +158,26 @@ function Isi() {
                       {efektif.masuk || "—"}
                       {a.koreksiMasuk && (
                         <span className="ml-1 inline-block h-2 w-2 rounded-full bg-kuning-500 align-middle" />
+                      )}
+                    </td>
+                    <td className="whitespace-nowrap">
+                      {efektif.istirahat ? (
+                        <>
+                          {efektif.istirahat}–
+                          {efektif.selesaiIstirahat || (
+                            <span className="font-semibold text-bahaya">belum selesai</span>
+                          )}
+                          {(a.koreksiIstirahat || a.koreksiSelesaiIstirahat) && (
+                            <span className="ml-1 inline-block h-2 w-2 rounded-full bg-kuning-500 align-middle" />
+                          )}
+                          {(a.istirahatLebihMenit || 0) > 0 && (
+                            <span className="ml-1 text-[10px] font-semibold text-amber-800">
+                              +{a.istirahatLebihMenit} mnt
+                            </span>
+                          )}
+                        </>
+                      ) : (
+                        <span className="text-muted">—</span>
                       )}
                     </td>
                     <td className="whitespace-nowrap">
@@ -191,6 +218,8 @@ function Isi() {
                           setRincianId(a.id);
                           setKMasuk(a.koreksiMasuk || "");
                           setKPulang(a.koreksiPulang || "");
+                          setKIstirahat(a.koreksiIstirahat || "");
+                          setKSelesaiIstirahat(a.koreksiSelesaiIstirahat || "");
                           setKAlasan("");
                           setCatatanValidasi("");
                         }}
@@ -207,8 +236,9 @@ function Isi() {
       )}
 
       <p className="mt-2 text-xs text-muted">
-        Jam kerja sudah dipotong satu jam istirahat baku untuk hari yang lebih panjang dari enam
-        jam. Titik kuning menandai jam yang dikoreksi Admin.
+        Jam kerja sudah dipotong lama istirahat yang diabsenkan. Yang tidak absen istirahat dipotong satu jam untuk
+        hari lebih dari enam jam. Istirahat lebih dari satu jam hanya dicatat (+menit), tanpa sanksi. Titik kuning
+        menandai jam yang dikoreksi Admin.
       </p>
 
       <Modal
@@ -220,14 +250,28 @@ function Isi() {
           <div className="space-y-4">
             {salah && <Pesan jenis="gagal" isi={salah} />}
 
-            {(["masuk", "pulang"] as const).map((jenis) => {
+            {(["masuk", "istirahat", "selesaiIstirahat", "pulang"] as const).map((jenis) => {
               const ev = buka[jenis];
+              const judul = {
+                masuk: "Masuk",
+                istirahat: "Istirahat",
+                selesaiIstirahat: "Selesai istirahat",
+                pulang: "Pulang",
+              }[jenis];
               if (!ev) {
+                // Istirahat yang memang tidak diabsenkan bukan kesalahan.
+                if (jenis === "istirahat" && !buka.selesaiIstirahat) {
+                  return (
+                    <div key={jenis} className="rounded-lg border border-line p-3">
+                      <p className="font-semibold text-ink">Istirahat</p>
+                      <p className="mt-1 text-sm text-muted">Tidak diabsenkan — dipotong 1 jam otomatis.</p>
+                    </div>
+                  );
+                }
+                if (jenis === "selesaiIstirahat" && !buka.istirahat) return null;
                 return (
                   <div key={jenis} className="rounded-lg border border-line p-3">
-                    <p className="font-semibold text-ink">
-                      {jenis === "masuk" ? "Masuk" : "Pulang"}
-                    </p>
+                    <p className="font-semibold text-ink">{judul}</p>
                     <p className="mt-1 text-sm text-bahaya">Belum tercatat.</p>
                   </div>
                 );
@@ -237,7 +281,7 @@ function Isi() {
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="font-semibold text-ink">
-                        {jenis === "masuk" ? "Masuk" : "Pulang"} pukul {jamDari(ev.waktu)}
+                        {judul} pukul {jamDari(ev.waktu)}
                       </p>
                       <p className="text-sm text-muted">
                         {ev.kantorNama} · {ev.location.distanceFromProjectMeter} m · ketelitian ±
@@ -322,6 +366,27 @@ function Isi() {
               </div>
             )}
 
+            {buka.istirahatTerbuka && (
+              <div className="rounded-lg border border-kuning-500 bg-kuning-400/10 p-3">
+                <p className="text-sm font-semibold text-ink">Istirahat belum ditutup</p>
+                <p className="mt-1 text-xs text-muted">
+                  Mulai istirahat {jamWIB(buka.istirahat?.waktu)}, tanpa absen selesai. Tentukan jam selesainya di
+                  kolom &quot;Selesai istirahat&quot; di bawah, lalu simpan koreksi. Sampai diputuskan, jam kerja
+                  dipotong satu jam.
+                </p>
+                <button
+                  className="btn-kuning mt-2"
+                  onClick={() => {
+                    const mulai = kIstirahat || jamWIB(buka.istirahat?.waktu);
+                    if (mulai) setKSelesaiIstirahat(tambahMenit(mulai, ISTIRAHAT_BAKU_MENIT));
+                    if (!kAlasan) setKAlasan("Lupa absen selesai istirahat, dianggap istirahat 1 jam.");
+                  }}
+                >
+                  Isi: anggap istirahat 1 jam
+                </button>
+              </div>
+            )}
+
             <div className="rounded-lg border border-line p-3">
               <p className="mb-3 text-sm font-semibold text-ink">Koreksi jam</p>
               <div className="grid gap-4 sm:grid-cols-2">
@@ -339,6 +404,22 @@ function Isi() {
                     className="input-dasar"
                     value={kPulang}
                     onChange={(e) => setKPulang(e.target.value)}
+                  />
+                </Field>
+                <Field label="Mulai istirahat seharusnya">
+                  <input
+                    type="time"
+                    className="input-dasar"
+                    value={kIstirahat}
+                    onChange={(e) => setKIstirahat(e.target.value)}
+                  />
+                </Field>
+                <Field label="Selesai istirahat seharusnya">
+                  <input
+                    type="time"
+                    className="input-dasar"
+                    value={kSelesaiIstirahat}
+                    onChange={(e) => setKSelesaiIstirahat(e.target.value)}
                   />
                 </Field>
               </div>
@@ -362,6 +443,8 @@ function Isi() {
                       absen: buka,
                       koreksiMasuk: kMasuk,
                       koreksiPulang: kPulang,
+                      koreksiIstirahat: kIstirahat,
+                      koreksiSelesaiIstirahat: kSelesaiIstirahat,
                       alasan: kAlasan,
                       oleh: profile?.email || "",
                     });

@@ -68,6 +68,8 @@ const KOLOM: KolomRingkas[] = [
   { judul: "Masuk hari libur", ambil: (b) => b.masukHariLibur, lebar: 8, angka: true },
   { judul: "Jam kerja", ambil: (b) => b.jamKerja, lebar: 8, angka: true },
   { judul: "% Hadir", ambil: (b) => b.persenHadir, lebar: 7, angka: true },
+  { judul: "Istirahat > 1 jam (kali)", ambil: (b) => b.istirahatLebihKali, lebar: 9, angka: true },
+  { judul: "Istirahat tdk ditutup", ambil: (b) => b.istirahatTerbuka, lebar: 9, angka: true },
 ];
 
 function jumlahKolom(baris: BarisRekap[], i: number): string | number {
@@ -335,7 +337,7 @@ export async function eksporRekapPdf(opsi: {
   const JUDUL_PDF = [
     "No", "Kode", "Nama", "Divisi", "Hari kerja", "Hadir", "Telat (x)", "Telat (mnt)", "Skor", "Denda (Rp)",
     "Plg cepat (mnt)", "Tdk absen plg", "Cuti", "Sakit", "Izin", "Dinas", "Mngg", "Alpa",
-    "Masuk libur", "Jam kerja", "% Hadir",
+    "Masuk libur", "Jam kerja", "% Hadir", "Ist >1j", "Ist terbuka",
   ];
 
   autoTable(doc, {
@@ -364,7 +366,7 @@ export async function eksporRekapPdf(opsi: {
       1: { cellWidth: 18 },
       2: { cellWidth: 36 },
       3: { cellWidth: 18 },
-      ...Object.fromEntries(Array.from({ length: 17 }, (_, i) => [i + 4, { halign: "center" as const }])),
+      ...Object.fromEntries(Array.from({ length: 19 }, (_, i) => [i + 4, { halign: "center" as const }])),
       9: { halign: "right" as const, cellWidth: 16 },
     },
     didParseCell: (d) => {

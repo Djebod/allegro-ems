@@ -14,7 +14,7 @@ import {
 } from "firebase/firestore";
 import { dbClient } from "@/lib/firebase";
 import { hitungKantor, jamWIB } from "@/lib/kantor";
-import { jadwalUntuk } from "@/lib/jadwal";
+import { hariSabtu, jadwalUntuk } from "@/lib/jadwal";
 import { rapikanKode } from "@/lib/data";
 import type { AbsenKantor, Employee, EventAbsenKantor, Kantor, TitikAbsen } from "@/types";
 
@@ -96,8 +96,17 @@ export async function ambilAbsenHariIni(
   return snap.exists() ? { id: snap.id, ...(snap.data() as Omit<AbsenKantor, "id">) } : null;
 }
 
+export type JenisAbsenKantor = "masuk" | "istirahat" | "selesaiIstirahat" | "pulang";
+
+const PESAN_SUDAH: Record<JenisAbsenKantor, string> = {
+  masuk: "Absen masuk hari ini sudah tercatat.",
+  istirahat: "Absen istirahat hari ini sudah tercatat.",
+  selesaiIstirahat: "Absen selesai istirahat hari ini sudah tercatat.",
+  pulang: "Absen pulang hari ini sudah tercatat.",
+};
+
 /**
- * Mencatat absen masuk atau pulang.
+ * Mencatat absen masuk, istirahat, selesai istirahat, atau pulang.
  *
  * Dokumennya ber-ID orang + tanggal, jadi satu orang tidak mungkin punya
  * dua catatan di hari yang sama — termasuk kalau tombolnya tertekan dua
@@ -106,7 +115,7 @@ export async function ambilAbsenHariIni(
 export async function catatAbsenKantor(opsi: {
   karyawan: Employee;
   tanggal: string;
-  jenis: "masuk" | "pulang";
+  jenis: JenisAbsenKantor;
   titik: TitikAbsen;
   photoUrl: string;
   kantorId: string;
@@ -124,13 +133,18 @@ export async function catatAbsenKantor(opsi: {
   const snap = await getDoc(ref);
   const kini = snap.exists() ? (snap.data() as AbsenKantor) : null;
 
-  if (kini?.[opsi.jenis]) {
-    throw new Error(
-      opsi.jenis === "masuk" ? "Absen masuk hari ini sudah tercatat." : "Absen pulang hari ini sudah tercatat."
-    );
-  }
-  if (opsi.jenis === "pulang" && !kini?.masuk) {
+  if (kini?.[opsi.jenis]) throw new Error(PESAN_SUDAH[opsi.jenis]);
+  if (opsi.jenis !== "masuk" && !kini?.masuk) {
     throw new Error("Absen masuk belum tercatat. Absen masuk dulu.");
+  }
+  if ((opsi.jenis === "istirahat" || opsi.jenis === "selesaiIstirahat") && kini?.pulang) {
+    throw new Error("Absen pulang sudah tercatat, jadi istirahat tidak bisa diabsenkan lagi.");
+  }
+  if (opsi.jenis === "istirahat" && hariSabtu(opsi.tanggal)) {
+    throw new Error("Hari Sabtu tidak ada absen istirahat.");
+  }
+  if (opsi.jenis === "selesaiIstirahat" && !kini?.istirahat) {
+    throw new Error("Absen istirahat belum tercatat.");
   }
 
   const jadwal = jadwalUntuk(opsi.karyawan, opsi.tanggal);
@@ -146,13 +160,16 @@ export async function catatAbsenKantor(opsi: {
     kantorNama: opsi.kantorNama,
   };
 
-  const jamMasuk =
-    opsi.jenis === "masuk" ? jamWIB(sekarang) : jamWIB(kini?.masuk?.waktu);
-  const jamPulang = opsi.jenis === "pulang" ? jamWIB(sekarang) : null;
+  // Jam tiap sesi: yang sedang dicatat memakai jam sekarang, yang lain
+  // memakai yang sudah tersimpan (koreksi Admin didahulukan).
+  const jam = (j: JenisAbsenKantor, koreksi?: string | null) =>
+    opsi.jenis === j ? jamWIB(sekarang) : koreksi || jamWIB(kini?.[j]?.waktu);
 
   const hitung = hitungKantor({
-    masuk: jamMasuk,
-    pulang: jamPulang,
+    masuk: jam("masuk", kini?.koreksiMasuk),
+    istirahat: jam("istirahat", kini?.koreksiIstirahat),
+    selesaiIstirahat: jam("selesaiIstirahat", kini?.koreksiSelesaiIstirahat),
+    pulang: jam("pulang", kini?.koreksiPulang),
     jadwalMasuk: jadwal.masuk,
     jadwalPulang: jadwal.pulang,
   });
@@ -164,6 +181,8 @@ export async function catatAbsenKantor(opsi: {
       divisi: opsi.karyawan.divisi || "",
       date: opsi.tanggal,
       masuk: null,
+      istirahat: null,
+      selesaiIstirahat: null,
       pulang: null,
       jadwalMasuk: jadwal.masuk,
       jadwalPulang: jadwal.pulang,
@@ -177,6 +196,8 @@ export async function catatAbsenKantor(opsi: {
       catatanValidasi: "",
       koreksiMasuk: null,
       koreksiPulang: null,
+      koreksiIstirahat: null,
+      koreksiSelesaiIstirahat: null,
       alasanKoreksi: "",
       isOverridden: false,
       createdAt: serverTimestamp(),
@@ -198,6 +219,9 @@ export async function catatAbsenKantor(opsi: {
     workHours: hitung.workHours,
     terlambatMenit: hitung.terlambatMenit,
     pulangCepatMenit: hitung.pulangCepatMenit,
+    istirahatMenit: hitung.istirahatMenit,
+    istirahatLebihMenit: hitung.istirahatLebihMenit,
+    istirahatTerbuka: hitung.istirahatTerbuka,
     status: hitung.status,
     perluValidasi: (kini?.perluValidasi ?? false) || opsi.diLuarRadius,
     updatedAt: serverTimestamp(),
@@ -223,24 +247,41 @@ export async function koreksiAbsenKantor(opsi: {
   absen: AbsenKantor;
   koreksiMasuk: string;
   koreksiPulang: string;
+  koreksiIstirahat?: string;
+  koreksiSelesaiIstirahat?: string;
   alasan: string;
   oleh: string;
 }) {
   if (!opsi.alasan.trim()) throw new Error("Alasan koreksi wajib diisi.");
 
-  const masuk = opsi.koreksiMasuk || jamWIB(opsi.absen.masuk?.waktu);
-  const pulang = opsi.koreksiPulang || jamWIB(opsi.absen.pulang?.waktu);
+  const a = opsi.absen;
+  const masuk = opsi.koreksiMasuk || jamWIB(a.masuk?.waktu);
+  const istirahat = opsi.koreksiIstirahat || jamWIB(a.istirahat?.waktu);
+  const selesaiIstirahat = opsi.koreksiSelesaiIstirahat || jamWIB(a.selesaiIstirahat?.waktu);
+  const pulang = opsi.koreksiPulang || jamWIB(a.pulang?.waktu);
+
+  if (selesaiIstirahat && !istirahat) throw new Error("Jam selesai istirahat diisi, tetapi jam mulai istirahatnya kosong.");
+  if (istirahat && selesaiIstirahat && selesaiIstirahat < istirahat) {
+    throw new Error("Jam selesai istirahat lebih awal dari jam mulainya.");
+  }
 
   const hitung = hitungKantor({
     masuk,
+    istirahat,
+    selesaiIstirahat,
     pulang,
-    jadwalMasuk: opsi.absen.jadwalMasuk,
-    jadwalPulang: opsi.absen.jadwalPulang,
+    jadwalMasuk: a.jadwalMasuk,
+    jadwalPulang: a.jadwalPulang,
   });
 
   await updateDoc(doc(dbClient(), "officeAttendance", opsi.absen.id), {
     koreksiMasuk: opsi.koreksiMasuk || null,
     koreksiPulang: opsi.koreksiPulang || null,
+    koreksiIstirahat: opsi.koreksiIstirahat || null,
+    koreksiSelesaiIstirahat: opsi.koreksiSelesaiIstirahat || null,
+    istirahatMenit: hitung.istirahatMenit,
+    istirahatLebihMenit: hitung.istirahatLebihMenit,
+    istirahatTerbuka: hitung.istirahatTerbuka,
     alasanKoreksi: `${opsi.alasan.trim()} — oleh ${opsi.oleh}`,
     isOverridden: true,
     workHours: hitung.workHours,

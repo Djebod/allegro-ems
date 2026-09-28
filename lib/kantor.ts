@@ -5,10 +5,22 @@ import { keMenit } from "@/lib/jadwal";
 import type { AbsenKantor, Kantor, StatusAbsenKantor } from "@/types";
 
 /**
- * Istirahat satu jam dipotong otomatis untuk hari yang cukup panjang.
- * Istirahat sengaja tidak diabsenkan: dari pengalaman mesin fingerprint,
- * cap istirahat hampir tidak pernah diisi tertib, dan yang keluar malah
- * jam kerja kelebihan satu jam untuk semua orang.
+ * ISTIRAHAT (diubah 28 September 2026 atas permintaan client)
+ *
+ * Sekarang ada absen "Istirahat" dan "Selesai istirahat", dengan swafoto
+ * dan GPS seperti masuk-pulang. Aturannya:
+ *
+ *  - Keduanya diabsenkan  -> yang dipotong dari jam kerja adalah lama
+ *                            istirahat sebenarnya.
+ *  - Lebih dari 1 jam      -> hanya DICATAT (istirahatLebihMenit), tanpa
+ *                            denda dan tanpa sanksi lain.
+ *  - Istirahat tidak ditutup -> ditandai (istirahatTerbuka), Admin yang
+ *                            memutuskan jam selesainya lewat koreksi.
+ *                            Selama belum diputuskan, dipotong 1 jam.
+ *  - Tidak absen istirahat sama sekali -> tetap dipotong 1 jam otomatis
+ *                            untuk hari lebih dari 6 jam, seperti dulu,
+ *                            supaya yang lupa tidak diuntungkan.
+ *  - Hari Sabtu tidak ada absen istirahat (pulang siang).
  */
 export const ISTIRAHAT_BAKU_MENIT = 60;
 export const MINIMAL_JAM_KENA_ISTIRAHAT = 6;
@@ -17,6 +29,12 @@ export interface HasilHitungKantor {
   workHours: number;
   terlambatMenit: number;
   pulangCepatMenit: number;
+  /** Lama istirahat yang diabsenkan, dalam menit. 0 bila tidak diabsenkan. */
+  istirahatMenit: number;
+  /** Kelebihan dari 1 jam. Hanya dicatat. */
+  istirahatLebihMenit: number;
+  /** Sudah absen istirahat, belum absen selesai istirahat. */
+  istirahatTerbuka: boolean;
   status: StatusAbsenKantor;
 }
 
@@ -25,25 +43,44 @@ export function hitungKantor(opsi: {
   pulang: string | null;
   jadwalMasuk: string;
   jadwalPulang: string;
+  istirahat?: string | null;
+  selesaiIstirahat?: string | null;
 }): HasilHitungKantor {
+  const kosong = { istirahatMenit: 0, istirahatLebihMenit: 0, istirahatTerbuka: false };
   if (!opsi.masuk) {
-    return { workHours: 0, terlambatMenit: 0, pulangCepatMenit: 0, status: "HADIR" };
+    return { workHours: 0, terlambatMenit: 0, pulangCepatMenit: 0, ...kosong, status: "HADIR" };
   }
 
   const terlambatMenit = Math.max(0, keMenit(opsi.masuk) - keMenit(opsi.jadwalMasuk));
 
+  const istirahatTerbuka = !!opsi.istirahat && !opsi.selesaiIstirahat;
+  const istirahatMenit =
+    opsi.istirahat && opsi.selesaiIstirahat
+      ? Math.max(0, keMenit(opsi.selesaiIstirahat) - keMenit(opsi.istirahat))
+      : 0;
+  const istirahatLebihMenit = Math.max(0, istirahatMenit - ISTIRAHAT_BAKU_MENIT);
+  const infoIstirahat = { istirahatMenit, istirahatLebihMenit, istirahatTerbuka };
+
   if (!opsi.pulang) {
-    return { workHours: 0, terlambatMenit, pulangCepatMenit: 0, status: "HADIR" };
+    return { workHours: 0, terlambatMenit, pulangCepatMenit: 0, ...infoIstirahat, status: "HADIR" };
   }
 
   const kotor = Math.max(0, keMenit(opsi.pulang) - keMenit(opsi.masuk));
-  const potong = kotor >= MINIMAL_JAM_KENA_ISTIRAHAT * 60 ? ISTIRAHAT_BAKU_MENIT : 0;
-  const workHours = Math.round(((kotor - potong) / 60) * 100) / 100;
+  const potong =
+    opsi.istirahat && opsi.selesaiIstirahat
+      ? istirahatMenit
+      : istirahatTerbuka
+      ? ISTIRAHAT_BAKU_MENIT // sementara, sampai Admin memutuskan
+      : kotor >= MINIMAL_JAM_KENA_ISTIRAHAT * 60
+      ? ISTIRAHAT_BAKU_MENIT
+      : 0;
+  const workHours = Math.round((Math.max(0, kotor - potong) / 60) * 100) / 100;
 
   return {
     workHours,
     terlambatMenit,
     pulangCepatMenit: Math.max(0, keMenit(opsi.jadwalPulang) - keMenit(opsi.pulang)),
+    ...infoIstirahat,
     status: "SELESAI",
   };
 }
@@ -118,9 +155,25 @@ export function jamWIB(iso: string | null | undefined): string | null {
   return `${jam}:${menit}`;
 }
 
-export function jamEfektifKantor(a: AbsenKantor): { masuk: string | null; pulang: string | null } {
+export interface JamEfektif {
+  masuk: string | null;
+  istirahat: string | null;
+  selesaiIstirahat: string | null;
+  pulang: string | null;
+}
+
+/** Jam yang dipakai menghitung: koreksi Admin bila ada, jam asli bila tidak. */
+export function jamEfektifKantor(a: AbsenKantor): JamEfektif {
   return {
     masuk: a.koreksiMasuk || jamWIB(a.masuk?.waktu),
+    istirahat: a.koreksiIstirahat || jamWIB(a.istirahat?.waktu),
+    selesaiIstirahat: a.koreksiSelesaiIstirahat || jamWIB(a.selesaiIstirahat?.waktu),
     pulang: a.koreksiPulang || jamWIB(a.pulang?.waktu),
   };
+}
+
+/** Jam "HH:MM" ditambah sejumlah menit. */
+export function tambahMenit(jam: string, menit: number): string {
+  const t = keMenit(jam) + menit;
+  return `${String(Math.floor(t / 60) % 24).padStart(2, "0")}:${String(t % 60).padStart(2, "0")}`;
 }

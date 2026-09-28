@@ -10,7 +10,9 @@ import { Field, Pesan } from "@/components/Field";
 import { useAuth } from "@/lib/auth";
 import { dbClient } from "@/lib/firebase";
 import { ambilAbsenHariIni, catatAbsenKantor, semuaKantor } from "@/lib/data-kantor";
-import { cariKantorTerdekat, hitungKantor, jamWIB } from "@/lib/kantor";
+import { cariKantorTerdekat, hitungKantor, jamEfektifKantor, ISTIRAHAT_BAKU_MENIT } from "@/lib/kantor";
+import { hariSabtu } from "@/lib/jadwal";
+import type { JenisAbsenKantor } from "@/lib/data-kantor";
 import { jadwalUntuk } from "@/lib/jadwal";
 import { jarakMeter } from "@/lib/lokasi";
 import { cloudinarySiap, unggahFoto } from "@/lib/cloudinary";
@@ -18,6 +20,20 @@ import { jamDari, tanggalHariIni } from "@/lib/absensi";
 import type { AbsenKantor, Employee, Kantor, TitikAbsen } from "@/types";
 
 const FOLDER = "allegro/absen-kantor";
+
+const NAMA_SESI: Record<JenisAbsenKantor, string> = {
+  masuk: "Absen masuk",
+  istirahat: "Mulai istirahat",
+  selesaiIstirahat: "Selesai istirahat",
+  pulang: "Absen pulang",
+};
+
+const PESAN_BERHASIL: Record<JenisAbsenKantor, string> = {
+  masuk: "Absen masuk tercatat. Selamat bekerja.",
+  istirahat: "Istirahat tercatat. Jangan lupa absen selesai istirahat.",
+  selesaiIstirahat: "Selesai istirahat tercatat. Selamat bekerja kembali.",
+  pulang: "Absen pulang tercatat. Terima kasih.",
+};
 
 function Isi() {
   const { profile } = useAuth();
@@ -35,7 +51,7 @@ function Isi() {
   const [terdekat, setTerdekat] = useState<ReturnType<typeof cariKantorTerdekat> | null>(null);
   const [mencari, setMencari] = useState(false);
   const [alasan, setAlasan] = useState("");
-  const [antrean, setAntrean] = useState<"masuk" | "pulang" | null>(null);
+  const [antrean, setAntrean] = useState<JenisAbsenKantor | null>(null);
   const [mengirim, setMengirim] = useState(false);
 
   const muat = useCallback(async () => {
@@ -85,9 +101,16 @@ function Isi() {
     });
   }
 
-  async function mulai(jenis: "masuk" | "pulang") {
+  async function mulai(jenis: JenisAbsenKantor) {
     setSalah(null);
     setPesan(null);
+    if (
+      jenis === "pulang" &&
+      absen?.istirahat &&
+      !absen?.selesaiIstirahat &&
+      !window.confirm("Anda belum absen selesai istirahat. Tetap absen pulang? Admin akan menentukan jam selesai istirahatnya.")
+    )
+      return;
     if (!cloudinarySiap()) return setSalah("Penyimpanan foto belum diatur. Hubungi Admin.");
 
     const hasil = await periksaLokasi();
@@ -120,11 +143,7 @@ function Isi() {
       });
       await muat();
       setAlasan("");
-      setPesan(
-        antrean === "masuk"
-          ? "Absen masuk tercatat. Selamat bekerja."
-          : "Absen pulang tercatat. Terima kasih."
-      );
+      setPesan(PESAN_BERHASIL[antrean]);
       setAntrean(null);
     } catch (e) {
       setSalah(e instanceof Error ? e.message : "Absen gagal disimpan.");
@@ -147,14 +166,23 @@ function Isi() {
   if (!karyawan) return <Pesan jenis="gagal" isi="Data karyawan Anda tidak ditemukan." />;
 
   const jadwal = jadwalUntuk(karyawan, tanggal);
-  const hitung = absen
-    ? hitungKantor({
-        masuk: jamWIB(absen.masuk?.waktu),
-        pulang: jamWIB(absen.pulang?.waktu),
-        jadwalMasuk: jadwal.masuk,
-        jadwalPulang: jadwal.pulang,
-      })
+  const efektif = absen ? jamEfektifKantor(absen) : null;
+  const hitung = efektif
+    ? hitungKantor({ ...efektif, jadwalMasuk: jadwal.masuk, jadwalPulang: jadwal.pulang })
     : null;
+  const sabtu = hariSabtu(tanggal);
+  const sedangIstirahat = !!absen?.istirahat && !absen?.selesaiIstirahat;
+  // Tombol utama mengikuti urutan hari kerja. Absen pulang tetap tersedia
+  // kapan saja sesudah masuk, karena orang tidak bisa ditahan pulang.
+  const utama: JenisAbsenKantor | null = !absen?.masuk
+    ? "masuk"
+    : absen?.pulang
+    ? null
+    : sedangIstirahat
+    ? "selesaiIstirahat"
+    : !absen?.istirahat && !sabtu
+    ? "istirahat"
+    : "pulang";
 
   return (
     <>
@@ -166,7 +194,7 @@ function Isi() {
           {karyawan.divisi ? ` · ${karyawan.divisi}` : ""}
         </p>
 
-        <div className="mt-4 grid gap-3 border-t border-line pt-4 sm:grid-cols-3">
+        <div className="mt-4 grid grid-cols-2 gap-3 border-t border-line pt-4 sm:grid-cols-5">
           <div>
             <p className="text-[11px] text-muted">Masuk</p>
             <p className="text-lg font-bold leading-tight text-ink">
@@ -177,6 +205,27 @@ function Isi() {
                 telat {absen.terlambatMenit} menit
               </p>
             )}
+          </div>
+          <div>
+            <p className="text-[11px] text-muted">Istirahat</p>
+            <p className="text-lg font-bold leading-tight text-ink">
+              {sabtu && !absen?.istirahat ? "—" : jamDari(absen?.istirahat?.waktu)}
+            </p>
+            {sabtu && <p className="text-[11px] text-muted">Sabtu tanpa istirahat</p>}
+          </div>
+          <div>
+            <p className="text-[11px] text-muted">Selesai istirahat</p>
+            <p className="text-lg font-bold leading-tight text-ink">{jamDari(absen?.selesaiIstirahat?.waktu)}</p>
+            {hitung && hitung.istirahatMenit > 0 && (
+              <p
+                className={`text-[11px] ${
+                  hitung.istirahatMenit > ISTIRAHAT_BAKU_MENIT ? "font-semibold text-amber-800" : "text-muted"
+                }`}
+              >
+                {hitung.istirahatMenit} menit
+              </p>
+            )}
+            {sedangIstirahat && <p className="text-[11px] font-semibold text-amber-800">sedang istirahat</p>}
           </div>
           <div>
             <p className="text-[11px] text-muted">Pulang</p>
@@ -235,14 +284,17 @@ function Isi() {
       )}
 
       <div className="mt-4 space-y-3">
-        {!absen?.masuk ? (
-          <button className="btn-lapangan" disabled={mencari || mengirim} onClick={() => mulai("masuk")}>
-            {mencari ? "Mengambil lokasi…" : "Absen masuk"}
-          </button>
-        ) : !absen?.pulang ? (
-          <button className="btn-lapangan" disabled={mencari || mengirim} onClick={() => mulai("pulang")}>
-            {mencari ? "Mengambil lokasi…" : "Absen pulang"}
-          </button>
+        {utama ? (
+          <>
+            <button className="btn-lapangan" disabled={mencari || mengirim} onClick={() => mulai(utama)}>
+              {mencari ? "Mengambil lokasi…" : NAMA_SESI[utama]}
+            </button>
+            {utama !== "masuk" && utama !== "pulang" && (
+              <button className="btn-ringan w-full" disabled={mencari || mengirim} onClick={() => mulai("pulang")}>
+                Absen pulang
+              </button>
+            )}
+          </>
         ) : (
           <div className="kartu text-center">
             <p className="text-sm text-muted">
@@ -267,14 +319,16 @@ function Isi() {
       )}
 
       <p className="mt-4 text-xs text-muted">
-        Istirahat tidak perlu diabsenkan — satu jam istirahat otomatis dipotong untuk hari yang
-        lebih panjang dari enam jam. Lembur tetap lewat formulir pengajuan.
+        Absen istirahat dan selesai istirahat memakai swafoto dan lokasi, sama seperti masuk dan pulang. Istirahat
+        lebih dari satu jam akan tercatat. Kalau lupa absen istirahat sama sekali, satu jam tetap dipotong otomatis;
+        kalau lupa absen selesai istirahat, Admin yang menentukan jamnya. Hari Sabtu tidak ada absen istirahat.
+        Lembur tetap lewat formulir pengajuan.
       </p>
 
       <KameraBelakang
         terbuka={Boolean(antrean) && !mengirim}
         arah="depan"
-        judul={antrean === "masuk" ? "Swafoto absen masuk" : "Swafoto absen pulang"}
+        judul={antrean ? `Swafoto ${NAMA_SESI[antrean].toLowerCase()}` : ""}
         onFoto={simpanFoto}
         onBatal={() => setAntrean(null)}
       />
@@ -293,7 +347,7 @@ function Isi() {
 export default function HalamanAbsenSaya() {
   return (
     <Guard izinkan={["ADMIN", "FINANCE", "HR", "OWNER", "KARYAWAN"]}>
-      <Shell judul="Absen Saya" keterangan="Absen masuk dan pulang dari lokasi kantor.">
+      <Shell judul="Absen Saya" keterangan="Absen masuk, istirahat, dan pulang dari lokasi kantor.">
         <Isi />
       </Shell>
     </Guard>

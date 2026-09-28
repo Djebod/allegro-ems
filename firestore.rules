@@ -784,6 +784,10 @@ service cloud.firestore {
             && request.resource.data.isOverridden == resource.data.isOverridden
             && request.resource.data.koreksiMasuk == resource.data.koreksiMasuk
             && request.resource.data.koreksiPulang == resource.data.koreksiPulang
+            // Catatan lama belum punya kolom koreksi istirahat, jadi dibaca
+            // dengan nilai bawaan null supaya tidak jadi galat.
+            && request.resource.data.get('koreksiIstirahat', null) == resource.data.get('koreksiIstirahat', null)
+            && request.resource.data.get('koreksiSelesaiIstirahat', null) == resource.data.get('koreksiSelesaiIstirahat', null)
             && request.resource.data.hasilValidasi == resource.data.hasilValidasi
           )
         );
