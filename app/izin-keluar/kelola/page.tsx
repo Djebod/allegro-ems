@@ -204,12 +204,12 @@ function Isi() {
             <input type="month" className="input-dasar" value={bulan} onChange={(e) => e.target.value && setBulan(e.target.value)} />
           </Field>
           <input
-            className="input-dasar max-w-xs"
+            className="input-dasar w-full sm:max-w-xs"
             placeholder="Cari nama, divisi, atau alasan"
             value={cari}
             onChange={(e) => setCari(e.target.value)}
           />
-          <div className="ml-auto flex flex-wrap gap-x-6 gap-y-2 text-sm">
+          <div className="flex w-full flex-wrap gap-x-6 gap-y-2 text-sm sm:ml-auto sm:w-auto">
             <span>
               <b>{ringkas.jumlah}</b> izin
             </span>

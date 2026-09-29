@@ -119,7 +119,7 @@ function Isi() {
 
         {tab === "PENGAJUAN" && (
           <select
-            className="input-dasar ml-auto max-w-[12rem]"
+            className="input-dasar w-full sm:ml-auto sm:w-auto sm:max-w-[12rem]"
             value={saring}
             onChange={(e) => setSaring(e.target.value as typeof saring)}
           >

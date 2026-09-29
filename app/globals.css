@@ -66,3 +66,92 @@
     @apply px-2 py-1 text-[11px];
   }
 }
+
+/*
+ * TABEL DI HP: setiap baris tampil sebagai kartu, setiap sel sebagai
+ * "Judul ....... isi". Label kolom dipasang otomatis oleh
+ * components/LabelTabel.tsx. Tabel yang harus tetap berbentuk tabel
+ * (mis. rincian harian 31 tanggal) diberi kelas "tetap-tabel".
+ */
+@media (max-width: 639px) {
+  .tabel-padat:not(.tetap-tabel) {
+    min-width: 0 !important;
+    font-size: 13px;
+  }
+  .tabel-padat:not(.tetap-tabel) thead {
+    display: none;
+  }
+  .tabel-padat:not(.tetap-tabel),
+  .tabel-padat:not(.tetap-tabel) tbody,
+  .tabel-padat:not(.tetap-tabel) tbody tr {
+    display: block;
+    width: 100%;
+  }
+  .tabel-padat:not(.tetap-tabel) tbody tr {
+    background: #fff !important;
+    border-bottom: 8px solid theme("colors.surface");
+    padding: 10px 14px;
+  }
+  .tabel-padat:not(.tetap-tabel) tbody td {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
+    max-width: none !important;
+    border: 0;
+    padding: 4px 0;
+    text-align: right !important;
+    white-space: normal !important;
+  }
+  .tabel-padat:not(.tetap-tabel) tbody td > * {
+    min-width: 0;
+  }
+  .tabel-padat:not(.tetap-tabel) tbody td::before {
+    content: attr(data-label);
+    flex-shrink: 0;
+    max-width: 45%;
+    text-align: left;
+    font-size: 11px;
+    font-weight: 400;
+    color: theme("colors.muted");
+  }
+  /* Sel tanpa judul (tombol aksi, baris kosong): tanpa label, rata kanan. */
+  .tabel-padat:not(.tetap-tabel) tbody td[data-label=""]::before,
+  .tabel-padat:not(.tetap-tabel) tbody td:not([data-label])::before {
+    content: none;
+  }
+  .tabel-padat:not(.tetap-tabel) tbody td[data-label=""] {
+    justify-content: flex-end;
+  }
+  /* Kolom pertama (biasanya nama) jadi judul kartu: tanpa label, rata kiri. */
+  .tabel-padat:not(.tetap-tabel) tbody td:first-child {
+    display: block;
+    text-align: left !important;
+    font-size: 14px;
+    padding-bottom: 8px;
+    margin-bottom: 4px;
+    border-bottom: 1px solid theme("colors.line");
+  }
+  .tabel-padat:not(.tetap-tabel) tbody td:first-child::before {
+    content: none;
+  }
+  /* Tabel yang diawali kolom "No": nomor disembunyikan, kolom kedua jadi judul. */
+  .tabel-padat:not(.tetap-tabel) tbody td[data-nomor] {
+    display: none;
+  }
+  .tabel-padat:not(.tetap-tabel) tbody td[data-nomor] + td {
+    display: block;
+    text-align: left !important;
+    font-size: 14px;
+    padding-bottom: 8px;
+    margin-bottom: 4px;
+    border-bottom: 1px solid theme("colors.line");
+  }
+  .tabel-padat:not(.tetap-tabel) tbody td[data-nomor] + td::before {
+    content: none;
+  }
+  .tabel-padat:not(.tetap-tabel) .truncate {
+    white-space: normal;
+  }
+}

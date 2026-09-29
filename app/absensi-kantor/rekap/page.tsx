@@ -377,7 +377,7 @@ function Isi() {
             </div>
           ) : (
             <div className="mt-2 overflow-x-auto rounded-xl border border-line bg-white">
-              <table className="tabel-padat">
+              <table className="tabel-padat tetap-tabel">
                 <thead>
                   <tr>
                     <th className="sticky left-0 z-10 min-w-[180px]">Nama</th>

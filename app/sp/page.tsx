@@ -143,7 +143,7 @@ function Isi({ kelola }: { kelola: boolean }) {
             </button>
           </>
         )}
-        <label className="ml-auto flex items-center gap-2 text-sm text-muted">
+        <label className="flex w-full items-center gap-2 text-sm text-muted sm:ml-auto sm:w-auto">
           <input
             type="checkbox"
             checked={hanyaBerlaku}

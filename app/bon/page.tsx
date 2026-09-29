@@ -217,7 +217,7 @@ function Isi() {
           ))}
         </select>
 
-        <div className="ml-auto rounded-xl border border-line bg-white px-4 py-2">
+        <div className="w-full rounded-xl border border-line bg-white px-4 py-2 sm:ml-auto sm:w-auto">
           <p className="text-[11px] text-muted">Total bon berjalan</p>
           <p className="text-lg font-bold leading-tight text-ink">{rupiahPenuh(totalBerjalan)}</p>
         </div>

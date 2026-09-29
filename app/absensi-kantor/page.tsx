@@ -68,7 +68,7 @@ function Isi() {
   return (
     <>
       <div className="mb-4 flex flex-wrap items-end gap-3">
-        <label className="block">
+        <label className="block w-full sm:w-auto">
           <span className="mb-1 block text-sm font-medium text-ink">Bulan</span>
           <input
             type="month"
@@ -78,7 +78,7 @@ function Isi() {
           />
         </label>
 
-        <label className="flex items-center gap-2 pb-2 text-sm text-muted">
+        <label className="flex w-full items-center gap-2 text-sm text-muted sm:w-auto sm:pb-2">
           <input
             type="checkbox"
             checked={hanyaPerluPeriksa}
@@ -87,7 +87,7 @@ function Isi() {
           Hanya yang perlu diperiksa
         </label>
 
-        <div className="ml-auto flex flex-wrap gap-x-6 gap-y-2 rounded-xl border border-line bg-white px-4 py-2">
+        <div className="grid w-full grid-cols-3 gap-2 rounded-xl border border-line bg-white px-4 py-2 sm:ml-auto sm:flex sm:w-auto sm:gap-x-6">
           <div>
             <p className="text-[11px] text-muted">Catatan</p>
             <p className="text-lg font-bold leading-tight text-ink">{ringkas.catatan}</p>

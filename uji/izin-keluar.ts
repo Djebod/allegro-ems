@@ -1,5 +1,6 @@
 import { durasiMenit, keadaanIzin, lebihDuaJam, teksDurasi } from "@/lib/izin-keluar";
 import { fotoMasihBaru, perangkatSeluler } from "@/lib/kamera";
+import { bersihkanJudul, judulKolom } from "@/lib/label-tabel";
 
 let lolos = 0, gagal = 0;
 function cek(nama: string, dapat: unknown, harap: unknown) {
@@ -35,6 +36,11 @@ cek("komputer Windows bukan HP", perangkatSeluler("Mozilla/5.0 (Windows NT 10.0;
 cek("Android adalah HP", perangkatSeluler("Mozilla/5.0 (Linux; Android 14; 23127PN0CG) Mobile Safari", 5), true);
 cek("iPad modern (mengaku Mac, layar sentuh)", perangkatSeluler("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)", 5), true);
 cek("Mac biasa bukan HP", perangkatSeluler("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)", 0), false);
+
+console.log("\n== Label kolom untuk tampilan kartu di HP ==");
+cek("tombol urut dibuang", bersihkanJudul("Nama ▲"), "Nama");
+cek("tombol tampilkan dibuang", bersihkanJudul("Gaji pokok Tampilkan"), "Gaji pokok");
+cek("colSpan diperhitungkan", judulKolom([{ colSpan: 1, textContent: "No" }, { colSpan: 2, textContent: "Jam" }, { colSpan: 1, textContent: "" }]), ["No", "Jam", "Jam", ""]);
 
 console.log(`\n==== ${lolos} lolos, ${gagal} gagal ====`);
 process.exit(gagal ? 1 : 0);

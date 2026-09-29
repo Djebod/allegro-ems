@@ -86,6 +86,10 @@ Pakai **`jamWIB()`** di `lib/kantor.ts`, yang zona waktunya dikunci ke Asia/Jaka
 
 Semua foto absensi (absen kantor, izin keluar, absensi lapangan) lewat `components/KameraBelakang.tsx`. Jangan pernah menambah `<input type="file">` untuk foto absensi: di komputer atribut `capture` diabaikan dan jendela pilih berkas terbuka, sehingga foto lama bisa diunggah (terjadi 28 Sep 2026). Jalur cadangan hanya untuk HP (`perangkatSeluler`) dan menolak foto yang bukan baru diambil (`fotoMasihBaru`, `lib/kamera.ts`).
 
+### 5.1d Tabel di HP tampil sebagai kartu
+
+Semua `table.tabel-padat` otomatis berubah jadi kartu di layar < 640 px (CSS di `app/globals.css`). Label tiap baris diambil dari judul kolom oleh `components/LabelTabel.tsx` (dipasang di `Shell`), jadi tabel baru tidak perlu apa-apa. Kolom pertama jadi judul kartu; kolom "No" disembunyikan. Tabel matriks yang harus tetap tabel (rincian harian 31 tanggal) diberi kelas `tetap-tabel`. Baris filter/ringkasan: pakai `w-full sm:w-auto` dan `sm:ml-auto`, jangan `ml-auto` polos.
+
 ### 5.2 Firestore Rules: dokumen yang belum ada
 
 Membaca dokumen yang belum ada membuat `resource` bernilai `null`. Menulis `resource.data.x == y` pada keadaan itu bukan menghasilkan "salah", melainkan **galat** — dan Firestore menerjemahkan galat jadi penolakan izin.

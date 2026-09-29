@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { menuAktif, menuUntuk } from "@/lib/menu";
+import LabelTabel from "@/components/LabelTabel";
 
 const NAMA_PERAN: Record<string, string> = {
   ADMIN: "Admin",
@@ -99,6 +100,7 @@ export default function Shell({
 
   return (
     <div className="min-h-screen bg-surface">
+      <LabelTabel />
       {/* Menu samping - layar lebar */}
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-60 bg-allegro-700 lg:block">
         <MenuSamping />
