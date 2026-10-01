@@ -207,6 +207,7 @@ function Isi() {
                         </span>
                       ) : (
                         <span className="label-status bg-green-100 text-green-800">
+                          {a.masuk?.jenisTitik === "PROYEK" ? "Proyek " : ""}
                           {a.masuk?.kantorNama || "—"}
                         </span>
                       )}
@@ -284,6 +285,7 @@ function Isi() {
                         {judul} pukul {jamDari(ev.waktu)}
                       </p>
                       <p className="text-sm text-muted">
+                        {ev.jenisTitik === "PROYEK" ? "Proyek " : ""}
                         {ev.kantorNama} · {ev.location.distanceFromProjectMeter} m · ketelitian ±
                         {ev.location.accuracy} m
                       </p>

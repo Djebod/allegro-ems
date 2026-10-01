@@ -13,6 +13,7 @@ import {
   where,
 } from "firebase/firestore";
 import { dbClient } from "@/lib/firebase";
+import { pantauDenganCadangan } from "@/lib/pantau-cadangan";
 import { hitungKantor, jamWIB } from "@/lib/kantor";
 import { hariSabtu, jadwalUntuk } from "@/lib/jadwal";
 import { rapikanKode } from "@/lib/data";
@@ -71,21 +72,28 @@ export function pantauAbsenKantor(
   employeeId?: string
 ) {
   const dasar = collection(dbClient(), "officeAttendance");
-  const q = employeeId
-    ? query(dasar, where("employeeId", "==", employeeId), where("date", ">=", dari), where("date", "<=", sampai))
-    : query(dasar, where("date", ">=", dari), where("date", "<=", sampai));
+  const urut = (isi: AbsenKantor[]) =>
+    onData(
+      [...isi].sort((a, b) => b.date.localeCompare(a.date) || a.employeeName.localeCompare(b.employeeName))
+    );
 
-  return onSnapshot(
-    q,
-    (snap) => {
-      const isi = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<AbsenKantor, "id">) }));
-      isi.sort(
-        (a, b) => b.date.localeCompare(a.date) || a.employeeName.localeCompare(b.employeeName)
-      );
-      onData(isi);
-    },
-    onGagal
-  );
+  if (!employeeId) {
+    return onSnapshot(
+      query(dasar, where("date", ">=", dari), where("date", "<=", sampai)),
+      (snap) => urut(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<AbsenKantor, "id">) }))),
+      onGagal
+    );
+  }
+
+  // Butuh index employeeId + date; kalau belum ada, pakai cadangan.
+  return pantauDenganCadangan<AbsenKantor>({
+    utama: query(dasar, where("employeeId", "==", employeeId), where("date", ">=", dari), where("date", "<=", sampai)),
+    cadangan: query(dasar, where("employeeId", "==", employeeId)),
+    ubah: (id, data) => ({ id, ...(data as Omit<AbsenKantor, "id">) }),
+    saring: (a) => a.date >= dari && a.date <= sampai,
+    onData: urut,
+    onGagal,
+  });
 }
 
 export async function ambilAbsenHariIni(
@@ -120,11 +128,13 @@ export async function catatAbsenKantor(opsi: {
   photoUrl: string;
   kantorId: string;
   kantorNama: string;
+  /** Kosong dianggap KANTOR, supaya pemanggil lama tidak perlu diubah. */
+  jenisTitik?: "KANTOR" | "PROYEK";
   diLuarRadius: boolean;
   alasan: string;
 }) {
   if (opsi.diLuarRadius && !opsi.alasan.trim()) {
-    throw new Error("Absen dari luar jangkauan kantor wajib disertai alasan.");
+    throw new Error("Absen dari luar jangkauan wajib disertai alasan.");
   }
 
   const db = dbClient();
@@ -158,6 +168,7 @@ export async function catatAbsenKantor(opsi: {
     alasan: opsi.alasan.trim(),
     kantorId: opsi.kantorId,
     kantorNama: opsi.kantorNama,
+    jenisTitik: opsi.jenisTitik || "KANTOR",
   };
 
   // Jam tiap sesi: yang sedang dicatat memakai jam sekarang, yang lain
@@ -216,6 +227,7 @@ export async function catatAbsenKantor(opsi: {
     [`${opsi.jenis}.alasan`]: event.alasan,
     [`${opsi.jenis}.kantorId`]: event.kantorId,
     [`${opsi.jenis}.kantorNama`]: event.kantorNama,
+    [`${opsi.jenis}.jenisTitik`]: event.jenisTitik,
     workHours: hitung.workHours,
     terlambatMenit: hitung.terlambatMenit,
     pulangCepatMenit: hitung.pulangCepatMenit,
@@ -300,14 +312,14 @@ export function pantauAbsenBawahan(
   onData: (d: AbsenKantor[]) => void,
   onGagal: () => void
 ) {
-  return onSnapshot(
-    query(
-      collection(dbClient(), "officeAttendance"),
-      where("atasanId", "==", atasanId),
-      where("date", ">=", dari),
-      where("date", "<=", sampai)
-    ),
-    (snap) => onData(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<AbsenKantor, "id">) }))),
-    onGagal
-  );
+  const dasar = collection(dbClient(), "officeAttendance");
+  // Butuh index atasanId + date; kalau belum ada, pakai cadangan.
+  return pantauDenganCadangan<AbsenKantor>({
+    utama: query(dasar, where("atasanId", "==", atasanId), where("date", ">=", dari), where("date", "<=", sampai)),
+    cadangan: query(dasar, where("atasanId", "==", atasanId)),
+    ubah: (id, data) => ({ id, ...(data as Omit<AbsenKantor, "id">) }),
+    saring: (a) => a.date >= dari && a.date <= sampai,
+    onData,
+    onGagal,
+  });
 }

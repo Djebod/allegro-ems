@@ -6,7 +6,7 @@ Staf kantor absen sendiri lewat HP. Menggantikan mesin fingerprint yang sudah ti
 
 1. Ekstrak ZIP, salin ke folder proyek, pilih **Replace**
 2. `npm install`
-3. `npm run uji` — harus `26`, `19`, `9`, `23` lolos
+3. `npm run uji` — semua berkas uji harus lolos tanpa satu pun gagal
 4. `npm run build` sampai bersih
 5. **Publish `firestore.rules` yang baru** — ada dua koleksi baru
 6. `git config user.email` harus `syam.rakhmany@gmail.com`
@@ -51,6 +51,10 @@ Catatan dari masa mesin fingerprint tetap relevan: cap istirahat dulu jarang dii
 **Swafoto wajib.** Tanpa sidik jari, foto adalah satu-satunya yang membuktikan orangnya sendiri yang absen, bukan menitip HP ke teman. Kamera depan, bukan belakang seperti absensi lapangan.
 
 **Jarak diukur ke seluruh kantor aktif, dipakai yang terdekat.** Jadi orang Bandung yang sedang di kantor Jakarta tetap terhitung berada di kantor, bukan dianggap di luar jangkauan lalu harus menulis alasan.
+
+**Yang ditugaskan ke proyek absen di titik proyeknya (1 Oktober 2026).** Koordinat dan radius diambil dari Master Proyek, bukan dari kantor. Titik proyek ditambahkan ke daftar tempat yang sah bagi orang itu, jadi kalau sewaktu-waktu ia mampir ke kantor, absennya tetap terhitung di dalam jangkauan — tidak perlu menulis alasan.
+
+Penugasan dibaca dari kolom `currentProjectId` pada data karyawan, yaitu cerminan penugasan yang sedang berjalan. Karyawan tanpa penugasan proyek tetap seperti sebelumnya: kantor saja. Di rekap Admin, absen dari titik proyek ditandai awalan **Proyek** pada nama tempatnya.
 
 **Absen dari luar jangkauan boleh, tapi wajib alasan.** Ini yang menampung dinas luar, langsung ke lapangan, dan kerja dari rumah mendesak — tiga hal yang memang sudah ada di formulir izin mereka. Catatannya ditandai, dan Admin memutuskan diterima atau ditolak.
 

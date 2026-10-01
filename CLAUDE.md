@@ -90,6 +90,10 @@ Semua foto absensi (absen kantor, izin keluar, absensi lapangan) lewat `componen
 
 Semua `table.tabel-padat` otomatis berubah jadi kartu di layar < 640 px (CSS di `app/globals.css`). Label tiap baris diambil dari judul kolom oleh `components/LabelTabel.tsx` (dipasang di `Shell`), jadi tabel baru tidak perlu apa-apa. Kolom pertama jadi judul kartu; kolom "No" disembunyikan. Tabel matriks yang harus tetap tabel (rincian harian 31 tanggal) diberi kelas `tetap-tabel`. Baris filter/ringkasan: pakai `w-full sm:w-auto` dan `sm:ml-auto`, jangan `ml-auto` polos.
 
+### 5.1e Query gabungan butuh composite index
+
+Query "kolom = X DAN tanggal di antara ..." ditolak Firestore bila composite index-nya belum dibuat, dan tampilannya diam-diam kosong (30 Sep 2026: beranda bilang belum absen padahal sudah). Daftar index ada di `firestore.indexes.json` dan harus dibuat di Firebase Console → Firestore → Indexes. Query seperti ini wajib lewat `pantauDenganCadangan()` (`lib/pantau-cadangan.ts`) supaya tetap jalan sebelum index selesai dibuat.
+
 ### 5.2 Firestore Rules: dokumen yang belum ada
 
 Membaca dokumen yang belum ada membuat `resource` bernilai `null`. Menulis `resource.data.x == y` pada keadaan itu bukan menghasilkan "salah", melainkan **galat** — dan Firestore menerjemahkan galat jadi penolakan izin.
@@ -238,6 +242,9 @@ Mesin fingerprint **tidak dipakai lagi**. Staf kantor absen sendiri lewat HP:
 - GPS diukur ke **seluruh kantor aktif**, dipakai yang terdekat. Orang Bandung yang sedang di kantor Jakarta tetap terhitung di kantor
 - Di luar jangkauan **boleh**, wajib alasan, lalu ditandai untuk diputuskan Admin
 - Kantor adalah data (`offices`), bukan angka di kode — bisa ditambah kapan saja
+- **Yang ditugaskan ke proyek absen di titik proyeknya** (1 Okt 2026). Koordinat dan radius diambil dari dokumen `projects`, bukan kantor. Penugasannya dibaca dari `employees.currentProjectId` — cerminan penugasan berjalan, dan satu-satunya kolom yang bisa dibaca karyawan sendiri; `employeeAssignments` hanya boleh dibaca Admin/Finance/Mandor
+- Titik proyek **ditambahkan** ke daftar tempat yang sah, bukan menggantikan kantor. Orang proyek yang mampir ke kantor tetap terhitung di dalam jangkauan. Tanpa penugasan proyek, perilakunya persis seperti sebelumnya
+- Tiap sesi menyimpan `jenisTitik` (`KANTOR` / `PROYEK`) supaya Admin tahu absennya di mana. Kosong pada catatan lama, dibaca sebagai `KANTOR`
 
 ### Kasbon
 

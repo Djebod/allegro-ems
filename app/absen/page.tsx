@@ -10,14 +10,23 @@ import { Field, Pesan } from "@/components/Field";
 import { useAuth } from "@/lib/auth";
 import { dbClient } from "@/lib/firebase";
 import { ambilAbsenHariIni, catatAbsenKantor, semuaKantor } from "@/lib/data-kantor";
-import { cariKantorTerdekat, hitungKantor, jamEfektifKantor, ISTIRAHAT_BAKU_MENIT } from "@/lib/kantor";
+import {
+  cariTitikTerdekat,
+  hitungKantor,
+  jamEfektifKantor,
+  titikDariKantor,
+  titikDariProyek,
+  ISTIRAHAT_BAKU_MENIT,
+} from "@/lib/kantor";
+import type { TitikTerdekat } from "@/lib/kantor";
+import { ambilProyek } from "@/lib/data";
 import { hariSabtu } from "@/lib/jadwal";
 import type { JenisAbsenKantor } from "@/lib/data-kantor";
 import { jadwalUntuk } from "@/lib/jadwal";
 import { jarakMeter } from "@/lib/lokasi";
 import { cloudinarySiap, unggahFoto } from "@/lib/cloudinary";
 import { jamDari, tanggalHariIni } from "@/lib/absensi";
-import type { AbsenKantor, Employee, Kantor, TitikAbsen } from "@/types";
+import type { AbsenKantor, Employee, Kantor, Project, TitikAbsen } from "@/types";
 
 const FOLDER = "allegro/absen-kantor";
 
@@ -42,13 +51,15 @@ function Isi() {
 
   const [karyawan, setKaryawan] = useState<Employee | null>(null);
   const [kantor, setKantor] = useState<Kantor[]>([]);
+  /** Proyek penugasan orang ini. Titik absennya ikut dipakai, bukan hanya kantor. */
+  const [proyek, setProyek] = useState<Project | null>(null);
   const [absen, setAbsen] = useState<AbsenKantor | null>(null);
   const [memuat, setMemuat] = useState(true);
   const [salah, setSalah] = useState<string | null>(null);
   const [pesan, setPesan] = useState<string | null>(null);
 
   const [titik, setTitik] = useState<TitikAbsen | null>(null);
-  const [terdekat, setTerdekat] = useState<ReturnType<typeof cariKantorTerdekat> | null>(null);
+  const [terdekat, setTerdekat] = useState<TitikTerdekat | null>(null);
   const [mencari, setMencari] = useState(false);
   const [alasan, setAlasan] = useState("");
   const [antrean, setAntrean] = useState<JenisAbsenKantor | null>(null);
@@ -57,8 +68,13 @@ function Isi() {
   const muat = useCallback(async () => {
     if (!employeeId) return;
     const snap = await getDoc(doc(dbClient(), "employees", employeeId));
-    if (snap.exists()) setKaryawan({ id: snap.id, ...(snap.data() as Omit<Employee, "id">) });
+    const data = snap.exists() ? ({ id: snap.id, ...(snap.data() as Omit<Employee, "id">) } as Employee) : null;
+    if (data) setKaryawan(data);
     setKantor(await semuaKantor());
+    // Kalau orang ini sedang ditugaskan ke proyek, titik proyeknya ikut
+    // dipakai sebagai tempat absen yang sah. Kolom currentProjectId adalah
+    // cerminan penugasan yang sedang berjalan.
+    setProyek(data?.currentProjectId ? await ambilProyek(data.currentProjectId).catch(() => null) : null);
     setAbsen(await ambilAbsenHariIni(employeeId, tanggal));
   }, [employeeId, tanggal]);
 
@@ -68,7 +84,14 @@ function Isi() {
       .finally(() => setMemuat(false));
   }, [muat]);
 
-  async function periksaLokasi(): Promise<ReturnType<typeof cariKantorTerdekat> | null> {
+  /** Semua tempat yang sah untuk orang ini: kantor aktif + proyek penugasannya. */
+  function titikSaya() {
+    const daftar = kantor.filter((k) => k.status === "ACTIVE").map(titikDariKantor);
+    if (proyek && proyek.status === "ACTIVE") daftar.push(titikDariProyek(proyek));
+    return daftar;
+  }
+
+  async function periksaLokasi(): Promise<TitikTerdekat | null> {
     return new Promise((selesai) => {
       if (!navigator.geolocation) {
         setSalah("Perangkat ini tidak mendukung GPS.");
@@ -78,8 +101,8 @@ function Isi() {
       setMencari(true);
       navigator.geolocation.getCurrentPosition(
         (pos) => {
-          const hasil = cariKantorTerdekat(kantor, (k) =>
-            jarakMeter(pos.coords.latitude, pos.coords.longitude, k.latitude, k.longitude)
+          const hasil = cariTitikTerdekat(titikSaya(), (t) =>
+            jarakMeter(pos.coords.latitude, pos.coords.longitude, t.latitude, t.longitude)
           );
           setTitik({
             latitude: pos.coords.latitude,
@@ -115,17 +138,21 @@ function Isi() {
 
     const hasil = await periksaLokasi();
     if (!hasil) return;
-    if (!hasil.kantor) return setSalah("Belum ada kantor terdaftar. Hubungi Admin.");
-    if (!hasil.diDalamRadius && !alasan.trim()) {
+    if (!hasil.titik)
       return setSalah(
-        `Anda berada ${hasil.jarakMeter} meter dari ${hasil.kantor.nama}, di luar radius ${hasil.kantor.radiusMeter} meter. Isi alasannya dulu di kolom bawah.`
+        "Belum ada kantor maupun proyek dengan titik koordinat. Hubungi Admin."
+      );
+    if (!hasil.diDalamRadius && !alasan.trim()) {
+      const sebutan = hasil.titik.jenis === "PROYEK" ? "proyek" : "kantor";
+      return setSalah(
+        `Anda berada ${hasil.jarakMeter} meter dari ${sebutan} ${hasil.titik.nama}, di luar radius ${hasil.titik.radiusMeter} meter. Isi alasannya dulu di kolom bawah.`
       );
     }
     setAntrean(jenis);
   }
 
   async function simpanFoto(file: File) {
-    if (!antrean || !karyawan || !titik || !terdekat?.kantor) return;
+    if (!antrean || !karyawan || !titik || !terdekat?.titik) return;
     setMengirim(true);
     setSalah(null);
     try {
@@ -136,8 +163,9 @@ function Isi() {
         jenis: antrean,
         titik,
         photoUrl: foto.url,
-        kantorId: terdekat.kantor.id,
-        kantorNama: terdekat.kantor.nama,
+        kantorId: terdekat.titik.id,
+        kantorNama: terdekat.titik.nama,
+        jenisTitik: terdekat.titik.jenis,
         diLuarRadius: !terdekat.diDalamRadius,
         alasan,
       });
@@ -256,7 +284,7 @@ function Isi() {
         </div>
       )}
 
-      {terdekat?.kantor && (
+      {terdekat?.titik && (
         <div className="mt-4 kartu">
           <div className="flex flex-wrap items-center gap-2">
             <span
@@ -267,8 +295,9 @@ function Isi() {
               {terdekat.diDalamRadius ? "Di dalam jangkauan" : "Di luar jangkauan"}
             </span>
             <span className="text-sm text-muted">
-              {terdekat.jarakMeter} m dari {terdekat.kantor.nama} · batas{" "}
-              {terdekat.kantor.radiusMeter} m
+              {terdekat.jarakMeter} m dari{" "}
+              {terdekat.titik.jenis === "PROYEK" ? "proyek " : ""}
+              {terdekat.titik.nama} · batas {terdekat.titik.radiusMeter} m
             </span>
             {titik && (
               <span className="text-xs text-muted">ketelitian GPS ±{titik.accuracy} m</span>
@@ -280,7 +309,7 @@ function Isi() {
       {(!terdekat || !terdekat.diDalamRadius) && (
         <div className="mt-4 kartu">
           <Field
-            label="Alasan bila absen dari luar kantor"
+            label="Alasan bila absen dari luar jangkauan"
             bantuan="Dinas luar, langsung ke lapangan, atau kerja dari rumah. Wajib diisi bila di luar jangkauan, dan akan diperiksa Admin."
           >
             <textarea

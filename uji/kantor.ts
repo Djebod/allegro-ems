@@ -1,5 +1,14 @@
-import { cariKantorTerdekat, hitungKantor, jamDibayar, jamWIB, tambahMenit } from "@/lib/kantor";
-import type { Kantor } from "@/types";
+import {
+  cariKantorTerdekat,
+  cariTitikTerdekat,
+  hitungKantor,
+  jamDibayar,
+  jamWIB,
+  tambahMenit,
+  titikDariKantor,
+  titikDariProyek,
+} from "@/lib/kantor";
+import type { Kantor, Project } from "@/types";
 
 let lolos = 0, gagal = 0;
 function cek(nama: string, dapat: unknown, harap: unknown) {
@@ -95,6 +104,41 @@ i = hitungKantor({ masuk: "08:00", istirahat: "12:00", selesaiIstirahat: null, p
 cek("sedang istirahat: belum ada jam kerja", i.workHours, 0);
 cek("keputusan Admin: selesai 13.00", hitungKantor({ masuk: "08:00", istirahat: "12:00", selesaiIstirahat: tambahMenit("12:00", 60), pulang: "17:00", ...jadwal }).workHours, 8);
 cek("tambah menit melewati jam", tambahMenit("12:30", 45), "13:15");
+
+console.log("\n== Titik absen proyek (1 Okt 2026) ==");
+const proyek: Project = {
+  id: "BYD-SGR-01",
+  code: "BYD-SGR-01",
+  name: "BYD Soekarno Gatot",
+  address: "",
+  latitude: -6.95,
+  longitude: 107.65,
+  attendanceRadiusMeter: 200,
+  status: "ACTIVE",
+};
+
+const titikKantor = kantor.filter((k) => k.status === "ACTIVE").map(titikDariKantor);
+const titikSemua = [...titikKantor, titikDariProyek(proyek)];
+
+let u = cariTitikTerdekat(titikSemua, (t) => (t.id === "BYD-SGR-01" ? 80 : 9000));
+cek("di proyek penugasannya", u.titik?.id, "BYD-SGR-01");
+cek("titiknya dikenali sebagai proyek", u.titik?.jenis, "PROYEK");
+cek("80 m masih di dalam radius proyek 200 m", u.diDalamRadius, true);
+
+u = cariTitikTerdekat(titikSemua, (t) => (t.id === "BYD-SGR-01" ? 260 : 9000));
+cek("260 m sudah di luar radius proyek", u.diDalamRadius, false);
+cek("tetap menyebut titik terdekat", u.titik?.id, "BYD-SGR-01");
+
+u = cariTitikTerdekat(titikSemua, (t) => (t.id === "BDG" ? 50 : 9000));
+cek("orang proyek mampir ke kantor tetap sah", u.titik?.id, "BDG");
+cek("titiknya dikenali sebagai kantor", u.titik?.jenis, "KANTOR");
+
+u = cariTitikTerdekat(titikKantor, (t) => (t.id === "BDG" ? 50 : 9000));
+cek("tanpa penugasan proyek, kantor saja yang dipakai", u.titik?.jenis, "KANTOR");
+
+cek("radius proyek diambil dari data proyek", titikDariProyek(proyek).radiusMeter, 200);
+cek("nama proyek dipakai sebagai nama titik", titikDariProyek(proyek).nama, "BYD Soekarno Gatot");
+cek("tanpa titik mana pun", cariTitikTerdekat([], () => 10).titik, null);
 
 console.log(`\n==== ${lolos} lolos, ${gagal} gagal ====`);
 process.exit(gagal ? 1 : 0);

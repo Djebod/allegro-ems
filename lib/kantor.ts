@@ -2,7 +2,7 @@
 
 import { MAX_REGULAR_HOURS_PER_DAY } from "@/lib/constants";
 import { keMenit } from "@/lib/jadwal";
-import type { AbsenKantor, Kantor, StatusAbsenKantor } from "@/types";
+import type { AbsenKantor, Kantor, Project, StatusAbsenKantor } from "@/types";
 
 /**
  * ISTIRAHAT (diubah 28 September 2026 atas permintaan client)
@@ -90,41 +90,102 @@ export function jamDibayar(workHours: number): number {
   return Math.min(workHours, MAX_REGULAR_HOURS_PER_DAY);
 }
 
+export type JenisTitikAbsen = "KANTOR" | "PROYEK";
+
+/**
+ * Titik yang sah untuk absen. Bisa kantor, bisa proyek tempat orang itu
+ * sedang ditugaskan. Keduanya diperlakukan sama; yang membedakan hanya
+ * dari mana koordinat dan radiusnya diambil.
+ */
+export interface TitikKehadiran {
+  id: string;
+  nama: string;
+  jenis: JenisTitikAbsen;
+  latitude: number;
+  longitude: number;
+  radiusMeter: number;
+}
+
+export function titikDariKantor(k: Kantor): TitikKehadiran {
+  return {
+    id: k.id,
+    nama: k.nama,
+    jenis: "KANTOR",
+    latitude: k.latitude,
+    longitude: k.longitude,
+    radiusMeter: k.radiusMeter,
+  };
+}
+
+/** Koordinat proyek diisi Admin di Master Proyek, sama seperti kantor. */
+export function titikDariProyek(p: Project): TitikKehadiran {
+  return {
+    id: p.id,
+    nama: p.name,
+    jenis: "PROYEK",
+    latitude: p.latitude,
+    longitude: p.longitude,
+    radiusMeter: p.attendanceRadiusMeter,
+  };
+}
+
+export interface TitikTerdekat {
+  titik: TitikKehadiran | null;
+  jarakMeter: number;
+  diDalamRadius: boolean;
+}
+
+/**
+ * Mencari titik absen terdekat dari posisi sekarang.
+ *
+ * Diperiksa ke SELURUH titik yang sah baginya, bukan hanya satu.
+ * Orang Bandung yang sedang di kantor Jakarta tetap terhitung berada di
+ * kantor — bukan dianggap di luar jangkauan lalu harus menulis alasan.
+ * Dengan alasan yang sama, orang yang ditugaskan ke proyek boleh absen
+ * di titik proyeknya maupun di kantor.
+ */
+export function cariTitikTerdekat(
+  daftar: TitikKehadiran[],
+  jarakKe: (t: TitikKehadiran) => number
+): TitikTerdekat {
+  if (daftar.length === 0) return { titik: null, jarakMeter: 0, diDalamRadius: false };
+
+  let terpilih = daftar[0];
+  let terdekat = jarakKe(terpilih);
+
+  for (const t of daftar.slice(1)) {
+    const j = jarakKe(t);
+    if (j < terdekat) {
+      terdekat = j;
+      terpilih = t;
+    }
+  }
+
+  return {
+    titik: terpilih,
+    jarakMeter: terdekat,
+    diDalamRadius: terdekat <= terpilih.radiusMeter,
+  };
+}
+
 export interface KantorTerdekat {
   kantor: Kantor | null;
   jarakMeter: number;
   diDalamRadius: boolean;
 }
 
-/**
- * Mencari kantor terdekat dari posisi sekarang.
- *
- * Diperiksa ke SELURUH kantor aktif, bukan hanya kantor penempatannya.
- * Orang Bandung yang sedang di kantor Jakarta tetap terhitung berada di
- * kantor — bukan dianggap di luar jangkauan lalu harus menulis alasan.
- */
+/** Bentuk lama, khusus kantor saja. Dipertahankan supaya pemakai lama tidak putus. */
 export function cariKantorTerdekat(
   daftar: Kantor[],
   jarakKe: (k: Kantor) => number
 ): KantorTerdekat {
   const aktif = daftar.filter((k) => k.status === "ACTIVE");
-  if (aktif.length === 0) return { kantor: null, jarakMeter: 0, diDalamRadius: false };
-
-  let terpilih = aktif[0];
-  let terdekat = jarakKe(terpilih);
-
-  for (const k of aktif.slice(1)) {
-    const j = jarakKe(k);
-    if (j < terdekat) {
-      terdekat = j;
-      terpilih = k;
-    }
-  }
-
+  const peta = new Map(aktif.map((k) => [k.id, k]));
+  const hasil = cariTitikTerdekat(aktif.map(titikDariKantor), (t) => jarakKe(peta.get(t.id)!));
   return {
-    kantor: terpilih,
-    jarakMeter: terdekat,
-    diDalamRadius: terdekat <= terpilih.radiusMeter,
+    kantor: hasil.titik ? peta.get(hasil.titik.id)! : null,
+    jarakMeter: hasil.jarakMeter,
+    diDalamRadius: hasil.diDalamRadius,
   };
 }
 

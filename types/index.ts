@@ -544,9 +544,14 @@ export interface EventAbsenKantor {
   diLuarRadius: boolean;
   /** Wajib diisi bila di luar radius. */
   alasan: string;
-  /** Kantor terdekat yang dipakai mengukur jarak. */
+  /** Titik terdekat yang dipakai mengukur jarak: kantor atau proyek. */
   kantorId: string;
   kantorNama: string;
+  /**
+   * Jenis titik yang dipakai. Kosong pada catatan lama (sebelum 1 Okt 2026),
+   * yang semuanya titik kantor.
+   */
+  jenisTitik?: "KANTOR" | "PROYEK";
 }
 
 export type StatusAbsenKantor = "HADIR" | "SELESAI";

@@ -15,6 +15,7 @@ import {
   where,
 } from "firebase/firestore";
 import { dbClient } from "@/lib/firebase";
+import { pantauDenganCadangan } from "@/lib/pantau-cadangan";
 import type {
   Attendance,
   AttendanceCorrection,
@@ -1166,20 +1167,16 @@ export function pantauAbsensiSaya(
   onData: (data: Attendance[]) => void,
   onGagal: () => void
 ) {
-  return onSnapshot(
-    query(
-      collection(dbClient(), "attendance"),
-      where("employeeId", "==", employeeId),
-      where("date", ">=", dari),
-      where("date", "<=", sampai)
-    ),
-    (snap) => {
-      const isi = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<Attendance, "id">) }));
-      isi.sort((a, b) => b.date.localeCompare(a.date));
-      onData(isi);
-    },
-    onGagal
-  );
+  const dasar = collection(dbClient(), "attendance");
+  // Butuh index employeeId + date; kalau belum ada, pakai cadangan.
+  return pantauDenganCadangan<Attendance>({
+    utama: query(dasar, where("employeeId", "==", employeeId), where("date", ">=", dari), where("date", "<=", sampai)),
+    cadangan: query(dasar, where("employeeId", "==", employeeId)),
+    ubah: (id, data) => ({ id, ...(data as Omit<Attendance, "id">) }),
+    saring: (a) => a.date >= dari && a.date <= sampai,
+    onData: (isi) => onData([...isi].sort((a, b) => b.date.localeCompare(a.date))),
+    onGagal,
+  });
 }
 
 /**
