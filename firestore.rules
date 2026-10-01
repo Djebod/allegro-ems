@@ -402,16 +402,39 @@ service cloud.firestore {
         && d.remainingAmount >= 0
         && d.remainingAmount <= d.originalAmount
         && d.loanDate is string && d.loanDate.size() == 10
-        && d.status in ['OPEN', 'PARTIALLY_PAID', 'PAID', 'CANCELLED']
-        && d.tenorBulan is number && d.tenorBulan >= 1
+        && d.status in ['OPEN', 'PARTIALLY_PAID', 'PAID', 'CANCELLED'];
+    }
+
+    function rencanaCicilanSah(d) {
+      return d.tenorBulan is number && d.tenorBulan >= 1
         && d.cicilanPerBulan is number && d.cicilanPerBulan > 0;
+    }
+
+    // Bon yang dibuat sebelum kasbon bisa dicicil tidak punya tenorBulan
+    // dan cicilanPerBulan. Membandingkan kolom yang tidak ada menghasilkan
+    // galat, bukan "salah", sehingga bon lama tidak bisa dibayar maupun
+    // dibatalkan. Bon lama boleh diperbarui selama tetap tanpa rencana;
+    // rencana tidak bisa disusulkan lewat update.
+    function rencanaCicilanTetap() {
+      let lama = resource.data;
+      let baru = request.resource.data;
+      return (
+          !('tenorBulan' in lama) && !('tenorBulan' in baru)
+          && !('cicilanPerBulan' in lama) && !('cicilanPerBulan' in baru)
+        ) || (
+          'tenorBulan' in lama && 'cicilanPerBulan' in lama
+          && rencanaCicilanSah(baru)
+          && baru.tenorBulan == lama.tenorBulan
+          && baru.cicilanPerBulan == lama.cicilanPerBulan
+        );
     }
 
     match /employeeLoans/{bonId} {
       // Karyawan tidak punya akses; bon adalah urusan Admin dan Finance.
       // HR ikut membaca karena menyusun payroll bulanan (usulan potongan bon).
       allow read: if isAdmin() || isFinance() || isOwner() || isHR();
-      allow create: if (isAdmin() || isFinance()) && bonSah();
+      allow create: if (isAdmin() || isFinance()) && bonSah()
+        && rencanaCicilanSah(request.resource.data);
 
       // Nominal asli dan pemiliknya tidak boleh berubah. Yang boleh
       // berubah hanya sisa dan statusnya, karena itulah yang bergerak
@@ -424,8 +447,7 @@ service cloud.firestore {
         && request.resource.data.loanDate == resource.data.loanDate
         // Rencana cicilannya juga beku. Kalau perlu diubah, bonnya
         // dibatalkan lalu dibuat baru - supaya jejaknya jelas.
-        && request.resource.data.tenorBulan == resource.data.tenorBulan
-        && request.resource.data.cicilanPerBulan == resource.data.cicilanPerBulan;
+        && rencanaCicilanTetap();
 
       // Bon tidak dihapus. Yang salah dibatalkan, jejaknya tetap ada.
       allow delete: if false;

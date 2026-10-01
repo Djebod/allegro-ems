@@ -19,11 +19,14 @@ function Baris({
   jumlah,
   href,
   rincian,
+  tujuan,
 }: {
   label: string;
   jumlah: number;
   href: string;
   rincian?: string;
+  /** Alamat yang dibuka bila berbeda dari href; izin tetap diperiksa dari href. */
+  tujuan?: string;
 }) {
   const { profile } = useAuth();
   const bisa = bolehBuka(profile?.role, href);
@@ -43,7 +46,7 @@ function Baris({
     </div>
   );
   return bisa ? (
-    <Link href={href} className="block border-b border-line last:border-0 hover:bg-allegro-50">
+    <Link href={tujuan || href} className="block border-b border-line last:border-0 hover:bg-allegro-50">
       {isi}
     </Link>
   ) : (
@@ -99,6 +102,11 @@ export default function PerluTindakan({ hariIni }: { hariIni: string }) {
                 label="Absen di luar kantor menunggu keputusan"
                 jumlah={d.absenLuarKantor.length}
                 href="/absensi-kantor"
+                tujuan={
+                  d.absenLuarKantor.length
+                    ? `/absensi-kantor?bulan=${d.absenLuarKantor[0].date.slice(0, 7)}&buka=${encodeURIComponent(d.absenLuarKantor[0].id)}`
+                    : undefined
+                }
                 rincian={d.absenLuarKantor.length ? nama(d.absenLuarKantor) : undefined}
               />
             )}

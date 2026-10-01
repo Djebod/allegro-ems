@@ -44,6 +44,39 @@ function Isi() {
     );
   }, [bulan]);
 
+  // Datang dari kotak "Perlu tindakan": bulannya belum tentu bulan ini
+  // (absen 30 September diputuskan 1 Oktober), jadi bulan dan catatannya
+  // dibawa lewat alamat. Dibaca dari window, bukan useSearchParams, supaya
+  // halaman tidak perlu dibungkus Suspense saat build.
+  const [tujuan, setTujuan] = useState<string | null>(null);
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search);
+    const b = p.get("bulan");
+    if (b && /^\d{4}-\d{2}$/.test(b)) setBulan(b);
+    if (p.get("buka")) {
+      setTujuan(p.get("buka"));
+      setHanyaPerluPeriksa(true);
+    }
+  }, []);
+
+  const bukaRincian = (a: AbsenKantor) => {
+    setRincianId(a.id);
+    setKMasuk(a.koreksiMasuk || "");
+    setKPulang(a.koreksiPulang || "");
+    setKIstirahat(a.koreksiIstirahat || "");
+    setKSelesaiIstirahat(a.koreksiSelesaiIstirahat || "");
+    setKAlasan("");
+    setCatatanValidasi("");
+  };
+
+  useEffect(() => {
+    if (!tujuan) return;
+    const a = data.find((x) => x.id === tujuan);
+    if (!a) return;
+    bukaRincian(a);
+    setTujuan(null);
+  }, [data, tujuan]);
+
   const buka = useMemo(() => data.find((a) => a.id === rincian) || null, [data, rincian]);
 
   const perluPeriksa = (a: AbsenKantor) =>
@@ -215,15 +248,7 @@ function Isi() {
                     <td className="whitespace-nowrap text-right">
                       <button
                         className="btn-kuning"
-                        onClick={() => {
-                          setRincianId(a.id);
-                          setKMasuk(a.koreksiMasuk || "");
-                          setKPulang(a.koreksiPulang || "");
-                          setKIstirahat(a.koreksiIstirahat || "");
-                          setKSelesaiIstirahat(a.koreksiSelesaiIstirahat || "");
-                          setKAlasan("");
-                          setCatatanValidasi("");
-                        }}
+                        onClick={() => bukaRincian(a)}
                       >
                         Rincian
                       </button>
