@@ -47,10 +47,35 @@ export function tanggalHariIni(): string {
   return keTanggal(new Date());
 }
 
+/**
+ * Memecah waktu ISO menjadi jam dan menit WIB, dikunci ke Asia/Jakarta -
+ * bukan zona waktu perangkat. Dipakai jamDari() dan keKotakJam() di bawah.
+ *
+ * Sebelum ini, keduanya memakai getHours()/getMinutes() yang mengikuti
+ * zona waktu PERANGKAT. Di server atau HP yang zonanya bukan WIB, jam
+ * yang tampil di layar bergeser dari jam WIB asli - sama persis dengan
+ * jebakan yang sudah pernah menggigit di jamWIB() milik lib/kantor.ts.
+ */
+function pecahJamWIB(iso: string): { jam: string | null; menit: string } {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return { jam: null, menit: "00" };
+  const bagian = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Jakarta",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(d);
+  return {
+    jam: bagian.find((b) => b.type === "hour")?.value ?? "00",
+    menit: bagian.find((b) => b.type === "minute")?.value ?? "00",
+  };
+}
+
 export function jamDari(iso?: string | null): string {
   if (!iso) return "—";
-  const d = new Date(iso);
-  return `${String(d.getHours()).padStart(2, "0")}.${String(d.getMinutes()).padStart(2, "0")}`;
+  const { jam, menit } = pecahJamWIB(iso);
+  if (jam === null) return "—";
+  return `${jam}.${menit}`;
 }
 
 /**
@@ -194,11 +219,12 @@ export function gabungTanggalJam(tanggal: string, jam: string): string {
   return new Date(`${tanggal}T${jam}:00`).toISOString();
 }
 
-/** ISO -> "07:30" untuk mengisi kotak jam. */
+/** ISO -> "07:30" untuk mengisi kotak jam, dikunci ke WIB (lihat pecahJamWIB). */
 export function keKotakJam(iso?: string | null): string {
   if (!iso) return "";
-  const d = new Date(iso);
-  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  const { jam, menit } = pecahJamWIB(iso);
+  if (jam === null) return "";
+  return `${jam}:${menit}`;
 }
 
 const BULAN_PENDEK = [
