@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth";
 import { menuAktif, menuUntuk } from "@/lib/menu";
 import LabelTabel from "@/components/LabelTabel";
@@ -130,7 +130,7 @@ const TEMA_BLOK: Record<
 function MenuSamping({ onPilih }: { onPilih?: () => void }) {
   const { profile, keluar } = useAuth();
   const pathname = usePathname() || "";
-  const grup = menuUntuk(profile?.role);
+  const grup = useMemo(() => menuUntuk(profile?.role), [profile?.role]);
 
   // Status buka/tutup sub menu per blok fungsi
   const [bukaGrup, setBukaGrup] = useState<Record<string, boolean>>(() => {
