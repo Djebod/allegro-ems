@@ -141,11 +141,14 @@ function MenuSamping({ onPilih }: { onPilih?: () => void }) {
     return awal;
   });
 
-  // Pastikan grup yang berisi halaman aktif otomatis terbuka
+  // Pastikan grup yang berisi halaman aktif otomatis terbuka.
+  // Kembalikan `prev` apa adanya kalau sudah terbuka: objek baru tiap kali
+  // memicu render ulang, dan bila `grup` ikut berubah identitas efek ini
+  // berputar tanpa henti sampai halaman beku (terjadi 6 Okt 2026).
   useEffect(() => {
     grup.forEach((g) => {
       if (g.item.some((i) => menuAktif(pathname, i.href))) {
-        setBukaGrup((prev) => ({ ...prev, [g.judul]: true }));
+        setBukaGrup((prev) => (prev[g.judul] ? prev : { ...prev, [g.judul]: true }));
       }
     });
   }, [pathname, grup]);
