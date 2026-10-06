@@ -108,7 +108,7 @@ function Isi() {
           });
         },
         () => gagal(new Error("Lokasi tidak bisa diambil. Nyalakan GPS dan izinkan akses lokasi.")),
-        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
       );
     });
   }, [proyekSaya]);
@@ -327,21 +327,14 @@ function Isi() {
       </div>
 
       <KameraBelakang
-        terbuka={Boolean(antrean) && !mengirim}
+        terbuka={Boolean(antrean)}
         judul={
           antrean ? `${NAMA_SESI[antrean.jenis]} · ${antrean.karyawan.name}` : ""
         }
         onFoto={simpanFoto}
         onBatal={() => setAntrean(null)}
+        memproses={mengirim}
       />
-
-      {mengirim && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-allegro-800/50">
-          <p className="rounded-lg bg-white px-5 py-4 text-sm font-medium text-ink">
-            Menyimpan absen…
-          </p>
-        </div>
-      )}
     </>
   );
 }

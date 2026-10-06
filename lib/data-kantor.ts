@@ -185,7 +185,13 @@ export async function catatAbsenKantor(opsi: {
     jadwalPulang: jadwal.pulang,
   });
 
+  const eventLengkap = {
+    ...event,
+    recordedAt: serverTimestamp(),
+  };
+
   if (!snap.exists()) {
+    // Tulis satu kali langsung lengkap untuk dokumen baru, tidak perlu setDoc lalu updateDoc.
     await setDoc(ref, {
       employeeId: opsi.karyawan.id,
       employeeName: opsi.karyawan.name,
@@ -198,11 +204,14 @@ export async function catatAbsenKantor(opsi: {
       jadwalMasuk: jadwal.masuk,
       jadwalPulang: jadwal.pulang,
       atasanId: opsi.karyawan.atasanId || "",
-      workHours: 0,
-      terlambatMenit: 0,
-      pulangCepatMenit: 0,
-      status: "HADIR",
-      perluValidasi: false,
+      workHours: hitung.workHours,
+      terlambatMenit: hitung.terlambatMenit,
+      pulangCepatMenit: hitung.pulangCepatMenit,
+      istirahatMenit: hitung.istirahatMenit,
+      istirahatLebihMenit: hitung.istirahatLebihMenit,
+      istirahatTerbuka: hitung.istirahatTerbuka,
+      status: hitung.status,
+      perluValidasi: opsi.diLuarRadius,
       hasilValidasi: null,
       catatanValidasi: "",
       koreksiMasuk: null,
@@ -213,31 +222,32 @@ export async function catatAbsenKantor(opsi: {
       isOverridden: false,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
+      [opsi.jenis]: eventLengkap,
+    });
+  } else {
+    // Jam server ikut disimpan di samping jam perangkat, supaya selisihnya
+    // terlihat kalau ada jam HP yang disetel jauh.
+    await updateDoc(ref, {
+      [`${opsi.jenis}.waktu`]: event.waktu,
+      [`${opsi.jenis}.recordedAt`]: serverTimestamp(),
+      [`${opsi.jenis}.location`]: event.location,
+      [`${opsi.jenis}.photoUrl`]: event.photoUrl,
+      [`${opsi.jenis}.diLuarRadius`]: event.diLuarRadius,
+      [`${opsi.jenis}.alasan`]: event.alasan,
+      [`${opsi.jenis}.kantorId`]: event.kantorId,
+      [`${opsi.jenis}.kantorNama`]: event.kantorNama,
+      [`${opsi.jenis}.jenisTitik`]: event.jenisTitik,
+      workHours: hitung.workHours,
+      terlambatMenit: hitung.terlambatMenit,
+      pulangCepatMenit: hitung.pulangCepatMenit,
+      istirahatMenit: hitung.istirahatMenit,
+      istirahatLebihMenit: hitung.istirahatLebihMenit,
+      istirahatTerbuka: hitung.istirahatTerbuka,
+      status: hitung.status,
+      perluValidasi: (kini?.perluValidasi ?? false) || opsi.diLuarRadius,
+      updatedAt: serverTimestamp(),
     });
   }
-
-  // Jam server ikut disimpan di samping jam perangkat, supaya selisihnya
-  // terlihat kalau ada jam HP yang disetel jauh.
-  await updateDoc(ref, {
-    [`${opsi.jenis}.waktu`]: event.waktu,
-    [`${opsi.jenis}.recordedAt`]: serverTimestamp(),
-    [`${opsi.jenis}.location`]: event.location,
-    [`${opsi.jenis}.photoUrl`]: event.photoUrl,
-    [`${opsi.jenis}.diLuarRadius`]: event.diLuarRadius,
-    [`${opsi.jenis}.alasan`]: event.alasan,
-    [`${opsi.jenis}.kantorId`]: event.kantorId,
-    [`${opsi.jenis}.kantorNama`]: event.kantorNama,
-    [`${opsi.jenis}.jenisTitik`]: event.jenisTitik,
-    workHours: hitung.workHours,
-    terlambatMenit: hitung.terlambatMenit,
-    pulangCepatMenit: hitung.pulangCepatMenit,
-    istirahatMenit: hitung.istirahatMenit,
-    istirahatLebihMenit: hitung.istirahatLebihMenit,
-    istirahatTerbuka: hitung.istirahatTerbuka,
-    status: hitung.status,
-    perluValidasi: (kini?.perluValidasi ?? false) || opsi.diLuarRadius,
-    updatedAt: serverTimestamp(),
-  });
 }
 
 export async function putuskanAbsenLuar(opsi: {

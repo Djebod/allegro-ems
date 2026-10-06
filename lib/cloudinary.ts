@@ -23,7 +23,20 @@ export async function kecilkanFoto(file: File): Promise<Blob> {
     img.src = URL.createObjectURL(file);
   });
 
-  const maksSisi = 1280;
+  const maksSisi = 960;
+
+  // Kalau berkas sudah di bawah batas ukuran dan dimensinya sudah pas
+  // (misal jepretan KameraBelakang yang sudah diatur ke 800 px),
+  // langsung pakai berkas aslinya — hindari kompresi ganda yang membuang waktu.
+  if (
+    file.size <= MAX_PHOTO_SIZE_BYTE &&
+    gambar.width <= maksSisi &&
+    gambar.height <= maksSisi
+  ) {
+    URL.revokeObjectURL(gambar.src);
+    return file;
+  }
+
   const skala = Math.min(1, maksSisi / Math.max(gambar.width, gambar.height));
   const kanvas = document.createElement("canvas");
   kanvas.width = Math.round(gambar.width * skala);
@@ -34,7 +47,7 @@ export async function kecilkanFoto(file: File): Promise<Blob> {
   ctx.drawImage(gambar, 0, 0, kanvas.width, kanvas.height);
   URL.revokeObjectURL(gambar.src);
 
-  let mutu = 0.8;
+  let mutu = 0.75;
   let hasil = await keBlob(kanvas, mutu);
   while (hasil.size > MAX_PHOTO_SIZE_BYTE && mutu > 0.4) {
     mutu -= 0.1;

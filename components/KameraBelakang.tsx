@@ -18,6 +18,7 @@ export default function KameraBelakang({
   arah = "belakang",
   onFoto,
   onBatal,
+  memproses = false,
 }: {
   terbuka: boolean;
   judul: string;
@@ -25,6 +26,8 @@ export default function KameraBelakang({
   arah?: "depan" | "belakang";
   onFoto: (file: File) => void;
   onBatal: () => void;
+  /** Sedang mengunggah atau menyimpan ke server. */
+  memproses?: boolean;
 }) {
   const video = useRef<HTMLVideoElement>(null);
   const aliran = useRef<MediaStream | null>(null);
@@ -33,6 +36,11 @@ export default function KameraBelakang({
   const [gagal, setGagal] = useState<string | null>(null);
   const [cobaLagi, setCobaLagi] = useState(0);
   const [seluler, setSeluler] = useState(false);
+  const [sedangAmbil, setSedangAmbil] = useState(false);
+
+  useEffect(() => {
+    if (!terbuka) setSedangAmbil(false);
+  }, [terbuka]);
 
   useEffect(() => {
     setSeluler(perangkatSeluler(navigator.userAgent, navigator.maxTouchPoints || 0));
@@ -78,28 +86,40 @@ export default function KameraBelakang({
 
   function ambil() {
     const v = video.current;
-    if (!v) return;
+    if (!v || sedangAmbil || memproses) return;
+    setSedangAmbil(true);
+
+    // Langsung kecilkan ke ukuran optimal (maksimal 800 px) saat mengambil dari video
+    // supaya ukuran berkas langsung kecil (~50 KB) dan proses kirim instan di laptop maupun HP.
+    const maksSisi = 800;
+    const skala = Math.min(1, maksSisi / Math.max(v.videoWidth || 1, v.videoHeight || 1));
     const kanvas = document.createElement("canvas");
-    kanvas.width = v.videoWidth;
-    kanvas.height = v.videoHeight;
-    kanvas.getContext("2d")?.drawImage(v, 0, 0);
+    kanvas.width = Math.round((v.videoWidth || 640) * skala);
+    kanvas.height = Math.round((v.videoHeight || 480) * skala);
+    kanvas.getContext("2d")?.drawImage(v, 0, 0, kanvas.width, kanvas.height);
+
     kanvas.toBlob(
       (b) => {
-        if (!b) return;
+        if (!b) {
+          setSedangAmbil(false);
+          return;
+        }
         onFoto(new File([b], "absen.jpg", { type: "image/jpeg" }));
       },
       "image/jpeg",
-      0.9
+      0.8
     );
   }
 
   if (!terbuka) return null;
 
+  const sibuk = sedangAmbil || memproses;
+
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-allegro-800">
       <div className="flex items-center justify-between px-4 py-3">
         <p className="font-semibold text-white">{judul}</p>
-        <button className="btn-ringan" onClick={onBatal}>
+        <button className="btn-ringan" onClick={onBatal} disabled={sibuk}>
           Batal
         </button>
       </div>
@@ -116,17 +136,25 @@ export default function KameraBelakang({
             {gagal}
           </p>
         )}
+        {sibuk && (
+          <div className="absolute inset-0 z-10 grid place-items-center bg-black/60 text-white">
+            <div className="flex flex-col items-center gap-2">
+              <span className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-white border-t-transparent" />
+              <p className="text-sm font-medium">Menyimpan absen…</p>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="space-y-3 px-4 pb-8 pt-4">
         {siap && (
-          <button className="btn-lapangan" onClick={ambil}>
-            Ambil foto
+          <button className="btn-lapangan" onClick={ambil} disabled={sibuk}>
+            {sibuk ? "Sedang menyimpan…" : "Ambil foto"}
           </button>
         )}
 
         {gagal && (
-          <button className="btn-ringan w-full" onClick={() => setCobaLagi((n) => n + 1)}>
+          <button className="btn-ringan w-full" onClick={() => setCobaLagi((n) => n + 1)} disabled={sibuk}>
             Coba nyalakan kamera lagi
           </button>
         )}
@@ -148,11 +176,12 @@ export default function KameraBelakang({
                   setGagal("Foto harus diambil langsung dengan kamera saat ini juga, bukan dipilih dari galeri.");
                   return;
                 }
+                setSedangAmbil(true);
                 onFoto(f);
               }}
             />
-            <button className="btn-lapangan" onClick={() => cadangan.current?.click()}>
-              Pakai kamera bawaan HP
+            <button className="btn-lapangan" onClick={() => cadangan.current?.click()} disabled={sibuk}>
+              {sibuk ? "Sedang menyimpan…" : "Pakai kamera bawaan HP"}
             </button>
           </>
         )}

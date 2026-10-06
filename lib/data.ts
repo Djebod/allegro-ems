@@ -414,24 +414,6 @@ export async function catatSesi(opsi: {
   const cek = periksaSesi(sekarang, opsi.jenis);
   if (!cek.boleh) throw new Error(cek.alasan || "Sesi ini tidak bisa dicatat.");
 
-  if (!snap.exists()) {
-    await setDoc(ref, {
-      employeeId: opsi.karyawan.id,
-      employeeName: opsi.karyawan.name,
-      projectId: opsi.projectId,
-      sectionId: opsi.sectionId,
-      mandorId: opsi.mandorId,
-      date: opsi.tanggal,
-      workHours: 0,
-      overtimeHours: 0,
-      status: "BELUM",
-      isOverridden: false,
-      terakhir: null,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    });
-  }
-
   const event: EventAbsen = {
     waktu: new Date().toISOString(),
     recordedBy: opsi.oleh,
@@ -441,20 +423,43 @@ export async function catatSesi(opsi: {
 
   const hitung = hitungJam({ ...sekarang, [opsi.jenis]: event });
 
-  // Ditulis dengan jalur bertitik supaya jam server bisa dipakai di
-  // dalam event, bukan jam HP yang bisa saja disetel mundur.
-  await updateDoc(ref, {
-    [`${opsi.jenis}.waktu`]: event.waktu,
-    [`${opsi.jenis}.recordedAt`]: serverTimestamp(),
-    [`${opsi.jenis}.recordedBy`]: event.recordedBy,
-    [`${opsi.jenis}.location`]: event.location,
-    [`${opsi.jenis}.photoUrl`]: event.photoUrl,
-    workHours: hitung.workHours,
-    overtimeHours: hitung.overtimeHours,
-    status: hitung.status,
-    terakhir: { jenis: opsi.jenis, jarakMeter: opsi.titik.distanceFromProjectMeter },
-    updatedAt: serverTimestamp(),
-  });
+  if (!snap.exists()) {
+    // Tulis satu kali langsung lengkap untuk dokumen baru
+    await setDoc(ref, {
+      employeeId: opsi.karyawan.id,
+      employeeName: opsi.karyawan.name,
+      projectId: opsi.projectId,
+      sectionId: opsi.sectionId,
+      mandorId: opsi.mandorId,
+      date: opsi.tanggal,
+      workHours: hitung.workHours,
+      overtimeHours: hitung.overtimeHours,
+      status: hitung.status,
+      isOverridden: false,
+      terakhir: { jenis: opsi.jenis, jarakMeter: opsi.titik.distanceFromProjectMeter },
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      [opsi.jenis]: {
+        ...event,
+        recordedAt: serverTimestamp(),
+      },
+    });
+  } else {
+    // Ditulis dengan jalur bertitik supaya jam server bisa dipakai di
+    // dalam event, bukan jam HP yang bisa saja disetel mundur.
+    await updateDoc(ref, {
+      [`${opsi.jenis}.waktu`]: event.waktu,
+      [`${opsi.jenis}.recordedAt`]: serverTimestamp(),
+      [`${opsi.jenis}.recordedBy`]: event.recordedBy,
+      [`${opsi.jenis}.location`]: event.location,
+      [`${opsi.jenis}.photoUrl`]: event.photoUrl,
+      workHours: hitung.workHours,
+      overtimeHours: hitung.overtimeHours,
+      status: hitung.status,
+      terakhir: { jenis: opsi.jenis, jarakMeter: opsi.titik.distanceFromProjectMeter },
+      updatedAt: serverTimestamp(),
+    });
+  }
 
   return NAMA_SESI[opsi.jenis];
 }

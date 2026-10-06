@@ -100,7 +100,7 @@ function Isi() {
             setSalah("Lokasi tidak bisa diambil. Nyalakan GPS dan izinkan akses lokasi.");
             selesai(null);
           },
-          { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+          { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
         );
       }),
     [kantor]
@@ -277,17 +277,13 @@ function Isi() {
       )}
 
       <KameraBelakang
-        terbuka={Boolean(antrean) && !menyimpan}
+        terbuka={Boolean(antrean)}
         arah="depan"
         judul={antrean?.jenis === "kembali" ? "Swafoto kembali ke kantor" : "Swafoto keluar kantor"}
         onFoto={simpanFoto}
         onBatal={() => setAntrean(null)}
+        memproses={menyimpan}
       />
-      {menyimpan && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-allegro-800/50">
-          <p className="rounded-lg bg-white px-5 py-4 text-sm font-medium text-ink">Menyimpan…</p>
-        </div>
-      )}
     </>
   );
 }

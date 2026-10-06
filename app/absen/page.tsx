@@ -119,7 +119,7 @@ function Isi() {
           setMencari(false);
           selesai(null);
         },
-        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
       );
     });
   }
@@ -155,12 +155,13 @@ function Isi() {
     if (!antrean || !karyawan || !titik || !terdekat?.titik) return;
     setMengirim(true);
     setSalah(null);
+    const jenisTercatat = antrean;
     try {
       const foto = await unggahFoto(file, `${FOLDER}/${tanggal}`);
       await catatAbsenKantor({
         karyawan,
         tanggal,
-        jenis: antrean,
+        jenis: jenisTercatat,
         titik,
         photoUrl: foto.url,
         kantorId: terdekat.titik.id,
@@ -169,10 +170,13 @@ function Isi() {
         diLuarRadius: !terdekat.diDalamRadius,
         alasan,
       });
-      await muat();
-      setAlasan("");
-      setPesan(PESAN_BERHASIL[antrean]);
+      // Tutup kamera langsung setelah simpan berhasil
       setAntrean(null);
+      setAlasan("");
+      setPesan(PESAN_BERHASIL[jenisTercatat]);
+      // Cukup perbarui data absen hari ini, tidak perlu membaca ulang seluruh kantor dan proyek
+      const absenBaru = await ambilAbsenHariIni(employeeId, tanggal);
+      setAbsen(absenBaru);
     } catch (e) {
       setSalah(e instanceof Error ? e.message : "Absen gagal disimpan.");
       setAntrean(null);
@@ -365,20 +369,13 @@ function Isi() {
       </p>
 
       <KameraBelakang
-        terbuka={Boolean(antrean) && !mengirim}
+        terbuka={Boolean(antrean)}
         arah="depan"
         judul={antrean ? `Swafoto ${NAMA_SESI[antrean].toLowerCase()}` : ""}
         onFoto={simpanFoto}
         onBatal={() => setAntrean(null)}
+        memproses={mengirim}
       />
-
-      {mengirim && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-allegro-800/50">
-          <p className="rounded-lg bg-white px-5 py-4 text-sm font-medium text-ink">
-            Menyimpan absen…
-          </p>
-        </div>
-      )}
     </>
   );
 }
