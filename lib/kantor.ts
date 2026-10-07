@@ -129,6 +129,28 @@ export function titikDariProyek(p: Project): TitikKehadiran {
   };
 }
 
+/**
+ * Semua tempat yang sah untuk absen kantor seseorang: kantor aktif, proyek
+ * penugasan utamanya, dan proyek tambahan yang dicentang Admin
+ * (`lokasiAbsenProyekIds`). Satu orang bisa mengawasi beberapa proyek,
+ * jadi absen masuk di proyek A dan pulang di proyek B sama-sama diterima.
+ * Proyek yang bukan ACTIVE dilewati; proyek yang sama tidak dimuat dua kali.
+ */
+export function titikAbsenKaryawan(
+  kantor: Kantor[],
+  proyekUtama: Project | null,
+  proyekTambahan: Project[]
+): TitikKehadiran[] {
+  const daftar = kantor.filter((k) => k.status === "ACTIVE").map(titikDariKantor);
+  const sudah = new Set<string>();
+  for (const p of [proyekUtama, ...proyekTambahan]) {
+    if (!p || p.status !== "ACTIVE" || sudah.has(p.id)) continue;
+    sudah.add(p.id);
+    daftar.push(titikDariProyek(p));
+  }
+  return daftar;
+}
+
 export interface TitikTerdekat {
   titik: TitikKehadiran | null;
   jarakMeter: number;

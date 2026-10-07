@@ -14,8 +14,7 @@ import {
   cariTitikTerdekat,
   hitungKantor,
   jamEfektifKantor,
-  titikDariKantor,
-  titikDariProyek,
+  titikAbsenKaryawan,
   ISTIRAHAT_BAKU_MENIT,
 } from "@/lib/kantor";
 import type { TitikTerdekat } from "@/lib/kantor";
@@ -51,8 +50,10 @@ function Isi() {
 
   const [karyawan, setKaryawan] = useState<Employee | null>(null);
   const [kantor, setKantor] = useState<Kantor[]>([]);
-  /** Proyek penugasan orang ini. Titik absennya ikut dipakai, bukan hanya kantor. */
+  /** Proyek penugasan utama orang ini. Titik absennya ikut dipakai, bukan hanya kantor. */
   const [proyek, setProyek] = useState<Project | null>(null);
+  /** Proyek tambahan yang dicentang Admin. Masuk di proyek A, pulang di proyek B sama-sama sah. */
+  const [proyekTambahan, setProyekTambahan] = useState<Project[]>([]);
   const [absen, setAbsen] = useState<AbsenKantor | null>(null);
   const [memuat, setMemuat] = useState(true);
   const [salah, setSalah] = useState<string | null>(null);
@@ -73,9 +74,18 @@ function Isi() {
     setKantor(await semuaKantor());
     // Kalau orang ini sedang ditugaskan ke proyek, titik proyeknya ikut
     // dipakai sebagai tempat absen yang sah. Kolom currentProjectId adalah
-    // cerminan penugasan yang sedang berjalan.
-    setProyek(data?.currentProjectId ? await ambilProyek(data.currentProjectId).catch(() => null) : null);
-    setAbsen(await ambilAbsenHariIni(employeeId, tanggal));
+    // cerminan penugasan yang sedang berjalan; lokasiAbsenProyekIds adalah
+    // proyek tambahan yang dicentang Admin. Dibaca serentak supaya tidak
+    // menunggu satu per satu.
+    const idTambahan = (data?.lokasiAbsenProyekIds || []).filter((id) => id !== data?.currentProjectId);
+    const [utama, tambahan, absenHariIni] = await Promise.all([
+      data?.currentProjectId ? ambilProyek(data.currentProjectId).catch(() => null) : Promise.resolve(null),
+      Promise.all(idTambahan.map((id) => ambilProyek(id).catch(() => null))),
+      ambilAbsenHariIni(employeeId, tanggal),
+    ]);
+    setProyek(utama);
+    setProyekTambahan(tambahan.filter((p): p is Project => p !== null));
+    setAbsen(absenHariIni);
   }, [employeeId, tanggal]);
 
   useEffect(() => {
@@ -84,11 +94,9 @@ function Isi() {
       .finally(() => setMemuat(false));
   }, [muat]);
 
-  /** Semua tempat yang sah untuk orang ini: kantor aktif + proyek penugasannya. */
+  /** Semua tempat yang sah untuk orang ini: kantor aktif + proyek penugasan + proyek tambahan. */
   function titikSaya() {
-    const daftar = kantor.filter((k) => k.status === "ACTIVE").map(titikDariKantor);
-    if (proyek && proyek.status === "ACTIVE") daftar.push(titikDariProyek(proyek));
-    return daftar;
+    return titikAbsenKaryawan(kantor, proyek, proyekTambahan);
   }
 
   async function periksaLokasi(): Promise<TitikTerdekat | null> {
@@ -235,6 +243,15 @@ function Isi() {
           Jadwal hari ini {jadwal.masuk}–{jadwal.pulang}
           {karyawan.divisi ? ` · ${karyawan.divisi}` : ""}
         </p>
+        {(proyek || proyekTambahan.length > 0) && (
+          <p className="mt-1 text-xs text-muted">
+            Boleh absen di kantor dan proyek{" "}
+            {[proyek, ...proyekTambahan]
+              .filter((p): p is Project => !!p && p.status === "ACTIVE")
+              .map((p) => p.name)
+              .join(", ")}
+          </p>
+        )}
 
         <div className="mt-4 grid grid-cols-2 gap-3 border-t border-line pt-4 sm:grid-cols-5">
           <div>

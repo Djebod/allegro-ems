@@ -17,3 +17,9 @@ build
 Thumbs.db
 .vscode
 *.log
+
+# dokumen non-kode dan cache build, tidak ikut ke GitHub
+Claude outputs/
+dokumen/
+Penawaran_Allegro_EMS_Syam.docx
+tsconfig.tsbuildinfo

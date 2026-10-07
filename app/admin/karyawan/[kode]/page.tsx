@@ -82,9 +82,15 @@ function Isi({ kode }: { kode: string }) {
   const [pMulai, setPMulai] = useState(hariIni());
   const [pAlasan, setPAlasan] = useState("");
 
+  /** Proyek tambahan tempat absen kantornya diterima, di luar penugasan utama. */
+  const [lokasiAbsen, setLokasiAbsen] = useState<string[]>([]);
+  const [menyimpanLokasi, setMenyimpanLokasi] = useState(false);
+
   async function muatKaryawan() {
     const snap = await getDoc(doc(dbClient(), "employees", kode));
-    setKaryawan(snap.exists() ? { id: snap.id, ...(snap.data() as Omit<Employee, "id">) } : null);
+    const data = snap.exists() ? { id: snap.id, ...(snap.data() as Omit<Employee, "id">) } : null;
+    setKaryawan(data);
+    setLokasiAbsen(data?.lokasiAbsenProyekIds || []);
   }
 
   useEffect(() => {
@@ -170,6 +176,24 @@ function Isi({ kode }: { kode: string }) {
       setSalah(e instanceof Error ? e.message : "Penugasan gagal disimpan.");
     } finally {
       setMenyimpan(false);
+    }
+  }
+
+  async function simpanLokasiAbsen() {
+    setSalah(null);
+    setMenyimpanLokasi(true);
+    try {
+      await ubahKaryawan(kode, { lokasiAbsenProyekIds: lokasiAbsen });
+      await muatKaryawan();
+      setPesan(
+        lokasiAbsen.length
+          ? "Lokasi absen tambahan tersimpan. Absen kantornya diterima di kantor, proyek penugasan, dan proyek yang dicentang."
+          : "Lokasi absen tambahan dikosongkan. Absen kantornya kembali hanya di kantor dan proyek penugasan."
+      );
+    } catch (e) {
+      setSalah(e instanceof Error ? e.message : "Lokasi absen gagal disimpan.");
+    } finally {
+      setMenyimpanLokasi(false);
     }
   }
 
@@ -415,6 +439,52 @@ function Isi({ kode }: { kode: string }) {
             </ul>
           </details>
         )}
+
+        {/* Lokasi absen tambahan: penugasan utama tetap satu (dipakai payroll
+            dan tim mandor), tetapi absen kantor boleh diterima di beberapa
+            proyek sekaligus. Masuk di proyek A, pulang di proyek B sah. */}
+        <div className="kartu">
+          <p className="text-sm font-medium text-ink">Lokasi absen tambahan</p>
+          <p className="mt-1 text-xs text-muted">
+            Untuk orang yang mengawasi beberapa proyek. Absen kantornya diterima di kantor, proyek penugasan
+            di atas, dan proyek yang dicentang di sini. Tiap sesi boleh di tempat berbeda, misalnya masuk di
+            proyek A dan pulang di proyek B.
+          </p>
+          {proyek.filter((p) => p.status === "ACTIVE" && p.id !== tugasBerlaku?.projectId).length === 0 ? (
+            <p className="mt-3 text-sm text-muted">Belum ada proyek aktif lain yang bisa dipilih.</p>
+          ) : (
+            <div className="mt-3 space-y-2">
+              {proyek
+                .filter((p) => p.status === "ACTIVE" && p.id !== tugasBerlaku?.projectId)
+                .map((p) => (
+                  <label key={p.id} className="flex items-start gap-2 rounded-lg bg-surface p-3 text-sm text-ink">
+                    <input
+                      type="checkbox"
+                      className="mt-1"
+                      checked={lokasiAbsen.includes(p.id)}
+                      onChange={(e) =>
+                        setLokasiAbsen((lama) =>
+                          e.target.checked ? [...lama, p.id] : lama.filter((id) => id !== p.id)
+                        )
+                      }
+                    />
+                    <span>
+                      <b>{p.name}</b>
+                      <span className="block text-xs text-muted">
+                        {p.code} · radius {p.attendanceRadiusMeter} m
+                      </span>
+                    </span>
+                  </label>
+                ))}
+            </div>
+          )}
+          {JSON.stringify([...lokasiAbsen].sort()) !==
+            JSON.stringify([...(karyawan.lokasiAbsenProyekIds || [])].sort()) && (
+            <button className="btn-utama mt-3 w-full sm:w-auto" onClick={simpanLokasiAbsen} disabled={menyimpanLokasi}>
+              {menyimpanLokasi ? "Menyimpan…" : "Simpan lokasi absen"}
+            </button>
+          )}
+        </div>
       </div>
 
 

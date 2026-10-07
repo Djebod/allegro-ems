@@ -244,6 +244,7 @@ Mesin fingerprint **tidak dipakai lagi**. Staf kantor absen sendiri lewat HP:
 - Kantor adalah data (`offices`), bukan angka di kode — bisa ditambah kapan saja
 - **Yang ditugaskan ke proyek absen di titik proyeknya** (1 Okt 2026). Koordinat dan radius diambil dari dokumen `projects`, bukan kantor. Penugasannya dibaca dari `employees.currentProjectId` — cerminan penugasan berjalan, dan satu-satunya kolom yang bisa dibaca karyawan sendiri; `employeeAssignments` hanya boleh dibaca Admin/Finance/Mandor
 - Titik proyek **ditambahkan** ke daftar tempat yang sah, bukan menggantikan kantor. Orang proyek yang mampir ke kantor tetap terhitung di dalam jangkauan. Tanpa penugasan proyek, perilakunya persis seperti sebelumnya
+- **Lokasi absen bisa lebih dari satu proyek** (7 Okt 2026). Penugasan utama tetap satu (dipakai payroll dan tim mandor); proyek tambahan dicentang Admin di Detail Karyawan → Penugasan → "Lokasi absen tambahan", tersimpan di `employees.lokasiAbsenProyekIds`. Daftar titik sah dibentuk `titikAbsenKaryawan()` di `lib/kantor.ts`: kantor aktif + proyek penugasan + proyek tambahan, proyek non-ACTIVE dilewati. Tiap sesi mencari titik terdekat sendiri, jadi masuk di proyek A dan pulang di proyek B sah. Karyawan tidak bisa mengubah kolom ini sendiri (tidak ada di daftar kolom yang boleh diubah di rules)
 - Tiap sesi menyimpan `jenisTitik` (`KANTOR` / `PROYEK`) supaya Admin tahu absennya di mana. Kosong pada catatan lama, dibaca sebagai `KANTOR`
 
 ### Kasbon

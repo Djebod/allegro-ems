@@ -142,6 +142,13 @@ export interface Employee {
   currentProjectId?: string | null;
   currentSectionId?: string | null;
   currentMandorId?: string | null;
+  /**
+   * Proyek tambahan tempat absen kantornya diterima, di luar proyek
+   * penugasan utama. Untuk orang yang mengawasi beberapa proyek sekaligus:
+   * absen masuk di proyek A dan pulang di proyek B sama-sama sah.
+   * Penugasan utama tetap satu karena dipakai payroll dan tim mandor.
+   */
+  lokasiAbsenProyekIds?: string[];
   createdAt?: unknown;
   updatedAt?: unknown;
 }

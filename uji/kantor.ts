@@ -5,6 +5,7 @@ import {
   jamDibayar,
   jamWIB,
   tambahMenit,
+  titikAbsenKaryawan,
   titikDariKantor,
   titikDariProyek,
 } from "@/lib/kantor";
@@ -139,6 +140,32 @@ cek("tanpa penugasan proyek, kantor saja yang dipakai", u.titik?.jenis, "KANTOR"
 cek("radius proyek diambil dari data proyek", titikDariProyek(proyek).radiusMeter, 200);
 cek("nama proyek dipakai sebagai nama titik", titikDariProyek(proyek).nama, "BYD Soekarno Gatot");
 cek("tanpa titik mana pun", cariTitikTerdekat([], () => 10).titik, null);
+
+console.log("\n== Penugasan lebih dari satu proyek (7 Okt 2026) ==");
+const proyekB: Project = { ...proyek, id: "BYD-CRB-02", code: "BYD-CRB-02", name: "BYD Cirebon", attendanceRadiusMeter: 300 };
+const proyekSelesai: Project = { ...proyek, id: "LAMA-01", code: "LAMA-01", name: "Proyek selesai", status: "COMPLETED" };
+
+let daftar = titikAbsenKaryawan(kantor, proyek, [proyekB]);
+cek(
+  "kantor aktif + proyek utama + proyek tambahan",
+  daftar.map((t) => t.id),
+  [...titikKantor.map((t) => t.id), "BYD-SGR-01", "BYD-CRB-02"]
+);
+
+u = cariTitikTerdekat(daftar, (t) => (t.id === "BYD-SGR-01" ? 100 : 9000));
+cek("absen masuk di proyek A sah", u.titik?.id === "BYD-SGR-01" && u.diDalamRadius, true);
+u = cariTitikTerdekat(daftar, (t) => (t.id === "BYD-CRB-02" ? 250 : 9000));
+cek("absen pulang di proyek B (250 m, radius 300) sah", u.titik?.id === "BYD-CRB-02" && u.diDalamRadius, true);
+
+daftar = titikAbsenKaryawan(kantor, proyek, [proyek, proyekB]);
+cek("proyek utama yang ikut dicentang tidak dobel", daftar.filter((t) => t.id === "BYD-SGR-01").length, 1);
+
+daftar = titikAbsenKaryawan(kantor, null, [proyekB, proyekSelesai]);
+cek("tanpa penugasan utama, proyek tambahan tetap dipakai", daftar.some((t) => t.id === "BYD-CRB-02"), true);
+cek("proyek yang sudah selesai tidak dipakai", daftar.some((t) => t.id === "LAMA-01"), false);
+
+daftar = titikAbsenKaryawan(kantor, null, []);
+cek("tanpa proyek sama sekali, hanya kantor", daftar.every((t) => t.jenis === "KANTOR"), true);
 
 console.log(`\n==== ${lolos} lolos, ${gagal} gagal ====`);
 process.exit(gagal ? 1 : 0);
