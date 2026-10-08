@@ -3,6 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import { fotoMasihBaru, perangkatSeluler } from "@/lib/kamera";
 
+/** Batas tunggu browser mengubah gambar kanvas menjadi berkas (milidetik). */
+const BATAS_PROSES_FOTO_MS = 10_000;
+
 /**
  * Kamera untuk foto absensi (swafoto maupun foto tim).
  *
@@ -19,6 +22,7 @@ export default function KameraBelakang({
   onFoto,
   onBatal,
   memproses = false,
+  tahap,
 }: {
   terbuka: boolean;
   judul: string;
@@ -28,6 +32,11 @@ export default function KameraBelakang({
   onBatal: () => void;
   /** Sedang mengunggah atau menyimpan ke server. */
   memproses?: boolean;
+  /**
+   * Teks di bawah spinner, misalnya "Mengunggah foto…". Dibuat bertahap supaya
+   * kalau ada yang macet, staf bisa menyebut di tahap mana.
+   */
+  tahap?: string;
 }) {
   const video = useRef<HTMLVideoElement>(null);
   const aliran = useRef<MediaStream | null>(null);
@@ -41,6 +50,16 @@ export default function KameraBelakang({
   useEffect(() => {
     if (!terbuka) setSedangAmbil(false);
   }, [terbuka]);
+
+  // Penanda "sedang ambil" dilepas begitu halaman selesai memproses, berhasil
+  // maupun gagal. Sebelumnya hanya dilepas saat kamera ditutup, sehingga
+  // bila halaman gagal dan kameranya tetap terbuka, spinner menyala selamanya
+  // tanpa ada proses apa pun (Okt 2026).
+  const memprosesSebelumnya = useRef(false);
+  useEffect(() => {
+    if (memprosesSebelumnya.current && !memproses) setSedangAmbil(false);
+    memprosesSebelumnya.current = memproses;
+  }, [memproses]);
 
   useEffect(() => {
     setSeluler(perangkatSeluler(navigator.userAgent, navigator.maxTouchPoints || 0));
@@ -98,12 +117,27 @@ export default function KameraBelakang({
     kanvas.height = Math.round((v.videoHeight || 480) * skala);
     kanvas.getContext("2d")?.drawImage(v, 0, 0, kanvas.width, kanvas.height);
 
+    // Di sebagian HP, toBlob bisa tidak pernah memanggil balik. Tanpa pagar
+    // ini spinner menyala selamanya padahal belum ada yang dikirim.
+    let sudahDijawab = false;
+    const pengatur = setTimeout(() => {
+      if (sudahDijawab) return;
+      sudahDijawab = true;
+      setSedangAmbil(false);
+      setGagal("Foto tidak bisa diproses oleh browser ini. Coba ambil foto lagi.");
+    }, BATAS_PROSES_FOTO_MS);
+
     kanvas.toBlob(
       (b) => {
+        if (sudahDijawab) return;
+        sudahDijawab = true;
+        clearTimeout(pengatur);
         if (!b) {
           setSedangAmbil(false);
+          setGagal("Foto tidak bisa diproses oleh browser ini. Coba ambil foto lagi.");
           return;
         }
+        setGagal(null);
         onFoto(new File([b], "absen.jpg", { type: "image/jpeg" }));
       },
       "image/jpeg",
@@ -140,7 +174,7 @@ export default function KameraBelakang({
           <div className="absolute inset-0 z-10 grid place-items-center bg-black/60 text-white">
             <div className="flex flex-col items-center gap-2">
               <span className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-white border-t-transparent" />
-              <p className="text-sm font-medium">Menyimpan absen…</p>
+              <p className="text-sm font-medium">{tahap || "Menyimpan absen…"}</p>
             </div>
           </div>
         )}

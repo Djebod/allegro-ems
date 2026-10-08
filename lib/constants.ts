@@ -40,6 +40,21 @@ export const DEFAULT_ATTENDANCE_RADIUS_METER = 1000;
 /** Target ukuran foto setelah dikompres sebelum diupload (byte). */
 export const MAX_PHOTO_SIZE_BYTE = 300 * 1024;
 
+/**
+ * Batas tunggu unggah satu foto ke Cloudinary (milidetik). Browser HP bisa
+ * menunggu bermenit-menit pada sinyal yang putus di tengah unggah, dan
+ * selama itu staf hanya melihat spinner (Okt 2026). Lewat batas ini unggah
+ * dibatalkan, dicoba ulang satu kali, lalu dilaporkan sebagai gagal.
+ */
+export const BATAS_UNGGAH_FOTO_MS = 30_000;
+export const ULANG_UNGGAH_FOTO = 1;
+
+/**
+ * Batas tunggu simpan ke Firestore (milidetik). Janji tulis Firestore tidak
+ * pernah gagal sendiri bila koneksinya tersangkut, hanya mengulang diam-diam.
+ */
+export const BATAS_SIMPAN_FIRESTORE_MS = 20_000;
+
 /* ---------------- Data kepegawaian ---------------- */
 
 /**

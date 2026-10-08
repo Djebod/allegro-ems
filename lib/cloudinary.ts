@@ -1,6 +1,6 @@
 "use client";
 
-import { MAX_PHOTO_SIZE_BYTE } from "@/lib/constants";
+import { BATAS_UNGGAH_FOTO_MS, MAX_PHOTO_SIZE_BYTE, ULANG_UNGGAH_FOTO } from "@/lib/constants";
 
 const CLOUD = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME || "";
 const PRESET = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET || "";
@@ -76,33 +76,80 @@ export interface HasilUnggah {
  * Tautan Cloudinary bisa dibuka siapa saja yang tahu alamatnya, jadi
  * alamat yang tidak bisa ditebak adalah lapisan perlindungan pertama.
  */
-export async function unggahFoto(file: File, folder: string): Promise<HasilUnggah> {
+export type TahapUnggah = "memproses" | "mengunggah" | "mengulang";
+
+export async function unggahFoto(
+  file: File,
+  folder: string,
+  onTahap?: (tahap: TahapUnggah) => void
+): Promise<HasilUnggah> {
   if (!cloudinarySiap()) {
     throw new Error(
       "Cloudinary belum diatur. Isi NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME dan NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET."
     );
   }
 
+  onTahap?.("memproses");
   const kecil = await kecilkanFoto(file);
   const acak =
     typeof crypto !== "undefined" && "randomUUID" in crypto
       ? crypto.randomUUID()
       : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
+  // Nama berkas sama di tiap percobaan, supaya kalau percobaan pertama
+  // sebenarnya sampai di Cloudinary tetapi balasannya tidak kembali,
+  // percobaan kedua menimpa berkas yang sama, bukan membuat foto kembar.
+  for (let percobaan = 0; percobaan <= ULANG_UNGGAH_FOTO; percobaan++) {
+    onTahap?.(percobaan === 0 ? "mengunggah" : "mengulang");
+    try {
+      return await kirimKeCloudinary(kecil, folder, acak);
+    } catch (e) {
+      // Galat dari Cloudinary sendiri (preset salah, berkas ditolak) tidak
+      // akan berubah bila diulang; yang diulang hanya masalah koneksi.
+      if (!(e instanceof GalatKoneksiUnggah)) throw e;
+    }
+  }
+  // Pesan teknis browser ("Failed to fetch", "aborted") sengaja tidak
+  // diteruskan; staf butuh tahu apa yang harus dilakukan, bukan sebabnya.
+  throw new Error(
+    "Foto tidak berhasil terkirim karena koneksi lambat atau terputus. Periksa sinyal, lalu ambil foto lagi."
+  );
+}
+
+/** Masalah jaringan: batas waktu habis, fetch gagal tersambung, atau Cloudinary sedang terganggu. */
+class GalatKoneksiUnggah extends Error {}
+
+async function kirimKeCloudinary(kecil: Blob, folder: string, publicId: string): Promise<HasilUnggah> {
   const data = new FormData();
   data.append("file", kecil);
   data.append("upload_preset", PRESET);
   data.append("folder", folder);
-  data.append("public_id", acak);
+  data.append("public_id", publicId);
 
-  const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD}/image/upload`, {
-    method: "POST",
-    body: data,
-  });
+  // Browser HP bisa menunggu bermenit-menit bila sinyal putus di tengah
+  // unggah. AbortController memastikan tunggunya berhenti di batas yang
+  // ditentukan, bukan sampai browser menyerah sendiri.
+  const pembatal = new AbortController();
+  const pengatur = setTimeout(() => pembatal.abort(), BATAS_UNGGAH_FOTO_MS);
+
+  let res: Response;
+  try {
+    res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD}/image/upload`, {
+      method: "POST",
+      body: data,
+      signal: pembatal.signal,
+    });
+  } catch (e) {
+    throw new GalatKoneksiUnggah(e instanceof Error ? e.message : "fetch gagal");
+  } finally {
+    clearTimeout(pengatur);
+  }
 
   if (!res.ok) {
     const isi = await res.json().catch(() => null);
     const sebab = isi?.error?.message || "";
+    // 5xx dan 429 adalah gangguan sementara di sisi Cloudinary; boleh diulang.
+    if (res.status >= 500 || res.status === 429) throw new GalatKoneksiUnggah(sebab || `HTTP ${res.status}`);
     throw new Error(
       sebab.includes("preset")
         ? "Upload preset Cloudinary tidak ditemukan atau belum disetel Unsigned."

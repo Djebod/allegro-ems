@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "uji": "tsx uji/payroll.ts && tsx uji/sp.ts && tsx uji/jadwal.ts && tsx uji/kantor.ts && tsx uji/rekap.ts && tsx uji/payroll-bulanan.ts && tsx uji/slip.ts && tsx uji/izin-keluar.ts"
+    "uji": "tsx uji/payroll.ts && tsx uji/sp.ts && tsx uji/jadwal.ts && tsx uji/kantor.ts && tsx uji/rekap.ts && tsx uji/payroll-bulanan.ts && tsx uji/slip.ts && tsx uji/izin-keluar.ts && tsx uji/batas-waktu.ts"
   },
   "dependencies": {
     "exceljs": "^4.4.0",

@@ -24,6 +24,9 @@ import type { JenisAbsenKantor } from "@/lib/data-kantor";
 import { jadwalUntuk } from "@/lib/jadwal";
 import { jarakMeter } from "@/lib/lokasi";
 import { cloudinarySiap, unggahFoto } from "@/lib/cloudinary";
+import type { TahapUnggah } from "@/lib/cloudinary";
+import { GalatBatasWaktu, denganBatasWaktu } from "@/lib/batas-waktu";
+import { BATAS_SIMPAN_FIRESTORE_MS } from "@/lib/constants";
 import { jamDari, tanggalHariIni } from "@/lib/absensi";
 import type { AbsenKantor, Employee, Kantor, Project, TitikAbsen } from "@/types";
 
@@ -41,6 +44,12 @@ const PESAN_BERHASIL: Record<JenisAbsenKantor, string> = {
   istirahat: "Istirahat tercatat. Jangan lupa absen selesai istirahat.",
   selesaiIstirahat: "Selesai istirahat tercatat. Selamat bekerja kembali.",
   pulang: "Absen pulang tercatat. Terima kasih.",
+};
+
+const TEKS_TAHAP: Record<TahapUnggah, string> = {
+  memproses: "Memproses foto…",
+  mengunggah: "Mengunggah foto…",
+  mengulang: "Sinyal lambat, mengunggah ulang…",
 };
 
 function Isi() {
@@ -65,6 +74,7 @@ function Isi() {
   const [alasan, setAlasan] = useState("");
   const [antrean, setAntrean] = useState<JenisAbsenKantor | null>(null);
   const [mengirim, setMengirim] = useState(false);
+  const [tahap, setTahap] = useState("");
 
   const muat = useCallback(async () => {
     if (!employeeId) return;
@@ -159,37 +169,63 @@ function Isi() {
     setAntrean(jenis);
   }
 
+  /** Membaca ulang absen hari ini. Kalau koneksi masih tersangkut, tampilan lama dibiarkan. */
+  async function segarkanAbsen() {
+    try {
+      setAbsen(await denganBatasWaktu(ambilAbsenHariIni(employeeId, tanggal), BATAS_SIMPAN_FIRESTORE_MS, ""));
+    } catch {
+      // Dibiarkan: pemakai bisa menekan muat ulang sendiri.
+    }
+  }
+
   async function simpanFoto(file: File) {
-    if (!antrean || !karyawan || !titik || !terdekat?.titik) return;
+    if (!antrean || !karyawan || !titik || !terdekat?.titik) {
+      // Dulu diam saja, dan spinner kamera menyala selamanya tanpa ada
+      // proses apa pun. Sekarang kamera ditutup dan sebabnya disebutkan.
+      setAntrean(null);
+      setSalah("Data lokasi belum siap. Tekan tombol absen lagi.");
+      return;
+    }
     setMengirim(true);
     setSalah(null);
+    setTahap(TEKS_TAHAP.memproses);
     const jenisTercatat = antrean;
     try {
-      const foto = await unggahFoto(file, `${FOLDER}/${tanggal}`);
-      await catatAbsenKantor({
-        karyawan,
-        tanggal,
-        jenis: jenisTercatat,
-        titik,
-        photoUrl: foto.url,
-        kantorId: terdekat.titik.id,
-        kantorNama: terdekat.titik.nama,
-        jenisTitik: terdekat.titik.jenis,
-        diLuarRadius: !terdekat.diDalamRadius,
-        alasan,
-      });
+      const foto = await unggahFoto(file, `${FOLDER}/${tanggal}`, (t) => setTahap(TEKS_TAHAP[t]));
+      setTahap("Menyimpan absen…");
+      // Janji tulis Firestore tidak pernah gagal sendiri bila koneksi
+      // tersangkut; tanpa pagar ini spinner berputar tanpa batas.
+      await denganBatasWaktu(
+        catatAbsenKantor({
+          karyawan,
+          tanggal,
+          jenis: jenisTercatat,
+          titik,
+          photoUrl: foto.url,
+          kantorId: terdekat.titik.id,
+          kantorNama: terdekat.titik.nama,
+          jenisTitik: terdekat.titik.jenis,
+          diLuarRadius: !terdekat.diDalamRadius,
+          alasan,
+        }),
+        BATAS_SIMPAN_FIRESTORE_MS,
+        "Koneksi ke server lambat. Foto sudah terkirim, tetapi absennya belum terkonfirmasi. Periksa sinyal, lalu muat ulang halaman ini untuk melihat apakah absen sudah tercatat. Kalau belum, ambil foto lagi."
+      );
       // Tutup kamera langsung setelah simpan berhasil
       setAntrean(null);
       setAlasan("");
       setPesan(PESAN_BERHASIL[jenisTercatat]);
       // Cukup perbarui data absen hari ini, tidak perlu membaca ulang seluruh kantor dan proyek
-      const absenBaru = await ambilAbsenHariIni(employeeId, tanggal);
-      setAbsen(absenBaru);
+      await segarkanAbsen();
     } catch (e) {
       setSalah(e instanceof Error ? e.message : "Absen gagal disimpan.");
       setAntrean(null);
+      // Tulisan yang lewat batas waktu mungkin tetap sampai ke server
+      // beberapa saat kemudian; coba perlihatkan keadaan terbaru.
+      if (e instanceof GalatBatasWaktu) await segarkanAbsen();
     } finally {
       setMengirim(false);
+      setTahap("");
     }
   }
 
@@ -392,6 +428,7 @@ function Isi() {
         onFoto={simpanFoto}
         onBatal={() => setAntrean(null)}
         memproses={mengirim}
+        tahap={tahap}
       />
     </>
   );
