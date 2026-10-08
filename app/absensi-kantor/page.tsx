@@ -26,6 +26,7 @@ function Isi() {
   const [bulan, setBulan] = useState(tanggalHariIni().slice(0, 7));
   const [data, setData] = useState<AbsenKantor[]>([]);
   const [hanyaPerluPeriksa, setHanyaPerluPeriksa] = useState(false);
+  const [cari, setCari] = useState("");
   const [salah, setSalah] = useState<string | null>(null);
   const [pesan, setPesan] = useState<string | null>(null);
   const [sibuk, setSibuk] = useState(false);
@@ -82,20 +83,29 @@ function Isi() {
   const perluPeriksa = (a: AbsenKantor) =>
     a.perluValidasi || !a.pulang || (!!a.istirahatTerbuka && (!!a.pulang || a.date < tanggalHariIni()));
 
+  // Pencarian nama menyempitkan data yang dilihat, termasuk angka ringkasannya,
+  // supaya "Telat" dan "Perlu diperiksa" bisa dibaca per orang.
+  const dataCari = useMemo(() => {
+    const kata = cari.trim().toLowerCase();
+    if (!kata) return data;
+    return data.filter((a) => `${a.employeeName} ${a.employeeId} ${a.divisi}`.toLowerCase().includes(kata));
+  }, [data, cari]);
+
   const terlihat = useMemo(
-    () => (hanyaPerluPeriksa ? data.filter(perluPeriksa) : data),
+    () => (hanyaPerluPeriksa ? dataCari.filter(perluPeriksa) : dataCari),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [data, hanyaPerluPeriksa]
+    [dataCari, hanyaPerluPeriksa]
   );
 
   const ringkas = useMemo(
     () => ({
-      catatan: data.length,
-      telat: data.filter((a) => a.terlambatMenit > 0).length,
-      menitTelat: data.reduce((t, a) => t + a.terlambatMenit, 0),
-      perluPeriksa: data.filter(perluPeriksa).length,
+      catatan: dataCari.length,
+      telat: dataCari.filter((a) => a.terlambatMenit > 0).length,
+      menitTelat: dataCari.reduce((t, a) => t + a.terlambatMenit, 0),
+      perluPeriksa: dataCari.filter(perluPeriksa).length,
     }),
-    [data]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [dataCari]
   );
 
   return (
@@ -108,6 +118,17 @@ function Isi() {
             className="input-dasar"
             value={bulan}
             onChange={(e) => setBulan(e.target.value)}
+          />
+        </label>
+
+        <label className="block w-full sm:w-auto">
+          <span className="mb-1 block text-sm font-medium text-ink">Cari karyawan</span>
+          <input
+            className="input-dasar"
+            placeholder="Nama, kode, atau divisi"
+            value={cari}
+            onChange={(e) => setCari(e.target.value)}
+            aria-label="Cari karyawan"
           />
         </label>
 
