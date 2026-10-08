@@ -185,6 +185,7 @@ function Isi({ bulan }: { bulan: string }) {
       potonganLain: i.potonganLain,
       potonganLainKet: i.potonganLainKet,
       potonganBon: i.potonganBon,
+      potonganBpjs: i.potonganBpjs || 0,
       catatan: i.catatan,
     });
     setSalahForm(null);
@@ -411,6 +412,7 @@ function Isi({ bulan }: { bulan: string }) {
               <th className="text-right">Denda</th>
               <th className="text-right">Pot. alpa</th>
               <th className="text-right">Pot. bon</th>
+              <th className="text-right">BPJS</th>
               <th className="text-right">Pot. lain</th>
               <th className="text-right">Diterima</th>
               <th></th>
@@ -447,6 +449,7 @@ function Isi({ bulan }: { bulan: string }) {
                   <td className="text-right">{r(i.dendaTelat)}</td>
                   <td className="text-right">{r(i.potonganAlpa)}</td>
                   <td className="text-right">{r(i.potonganBon)}</td>
+                  <td className="text-right">{r(i.potonganBpjs || 0)}</td>
                   <td className="text-right">{r(i.potonganLain)}</td>
                   <td className={`text-right font-bold ${i.bersih < 0 ? "text-bahaya" : "text-allegro-700"}`}>
                     {r(i.bersih)}
@@ -571,6 +574,9 @@ function Isi({ bulan }: { bulan: string }) {
               </Field>
               <Field label="Potongan bon" bantuan={`Sisa bon ${r(ubah.sisaBon)}`}>
                 <IsianRupiah nilai={isian.potonganBon} ubah={set("potonganBon")} mati={!bisaUbah || !ubah.sisaBon} />
+              </Field>
+              <Field label="Potongan BPJS" bantuan="Terisi dari iuran di data karyawan, bisa dikoreksi">
+                <IsianRupiah nilai={isian.potonganBpjs || 0} ubah={set("potonganBpjs")} mati={!bisaUbah} />
               </Field>
               <Field label="Potongan lain">
                 <IsianRupiah nilai={isian.potonganLain} ubah={set("potonganLain")} mati={!bisaUbah} />

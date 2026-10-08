@@ -9,11 +9,13 @@ import type { BarisTunjangan, EmployeeLoan, GajiBulanan, ItemPayrollBulanan, Jen
  *
  *   Kotor     = gaji pokok + tunjangan + bonus + lembur + uang kerajinan
  *               + tambahan lain
- *   Potongan  = denda telat + potongan alpa + potongan bon + potongan lain
+ *   Potongan  = denda telat + potongan alpa + potongan BPJS + potongan bon
+ *               + potongan lain
  *   Diterima  = kotor - potongan
  *
  * Otomatis  : gaji pokok (dari Gaji Pokok), angka kehadiran dan denda
- *             telat (dari rekap bulanan), usulan potongan bon (cicilan).
+ *             telat (dari rekap bulanan), usulan potongan bon (cicilan),
+ *             potongan BPJS (dari iuran di data karyawan).
  * Manual    : lembur, potongan alpa, uang kerajinan (khusus Owner),
  *             tambahan lain, potongan lain. Lembur dan potongan alpa
  *             manual karena rumusnya belum diputuskan client; begitu
@@ -34,6 +36,7 @@ export const KOLOM_MANUAL = [
   "potonganLain",
   "potonganLainKet",
   "potonganBon",
+  "potonganBpjs",
   "catatan",
 ] as const;
 
@@ -98,9 +101,12 @@ export function hitungAngka<T extends ItemBaru>(item: T): T {
   const tambahanLain = bulat(item.tambahanLain);
   const potonganAlpa = bulat(item.potonganAlpa);
   const potonganLain = bulat(item.potonganLain);
+  const potonganBpjs = bulat(item.potonganBpjs);
 
   const kotor = item.gajiPokok + totalTunjangan + bonus + lembur + uangKerajinan + tambahanLain;
-  const potonganNonBon = item.dendaTelat + potonganAlpa + potonganLain;
+  // BPJS ikut dipotong sebelum bon: iuran harus tetap dibayar, bon bisa
+  // menunggu bulan berikutnya.
+  const potonganNonBon = item.dendaTelat + potonganAlpa + potonganLain + potonganBpjs;
   const ruangBon = Math.max(0, kotor - potonganNonBon);
   const potonganBon = Math.min(bulat(item.potonganBon), item.sisaBon, ruangBon);
   const totalPotongan = potonganNonBon + potonganBon;
@@ -113,6 +119,7 @@ export function hitungAngka<T extends ItemBaru>(item: T): T {
     tambahanLain,
     potonganAlpa,
     potonganLain,
+    potonganBpjs,
     potonganBon,
     kotor,
     totalPotongan,
@@ -127,6 +134,8 @@ export function susunItemBulanan(opsi: {
   bon: EmployeeLoan | undefined;
   /** Jenis tunjangan yang diatur di aplikasi. Kosong = tanpa tunjangan. */
   jenisTunjangan?: JenisTunjangan[];
+  /** Iuran BPJS bulanan dari data karyawan. Kosong = tidak dipotong. */
+  iuranBpjs?: number;
   /** Isian manual dari hitungan sebelumnya, supaya hitung ulang tidak menghapusnya. */
   lama?: Partial<IsianManual>;
 }): ItemBaru {
@@ -166,6 +175,9 @@ export function susunItemBulanan(opsi: {
     potonganLain: lama.potonganLain ?? 0,
     potonganLainKet: lama.potonganLainKet ?? "",
     potonganBon: lama.potonganBon ?? usulanPotonganBon(opsi.bon, opsi.bulan),
+    // Seperti potongan bon: koreksi manual (termasuk dikosongkan) tidak
+    // ditimpa saat hitung ulang.
+    potonganBpjs: lama.potonganBpjs ?? opsi.iuranBpjs ?? 0,
     catatan: lama.catatan ?? "",
 
     kotor: 0,

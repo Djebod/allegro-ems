@@ -251,6 +251,10 @@ Mesin fingerprint **tidak dipakai lagi**. Staf kantor absen sendiri lewat HP:
 
 Satu karyawan satu bon aktif. Bisa dicicil; besarnya dibulatkan ke atas supaya cicilan terakhir yang mengecil. Potongan tidak pernah melebihi upah periode itu.
 
+### Potongan BPJS (8 Okt 2026)
+
+Iuran BPJS disimpan sebagai **angka rupiah per bulan** di `employees.iuranBpjs` (Detail Karyawan → Pajak & BPJS), bukan persen. Saat payroll bulanan disusun, nilainya disalin ke `potonganBpjs` pada baris payroll dan masih bisa dikoreksi selama DRAFT/REVIEW. Hitung ulang **tidak menimpa** koreksi itu (pola sama dengan potongan bon). BPJS dipotong **sebelum** bon: iuran harus tetap dibayar, bon bisa menunggu. Belum ditanyakan ke client apakah yang dipotong iuran penuh atau porsi karyawan saja; sistem hanya memotong angka yang diisi.
+
 ---
 
 ## 8. Peran dan hak akses

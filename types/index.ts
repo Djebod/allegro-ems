@@ -100,6 +100,12 @@ export interface Employee {
   npwp?: string;
   bpjsKesehatan?: string;
   bpjsKetenagakerjaan?: string;
+  /**
+   * Iuran BPJS yang dipotong dari gaji tiap bulan, rupiah. Diisi Admin/HR
+   * sebagai angka, bukan persen, karena besarnya ditetapkan di luar
+   * aplikasi. Kosong atau nol berarti tidak dipotong.
+   */
+  iuranBpjs?: number;
 
   /* --- Kepegawaian --- */
   statusKepegawaian?: StatusKepegawaian;
@@ -720,6 +726,11 @@ export interface ItemPayrollBulanan {
   potonganLain: number;
   potonganLainKet: string;
   potonganBon: number;
+  /**
+   * Terisi otomatis dari iuranBpjs karyawan saat payroll disusun, masih
+   * bisa dikoreksi selama DRAFT/REVIEW. Kosong pada payroll lama = 0.
+   */
+  potonganBpjs?: number;
   catatan: string;
 
   /* --- hasil hitung --- */

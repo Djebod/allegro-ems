@@ -325,6 +325,7 @@ function halamanGaji(doc: JsPDF, s: DataSlip, logoUrl: string | null, autoTable:
   barisGaji("Potongan Kasbon", "", "", "", ribu(s.potonganBon), true);
   barisGaji("Potongan Telat", "", "", "", ribu(s.dendaTelat), true);
   if (s.potonganAlpa) barisGaji("Potongan Alpa", "", "", "", ribu(s.potonganAlpa), true);
+  if (s.potonganBpjs) barisGaji("Potongan BPJS", "", "", "", ribu(s.potonganBpjs), true);
   if (s.potonganLain) {
     barisGaji(`Potongan Lain${s.potonganLainKet ? ` (${s.potonganLainKet})` : ""}`.slice(0, 40), "", "", "", ribu(s.potonganLain), true);
   }

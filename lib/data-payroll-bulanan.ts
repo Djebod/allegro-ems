@@ -249,6 +249,7 @@ async function susunSemua(bulan: string, lama: Map<string, Partial<IsianManual>>
       gaji: gajiUntukBulan(gaji, r.employeeId, bulan),
       bon: bon.find((b) => b.employeeId === r.employeeId),
       jenisTunjangan,
+      iuranBpjs: bahan.karyawan.find((e) => e.id === r.employeeId)?.iuranBpjs,
       lama: lama.get(r.employeeId),
     })
   );

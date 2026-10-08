@@ -646,7 +646,7 @@ service cloud.firestore {
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
              'bonus', 'lembur', 'lemburKet', 'potonganAlpa', 'uangKerajinan', 'tambahanLain',
              'tambahanLainKet', 'potonganLain', 'potonganLainKet', 'potonganBon',
-             'catatan', 'kotor', 'totalPotongan', 'bersih', 'updatedAt'])
+             'potonganBpjs', 'catatan', 'kotor', 'totalPotongan', 'bersih', 'updatedAt'])
         && (request.resource.data.uangKerajinan == resource.data.uangKerajinan || isOwner())
         && request.resource.data.potonganBon <= resource.data.sisaBon
         // Tunjangan tetap adalah salinan (tidak bisa diubah); bonus diisi manual.
@@ -656,6 +656,7 @@ service cloud.firestore {
              + request.resource.data.uangKerajinan + request.resource.data.tambahanLain
         && request.resource.data.totalPotongan == resource.data.dendaTelat + request.resource.data.potonganAlpa
              + request.resource.data.potonganBon + request.resource.data.potonganLain
+             + request.resource.data.get('potonganBpjs', 0)
         && request.resource.data.bersih == request.resource.data.kotor - request.resource.data.totalPotongan;
 
       allow delete: if urusGajiBulanan() && statusBulanan(resource.data.payrollId) == 'DRAFT';

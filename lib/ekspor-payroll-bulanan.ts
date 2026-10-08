@@ -43,6 +43,7 @@ const KOLOM: Kolom[] = [
   { judul: "Denda telat", pendek: "Denda", ambil: (i) => i.dendaTelat, lebar: 11, uang: true, jumlah: true },
   { judul: "Potongan alpa", pendek: "Pot. alpa", ambil: (i) => i.potonganAlpa, lebar: 11, uang: true, jumlah: true },
   { judul: "Potongan bon", pendek: "Pot. bon", ambil: (i) => i.potonganBon, lebar: 11, uang: true, jumlah: true },
+  { judul: "Potongan BPJS", pendek: "BPJS", ambil: (i) => i.potonganBpjs || 0, lebar: 11, uang: true, jumlah: true },
   { judul: "Potongan lain", pendek: "Pot. lain", ambil: (i) => i.potonganLain, lebar: 11, uang: true, jumlah: true },
   { judul: "Total potongan", pendek: "Tot. potongan", ambil: (i) => i.totalPotongan, lebar: 13, uang: true, jumlah: true },
   { judul: "Diterima", pendek: "Diterima", ambil: (i) => i.bersih, lebar: 14, uang: true, jumlah: true },

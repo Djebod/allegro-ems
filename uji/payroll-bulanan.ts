@@ -65,6 +65,17 @@ const ulang = susunItemBulanan({
 cek("angka rekap diperbarui", [ulang.alpa, ulang.dendaTelat], [3, 120_000]);
 cek("isian manual tetap", [ulang.lembur, ulang.uangKerajinan, ulang.potonganBon, ulang.catatan], [300_000, 200_000, 500_000, "ok"]);
 
+console.log("\n== Potongan BPJS ==");
+const bpjs = susunItemBulanan({ bulan: "2026-09", rekap, gaji: riwayat[1], bon: undefined, iuranBpjs: 150_000 });
+cek("terisi otomatis dari iuran karyawan", bpjs.potonganBpjs, 150_000);
+cek("masuk total potongan", bpjs.totalPotongan, 105_000 + 150_000);
+cek("mengurangi gaji diterima", bpjs.bersih, 4_500_000 - 105_000 - 150_000);
+cek("tanpa iuran berarti nol", susunItemBulanan({ bulan: "2026-09", rekap, gaji: riwayat[1], bon: undefined }).potonganBpjs, 0);
+cek("hitung ulang mempertahankan koreksi", susunItemBulanan({ bulan: "2026-09", rekap, gaji: riwayat[1], bon: undefined, iuranBpjs: 150_000, lama: { potonganBpjs: 100_000 } }).potonganBpjs, 100_000);
+cek("hitung ulang nol tetap nol, bukan diisi ulang", susunItemBulanan({ bulan: "2026-09", rekap, gaji: riwayat[1], bon: undefined, iuranBpjs: 150_000, lama: { potonganBpjs: 0 } }).potonganBpjs, 0);
+cek("minus jadi nol", hitungAngka({ ...bpjs, potonganBpjs: -1 }).potonganBpjs, 0);
+cek("bon mengalah pada BPJS saat gaji tipis", hitungAngka({ ...bpjs, gajiPokok: 300_000, sisaBon: 1_000_000, potonganBon: 1_000_000 }).potonganBon, 300_000 - 105_000 - 150_000);
+
 console.log("\n== Peringatan ==");
 cek("alpa tanpa potongan", peringatanItem(item).includes("2 hari alpa, potongan alpa belum diisi"), true);
 cek("gaji kosong", peringatanItem({ ...item, gajiPokok: 0 }).includes("Gaji pokok belum diisi"), true);

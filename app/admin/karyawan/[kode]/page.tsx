@@ -300,6 +300,12 @@ function Isi({ kode }: { kode: string }) {
             <dt className="text-muted">BPJS Ketenagakerjaan</dt>
             <dd className="font-medium text-ink">{karyawan.bpjsKetenagakerjaan || "—"}</dd>
           </div>
+          <div>
+            <dt className="text-muted">Iuran BPJS per bulan</dt>
+            <dd className="font-medium text-ink">
+              {karyawan.iuranBpjs ? `Rp ${keRupiah(karyawan.iuranBpjs)}` : "—"}
+            </dd>
+          </div>
         </dl>
 
         <div className="mt-5 grid gap-6 sm:grid-cols-2">
@@ -756,6 +762,20 @@ function Isi({ kode }: { kode: string }) {
                   />
                 </Field>
               </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field
+                  label="Iuran BPJS per bulan (Rp)"
+                  bantuan="Dipotong otomatis di payroll bulanan. Kosongkan kalau tidak dipotong."
+                >
+                  <input
+                    className="input-dasar"
+                    inputMode="numeric"
+                    placeholder="0"
+                    value={uData.iuranBpjs ? keRupiah(uData.iuranBpjs) : ""}
+                    onChange={(e) => setUData({ ...uData, iuranBpjs: bacaAngka(e.target.value) })}
+                  />
+                </Field>
+              </div>
             </div>
           </div>
 
@@ -818,6 +838,7 @@ function Isi({ kode }: { kode: string }) {
                   npwp: uData.npwp || "",
                   bpjsKesehatan: uData.bpjsKesehatan || "",
                   bpjsKetenagakerjaan: uData.bpjsKetenagakerjaan || "",
+                  iuranBpjs: Math.max(0, Math.round(Number(uData.iuranBpjs) || 0)),
                   bankName: uData.bankName || "",
                   bankAccountNumber: uData.bankAccountNumber || "",
                   bankAccountName: uData.bankAccountName || "",
