@@ -174,7 +174,12 @@ export async function buatKaryawan(data: Omit<Employee, "id" | "createdAt" | "up
 
 export async function ubahKaryawan(id: string, data: Partial<Employee>) {
   const { id: _b, employeeCode: _k, createdAt: _c, ...bersih } = data as Employee;
-  await updateDoc(doc(dbClient(), "employees", id), { ...bersih, updatedAt: serverTimestamp() });
+  // Firestore menolak nilai undefined ("Unsupported field value"). Karyawan
+  // lama hasil impor bisa tidak punya jenisKelamin atau statusKepegawaian,
+  // sehingga formulir Ubah data mengirim undefined dan seluruh simpanan
+  // gagal (9 Okt 2026). Kolom yang kosong cukup tidak dikirim.
+  const terisi = Object.fromEntries(Object.entries(bersih).filter(([, v]) => v !== undefined));
+  await updateDoc(doc(dbClient(), "employees", id), { ...terisi, updatedAt: serverTimestamp() });
 }
 
 /** Dipakai hanya untuk membatalkan salah input di hari yang sama. */

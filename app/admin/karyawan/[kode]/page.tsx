@@ -898,8 +898,10 @@ function Isi({ kode }: { kode: string }) {
                 await muatKaryawan();
                 setBukaUbah(false);
                 setPesan("Data karyawan diperbarui.");
-              } catch {
-                setSalah("Data gagal disimpan.");
+              } catch (e) {
+                // Pesan asli ikut ditampilkan supaya penolakan rules dan
+                // galat data bisa dibedakan tanpa membuka konsol browser.
+                setSalah(`Data gagal disimpan. ${e instanceof Error ? e.message : ""}`.trim());
               } finally {
                 setMenyimpan(false);
               }
