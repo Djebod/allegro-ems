@@ -121,7 +121,7 @@ function Isi() {
     setMenyimpan(true);
     try {
       const foto = await unggahFoto(file, `${FOLDER}/${antrean.izin.tanggal}`);
-      await catatSesiIzin(antrean.izin, antrean.jenis, { ...titik, waktu: new Date().toISOString(), photoUrl: foto.url });
+      await catatSesiIzin(antrean.izin, antrean.jenis, { ...titik, photoUrl: foto.url });
       setPesan(
         antrean.jenis === "keluar"
           ? "Jam keluar tercatat. Jangan lupa tekan Sudah kembali saat tiba di kantor."

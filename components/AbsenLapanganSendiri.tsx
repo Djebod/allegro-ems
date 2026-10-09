@@ -134,7 +134,6 @@ export default function AbsenLapanganSendiri({ karyawan }: { karyawan: Employee 
           projectId: proyek.id,
           sectionId: karyawan.currentSectionId || "",
           mandorId: karyawan.currentMandorId || "",
-          tanggal,
           jenis,
           titik: antrean.titik,
           photoUrl: foto.url,

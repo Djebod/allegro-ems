@@ -16,6 +16,8 @@ import { dbClient } from "@/lib/firebase";
 import { pantauDenganCadangan } from "@/lib/pantau-cadangan";
 import { hitungKantor, jamWIB } from "@/lib/kantor";
 import { hariSabtu, jadwalUntuk } from "@/lib/jadwal";
+import { jamServer, selisihJamPerangkatDetik } from "@/lib/jam-server";
+import { tanggalWIB } from "@/lib/absensi";
 import { rapikanKode } from "@/lib/data";
 import type {
   AbsenKantor,
@@ -130,7 +132,6 @@ const PESAN_SUDAH: Record<JenisAbsenKantor, string> = {
  */
 export async function catatAbsenKantor(opsi: {
   karyawan: Employee;
-  tanggal: string;
   jenis: JenisAbsenKantor;
   titik: TitikAbsen;
   photoUrl: string;
@@ -145,8 +146,14 @@ export async function catatAbsenKantor(opsi: {
     throw new Error("Absen dari luar jangkauan wajib disertai alasan.");
   }
 
+  // Jam dan tanggal diambil dari server, bukan perangkat: jam HP/laptop bisa
+  // disetel mundur lalu absen pulang tercatat lebih awal (terjadi 9 Okt 2026).
+  const jamKini = await jamServer();
+  const sekarang = jamKini.toISOString();
+  const tanggal = tanggalWIB(jamKini);
+
   const db = dbClient();
-  const id = idAbsenKantor(opsi.karyawan.id, opsi.tanggal);
+  const id = idAbsenKantor(opsi.karyawan.id, tanggal);
   const ref = doc(db, "officeAttendance", id);
   const snap = await getDoc(ref);
   const kini = snap.exists() ? (snap.data() as AbsenKantor) : null;
@@ -158,18 +165,18 @@ export async function catatAbsenKantor(opsi: {
   if ((opsi.jenis === "istirahat" || opsi.jenis === "selesaiIstirahat") && kini?.pulang) {
     throw new Error("Absen pulang sudah tercatat, jadi istirahat tidak bisa diabsenkan lagi.");
   }
-  if (opsi.jenis === "istirahat" && hariSabtu(opsi.tanggal)) {
+  if (opsi.jenis === "istirahat" && hariSabtu(tanggal)) {
     throw new Error("Hari Sabtu tidak ada absen istirahat.");
   }
   if (opsi.jenis === "selesaiIstirahat" && !kini?.istirahat) {
     throw new Error("Absen istirahat belum tercatat.");
   }
 
-  const jadwal = jadwalUntuk(opsi.karyawan, opsi.tanggal);
-  const sekarang = new Date().toISOString();
+  const jadwal = jadwalUntuk(opsi.karyawan, tanggal);
 
   const event: Omit<EventAbsenKantor, "recordedAt"> = {
     waktu: sekarang,
+    selisihJamPerangkatDetik: selisihJamPerangkatDetik(jamKini),
     location: opsi.titik,
     photoUrl: opsi.photoUrl,
     diLuarRadius: opsi.diLuarRadius,
@@ -204,7 +211,7 @@ export async function catatAbsenKantor(opsi: {
       employeeId: opsi.karyawan.id,
       employeeName: opsi.karyawan.name,
       divisi: opsi.karyawan.divisi || "",
-      date: opsi.tanggal,
+      date: tanggal,
       masuk: null,
       istirahat: null,
       selesaiIstirahat: null,
@@ -233,11 +240,11 @@ export async function catatAbsenKantor(opsi: {
       [opsi.jenis]: eventLengkap,
     });
   } else {
-    // Jam server ikut disimpan di samping jam perangkat, supaya selisihnya
-    // terlihat kalau ada jam HP yang disetel jauh.
+    // Ditulis dengan jalur bertitik supaya sesi lain tidak tersentuh.
     await updateDoc(ref, {
       [`${opsi.jenis}.waktu`]: event.waktu,
       [`${opsi.jenis}.recordedAt`]: serverTimestamp(),
+      [`${opsi.jenis}.selisihJamPerangkatDetik`]: event.selisihJamPerangkatDetik,
       [`${opsi.jenis}.location`]: event.location,
       [`${opsi.jenis}.photoUrl`]: event.photoUrl,
       [`${opsi.jenis}.diLuarRadius`]: event.diLuarRadius,

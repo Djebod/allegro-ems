@@ -4,10 +4,10 @@ rules_version = '2';
 //  FIRESTORE RULES GABUNGAN — Allegro Global Construction
 //
 //  Satu Firebase project dipakai dua aplikasi:
-//    1. ALLEGRO EMS      — absensi, payroll, HRIS   (Tahap 20: pengakuan lembur, tanda tangan revisi, rekening diisi sendiri, tukang absen sendiri)
+//    1. ALLEGRO EMS      — absensi, payroll, HRIS   (Tahap 21: jam absen dari server, sesi tersimpan tak bisa diubah)
 //    2. ALLEGRO PROJECT  — admin proyek (Fase 1)    (blok ap* di bagian bawah)
 //
-//  Bagian EMS disalin apa adanya dari rules Tahap 20 (firestore.rules di repo allegro-ems).
+//  Bagian EMS disalin apa adanya dari rules Tahap 21 (firestore.rules di repo allegro-ems).
 //  Semua tambahan untuk aplikasi Admin Proyek diberi tanda komentar
 //  "[ADMIN PROYEK]" supaya mudah ditelusuri dan dicabut bila perlu.
 //
@@ -434,6 +434,84 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // ---------- jam server untuk absen (9 Okt 2026) ----------
+    // Jam HP/laptop bisa disetel bebas: pernah absen masuk jam 9, jam laptop
+    // dimundurkan ke jam 5, lalu absen pulang diterima dengan jam 5. Maka:
+    //   1. Klien mengambil jam server lewat dokumen jamServer/{uid}: menulis
+    //      serverTimestamp lalu membacanya kembali (lib/jam-server.ts).
+    //   2. Setiap sesi absen yang BARU ditulis wajib ber-recordedAt jam server
+    //      (serverTimestamp == request.time), kolom waktu-nya tidak jauh dari
+    //      jam server, dan tanggal dokumennya adalah hari ini menurut WIB.
+    //   3. Sesi yang sudah tersimpan tidak boleh diubah lewat jalur karyawan
+    //      atau mandor; koreksi hanya lewat Admin yang berjejak.
+    match /jamServer/{uid} {
+      allow read: if sudahLogin() && request.auth.uid == uid;
+      allow create, update: if sudahLogin() && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(['pada'])
+        && request.resource.data.pada == request.time;
+      allow delete: if false;
+    }
+
+    /** Jam server digeser ke WIB (UTC+7), untuk membaca tanggal hari ini. */
+    function jamServerWIB() {
+      return request.time + duration.value(7, 'h');
+    }
+
+    /** "09" -> 9. Nol di depan dibuang dulu supaya int() tidak salah tafsir. */
+    function angkaDuaDigit(s) {
+      return int(s.replace('^0', ''));
+    }
+
+    /** Tanggal "YYYY-MM-DD" ini adalah hari ini menurut WIB. */
+    function tanggalHariIniWIB(tanggal) {
+      let t = jamServerWIB();
+      return tanggal is string && tanggal.size() == 10
+        && int(tanggal[0:4]) == t.year()
+        && angkaDuaDigit(tanggal[5:7]) == t.month()
+        && angkaDuaDigit(tanggal[8:10]) == t.day();
+    }
+
+    /**
+     * Teks ISO UTC "YYYY-MM-DDTHH:MM:SS.sssZ" tidak lebih dari 5 menit dari
+     * jam server. Toleransinya untuk jeda antara pengambilan jam server dan
+     * tiba-nya tulisan ini, bukan untuk jam perangkat. Tepat di pergantian
+     * hari UTC (07.00 WIB) kedua jam bisa jatuh di tanggal berbeda, dan itu
+     * ditangani di gantiHari.
+     */
+    function waktuDekatJamServer(w) {
+      let t = request.time;
+      let hariSama = int(w[0:4]) == t.year()
+        && angkaDuaDigit(w[5:7]) == t.month()
+        && angkaDuaDigit(w[8:10]) == t.day();
+      let m = angkaDuaDigit(w[11:13]) * 60 + angkaDuaDigit(w[14:16]);
+      let mt = t.hours() * 60 + t.minutes();
+      let gantiHari = (m >= 1435 && mt <= 4) || (mt >= 1435 && m <= 4);
+      return w is string && w.size() >= 16
+        && ((hariSama && m - mt <= 5 && mt - m <= 5) || gantiHari);
+    }
+
+    /** Satu sesi absen yang baru dicatat: jam server, bukan jam perangkat. */
+    function sesiBerjamServer(s) {
+      return s is map
+        && s.recordedAt == request.time
+        && s.waktu is string
+        && waktuDekatJamServer(s.waktu);
+    }
+
+    /** Saat dokumen dibuat: tiap sesi kosong, atau berjam server. */
+    function sesiKosongAtauBerjamServer(k) {
+      let d = request.resource.data;
+      return d.get(k, null) == null || sesiBerjamServer(d[k]);
+    }
+
+    /** Saat dokumen diubah: sesi yang sudah ada tidak disentuh; sesi baru berjam server. */
+    function sesiTetapAtauBaru(k) {
+      let lama = resource.data.get(k, null);
+      let baru = request.resource.data.get(k, null);
+      return (lama != null && baru == lama)
+        || (lama == null && (baru == null || sesiBerjamServer(baru)));
+    }
+
     // ---------- attendance ----------
     function radiusProyek(projectId) {
       return get(/databases/$(database)/documents/projects/$(projectId)).data.attendanceRadiusMeter;
@@ -476,6 +554,27 @@ service cloud.firestore {
         && d.projectId == k.get('currentProjectId', null);
     }
 
+    /** Dokumen absensi lapangan baru: hari ini, semua sesinya berjam server. */
+    function sesiLapanganBaruSah() {
+      return tanggalHariIniWIB(request.resource.data.date)
+        && sesiKosongAtauBerjamServer('checkIn')
+        && sesiKosongAtauBerjamServer('breakStart')
+        && sesiKosongAtauBerjamServer('breakEnd')
+        && sesiKosongAtauBerjamServer('checkOut')
+        && sesiKosongAtauBerjamServer('overtimeStart')
+        && sesiKosongAtauBerjamServer('overtimeEnd');
+    }
+
+    /** Ubahan absensi lapangan: sesi lama utuh, sesi baru berjam server. */
+    function sesiLapanganTetapAtauBaru() {
+      return sesiTetapAtauBaru('checkIn')
+        && sesiTetapAtauBaru('breakStart')
+        && sesiTetapAtauBaru('breakEnd')
+        && sesiTetapAtauBaru('checkOut')
+        && sesiTetapAtauBaru('overtimeStart')
+        && sesiTetapAtauBaru('overtimeEnd');
+    }
+
     match /attendance/{absenId} {
       // Catatan: "resource == null" berarti dokumennya belum ada. Itu
       // keadaan normal saat absen pertama hari itu diperiksa lebih dulu,
@@ -498,8 +597,15 @@ service cloud.firestore {
         && absenId == request.resource.data.employeeId + '_' + request.resource.data.date
         && (
           isAdmin()
-          || (isMandor() && request.resource.data.mandorId == profilSaya().employeeId)
-          || absenDiriSendiri()
+          || (
+            // Mandor dan pekerja sendiri hanya bisa mencatat hari ini dengan
+            // jam server. Admin dikecualikan karena memasukkan catatan lama.
+            sesiLapanganBaruSah()
+            && (
+              (isMandor() && request.resource.data.mandorId == profilSaya().employeeId)
+              || absenDiriSendiri()
+            )
+          )
         );
 
       // Mandor hanya boleh menambah sesi pada catatan miliknya sendiri,
@@ -517,6 +623,9 @@ service cloud.firestore {
             // menulis lagi pada catatan itu. Kalau masih ada yang keliru,
             // jalurnya lewat Admin, supaya tetap berjejak.
             resource.data.isOverridden == false
+            // Hanya hari ini, hanya menambah sesi, dan sesi barunya berjam server.
+            && tanggalHariIniWIB(resource.data.date)
+            && sesiLapanganTetapAtauBaru()
             && (
               (isMandor() && resource.data.mandorId == profilSaya().employeeId)
               || (sudahLogin() && resource.data.employeeId == karyawanSaya())
@@ -966,8 +1075,10 @@ service cloud.firestore {
                 && resource.data.keluar == null
                 && request.resource.data.status == 'DIBATALKAN')
           )
-          && (resource.data.keluar == null || request.resource.data.keluar == resource.data.keluar)
-          && (resource.data.kembali == null || request.resource.data.kembali == resource.data.kembali)
+          // Jam keluar/kembali yang sudah tercatat tidak bisa diubah, dan yang
+          // baru dicatat wajib berjam server (bukan jam HP).
+          && sesiTetapAtauBaru('keluar')
+          && sesiTetapAtauBaru('kembali')
         ) || (
           // HR: "Diketahui oleh", sekali saja.
           (isHR() || isAdmin())
@@ -1198,6 +1309,23 @@ service cloud.firestore {
         && d.isOverridden is bool;
     }
 
+    /** Dokumen absen kantor baru: hari ini, semua sesinya berjam server. */
+    function sesiKantorBaruSah() {
+      return tanggalHariIniWIB(request.resource.data.date)
+        && sesiKosongAtauBerjamServer('masuk')
+        && sesiKosongAtauBerjamServer('istirahat')
+        && sesiKosongAtauBerjamServer('selesaiIstirahat')
+        && sesiKosongAtauBerjamServer('pulang');
+    }
+
+    /** Ubahan absen kantor oleh pemiliknya: sesi lama utuh, sesi baru berjam server. */
+    function sesiKantorTetapAtauBaru() {
+      return sesiTetapAtauBaru('masuk')
+        && sesiTetapAtauBaru('istirahat')
+        && sesiTetapAtauBaru('selesaiIstirahat')
+        && sesiTetapAtauBaru('pulang');
+    }
+
     match /officeAttendance/{absenId} {
       // "resource == null" berarti dokumennya belum ada — keadaan normal
       // saat absen pertama hari itu diperiksa lebih dulu. Harus dijawab
@@ -1215,20 +1343,27 @@ service cloud.firestore {
       // Absen hanya untuk diri sendiri. ID wajib "<kode>_<tanggal>",
       // jadi satu orang mustahil punya dua catatan di satu hari — termasuk
       // kalau tombolnya tertekan dua kali.
+      // Siapa pun yang absen (termasuk HR/Owner) hanya bisa mencatat hari ini
+      // dengan jam server; tidak ada jalur membuat catatan hari lain.
       allow create: if sudahLogin()
         && absenKantorSah()
         && absenId == request.resource.data.employeeId + '_' + request.resource.data.date
+        && sesiKantorBaruSah()
         && (urusKepegawaian() || request.resource.data.employeeId == karyawanSaya());
 
       // Pemiliknya boleh menambah sesi pada catatan hari itu, tetapi tidak
       // boleh menyentuh koreksi dan hasil validasi — itu wilayah Admin.
+      // Sesi yang sudah tersimpan tidak pernah diubah lewat jalur ini, juga
+      // oleh Admin: koreksi jam masuk ke kolom koreksi*, bukan ke sesinya.
       allow update: if absenKantorSah()
         && request.resource.data.employeeId == resource.data.employeeId
         && request.resource.data.date == resource.data.date
+        && sesiKantorTetapAtauBaru()
         && (
           urusKepegawaian()
           || (
             resource.data.employeeId == karyawanSaya()
+            && tanggalHariIniWIB(resource.data.date)
             && request.resource.data.isOverridden == resource.data.isOverridden
             && request.resource.data.koreksiMasuk == resource.data.koreksiMasuk
             && request.resource.data.koreksiPulang == resource.data.koreksiPulang

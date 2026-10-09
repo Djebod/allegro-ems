@@ -46,7 +46,9 @@ import {
   keTanggal,
   NAMA_SESI,
   periksaSesi,
+  tanggalWIB,
 } from "@/lib/absensi";
+import { jamServer, selisihJamPerangkatDetik } from "@/lib/jam-server";
 import { hitungUpahKaryawan, segarkanItem } from "@/lib/payroll";
 
 /**
@@ -406,14 +408,18 @@ export async function catatSesi(opsi: {
   projectId: string;
   sectionId: string;
   mandorId: string;
-  tanggal: string;
   jenis: JenisSesi;
   titik: TitikAbsen;
   photoUrl: string;
   oleh: string;
 }) {
+  // Jam dan tanggal diambil dari server, bukan perangkat: jam HP bisa
+  // disetel mundur lalu sesi pulang tercatat lebih awal (terjadi 9 Okt 2026).
+  const jamKini = await jamServer();
+  const tanggal = tanggalWIB(jamKini);
+
   const db = dbClient();
-  const id = idAbsensi(opsi.karyawan.id, opsi.tanggal);
+  const id = idAbsensi(opsi.karyawan.id, tanggal);
   const ref = doc(db, "attendance", id);
   const snap = await getDoc(ref);
   const sekarang = snap.exists() ? (snap.data() as Partial<Attendance>) : {};
@@ -422,7 +428,8 @@ export async function catatSesi(opsi: {
   if (!cek.boleh) throw new Error(cek.alasan || "Sesi ini tidak bisa dicatat.");
 
   const event: EventAbsen = {
-    waktu: new Date().toISOString(),
+    waktu: jamKini.toISOString(),
+    selisihJamPerangkatDetik: selisihJamPerangkatDetik(jamKini),
     recordedBy: opsi.oleh,
     location: opsi.titik,
     photoUrl: opsi.photoUrl,
@@ -438,7 +445,7 @@ export async function catatSesi(opsi: {
       projectId: opsi.projectId,
       sectionId: opsi.sectionId,
       mandorId: opsi.mandorId,
-      date: opsi.tanggal,
+      date: tanggal,
       workHours: hitung.workHours,
       overtimeHours: hitung.overtimeHours,
       status: hitung.status,
@@ -457,6 +464,7 @@ export async function catatSesi(opsi: {
     await updateDoc(ref, {
       [`${opsi.jenis}.waktu`]: event.waktu,
       [`${opsi.jenis}.recordedAt`]: serverTimestamp(),
+      [`${opsi.jenis}.selisihJamPerangkatDetik`]: event.selisihJamPerangkatDetik,
       [`${opsi.jenis}.recordedBy`]: event.recordedBy,
       [`${opsi.jenis}.location`]: event.location,
       [`${opsi.jenis}.photoUrl`]: event.photoUrl,

@@ -13,6 +13,7 @@ import {
 } from "firebase/firestore";
 import { dbClient } from "@/lib/firebase";
 import { durasiMenit, lebihDuaJam } from "@/lib/izin-keluar";
+import { jamServer, selisihJamPerangkatDetik } from "@/lib/jam-server";
 import type { Employee, IzinKeluar, KeperluanIzinKeluar, SesiIzinKeluar } from "@/types";
 
 const KOLEKSI = "izinKeluar";
@@ -89,7 +90,11 @@ export async function ajukanIzinKeluar(opsi: {
 }
 
 /** Karyawan mencatat keluar atau kembali, dengan swafoto dan GPS. */
-export async function catatSesiIzin(izin: IzinKeluar, jenis: "keluar" | "kembali", sesi: SesiIzinKeluar) {
+export async function catatSesiIzin(
+  izin: IzinKeluar,
+  jenis: "keluar" | "kembali",
+  titik: Omit<SesiIzinKeluar, "waktu" | "recordedAt" | "selisihJamPerangkatDetik">
+) {
   const ref = doc(dbClient(), KOLEKSI, izin.id);
   const kini = (await getDoc(ref)).data() as IzinKeluar | undefined;
   if (!kini) throw new Error("Izin tidak ditemukan.");
@@ -97,6 +102,16 @@ export async function catatSesiIzin(izin: IzinKeluar, jenis: "keluar" | "kembali
   if (jenis === "keluar" && kini.keluar) throw new Error("Jam keluar sudah tercatat.");
   if (jenis === "kembali" && !kini.keluar) throw new Error("Catat keluar kantor dulu.");
   if (jenis === "kembali" && kini.kembali) throw new Error("Jam kembali sudah tercatat.");
+
+  // Jam dari server, bukan perangkat: lama di luar kantor dihitung dari
+  // dua jam ini, jadi keduanya tidak boleh bisa diatur dari jam HP.
+  const jamKini = await jamServer();
+  const sesi = {
+    ...titik,
+    waktu: jamKini.toISOString(),
+    recordedAt: serverTimestamp(),
+    selisihJamPerangkatDetik: selisihJamPerangkatDetik(jamKini),
+  };
 
   if (jenis === "keluar") {
     await updateDoc(ref, { keluar: sesi, updatedAt: serverTimestamp() });

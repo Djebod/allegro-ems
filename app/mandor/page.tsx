@@ -156,7 +156,6 @@ function Isi() {
         projectId: proyekSaya.id,
         sectionId: sayaSendiri.currentSectionId || "",
         mandorId,
-        tanggal,
         jenis: antrean.jenis,
         titik: antrean.titik,
         photoUrl: foto.url,

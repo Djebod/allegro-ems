@@ -48,6 +48,25 @@ export function tanggalHariIni(): string {
 }
 
 /**
+ * Tanggal "YYYY-MM-DD" menurut WIB, apa pun zona waktu perangkatnya.
+ *
+ * Dipakai untuk tanggal dokumen absen yang dibentuk dari jam server
+ * (lihat lib/jam-server.ts). keTanggal() tidak cocok di sini karena
+ * mengikuti zona perangkat, dan rules memeriksa tanggal absen terhadap
+ * jam server yang digeser ke WIB.
+ */
+export function tanggalWIB(d: Date): string {
+  const bagian = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Jakarta",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(d);
+  const ambil = (jenis: string) => bagian.find((b) => b.type === jenis)?.value ?? "";
+  return `${ambil("year")}-${ambil("month")}-${ambil("day")}`;
+}
+
+/**
  * Memecah waktu ISO menjadi jam dan menit WIB, dikunci ke Asia/Jakarta -
  * bukan zona waktu perangkat. Dipakai jamDari() dan keKotakJam() di bawah.
  *

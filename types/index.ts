@@ -243,8 +243,13 @@ export interface ValidasiEvent {
 }
 
 export interface EventAbsen {
-  /** Jam menurut perangkat, untuk ditampilkan. */
+  /**
+   * Jam ISO saat sesi dicatat. Sejak 9 Okt 2026 diambil dari jam server
+   * (lib/jam-server.ts); catatan sebelumnya memakai jam perangkat.
+   */
   waktu: string;
+  /** Selisih jam perangkat terhadap jam server saat mencatat, detik (positif = perangkat lebih maju). */
+  selisihJamPerangkatDetik?: number;
   /**
    * Jam hasil koreksi Admin. Kalau terisi, inilah yang dipakai
    * menghitung, dan jam aslinya tetap tersimpan di atas.
@@ -641,8 +646,11 @@ export interface Kantor {
 /* ---------------- Absensi kantor ---------------- */
 
 export interface EventAbsenKantor {
+  /** Jam ISO dari server (sejak 9 Okt 2026); catatan sebelumnya dari jam perangkat. */
   waktu: string;
   recordedAt?: unknown;
+  /** Selisih jam perangkat terhadap jam server saat mencatat, detik (positif = perangkat lebih maju). */
+  selisihJamPerangkatDetik?: number;
   location: TitikAbsen;
   photoUrl: string;
   /** Absen dari luar jangkauan kantor mana pun. */
@@ -868,7 +876,11 @@ export type StatusIzinKeluar = "MENUNGGU" | "DISETUJUI" | "DITOLAK" | "DIBATALKA
 
 /** Sesi keluar/kembali, dicatat karyawan sendiri dengan swafoto dan GPS. */
 export interface SesiIzinKeluar {
+  /** Jam ISO dari server (sejak 9 Okt 2026); catatan sebelumnya dari jam perangkat. */
   waktu: string;
+  recordedAt?: unknown;
+  /** Selisih jam perangkat terhadap jam server saat mencatat, detik. */
+  selisihJamPerangkatDetik?: number;
   photoUrl: string;
   latitude: number;
   longitude: number;

@@ -200,7 +200,6 @@ function Isi() {
       await denganBatasWaktu(
         catatAbsenKantor({
           karyawan,
-          tanggal,
           jenis: jenisTercatat,
           titik,
           photoUrl: foto.url,

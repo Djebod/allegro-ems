@@ -89,6 +89,12 @@ Pengecualian: tanggal yang **dibaca dari sel Excel** justru harus memakai `getUT
 
 Pakai **`jamWIB()`** di `lib/kantor.ts`, yang zona waktunya dikunci ke Asia/Jakarta. Selisih jam (jam kerja lapangan) aman karena dihitung dari dua waktu penuh, bukan dari teks jamnya.
 
+### 5.1f Jam absen dari server, bukan perangkat (9 Okt 2026)
+
+Jam laptop/HP bisa disetel bebas: pernah absen masuk jam 9, jam laptop dimundurkan ke 5, dan absen pulang diterima dengan jam 5. Sekarang **semua jalur absen** (kantor, lapangan, izin keluar) mengambil jam lewat `jamServer()` di `lib/jam-server.ts`: menulis `serverTimestamp()` ke `jamServer/{uid}` lalu membacanya kembali dengan `getDocFromServer`. Tanggal dokumennya dari `tanggalWIB()` di `lib/absensi.ts`, bukan `tanggalHariIni()`. Fungsi `catatAbsenKantor`, `catatSesi`, dan `catatSesiIzin` **tidak lagi menerima tanggal/waktu dari pemanggil**. Selisih jam perangkat disimpan di `selisihJamPerangkatDetik` pada tiap sesi, untuk dilihat Admin.
+
+Rules menegakkannya: sesi baru wajib `recordedAt == request.time`, kolom `waktu` harus dalam 5 menit dari jam server (`waktuDekatJamServer`), tanggal dokumen harus hari ini WIB (`tanggalHariIniWIB`), dan sesi yang sudah tersimpan tidak bisa diubah lewat jalur karyawan/mandor (`sesiTetapAtauBaru`). Jangan pernah menulis sesi absen dengan `new Date()` lagi. Kalau absen selalu ditolak "insufficient permissions" setelah rules ini di-publish, curigai `angkaDuaDigit`/`int()` pada potongan teks tanggal — belum pernah diuji di Firestore sungguhan.
+
 ### 5.1c Foto absensi hanya dari kamera
 
 Semua foto absensi (absen kantor, izin keluar, absensi lapangan) lewat `components/KameraBelakang.tsx`. Jangan pernah menambah `<input type="file">` untuk foto absensi: di komputer atribut `capture` diabaikan dan jendela pilih berkas terbuka, sehingga foto lama bisa diunggah (terjadi 28 Sep 2026). Jalur cadangan hanya untuk HP (`perangkatSeluler`) dan menolak foto yang bukan baru diambil (`fotoMasihBaru`, `lib/kamera.ts`).
@@ -327,7 +333,8 @@ lib/          aturan bisnis, akses data, util
   tanda-tangan.ts unggah tanda tangan revisi absen
   sp.ts           aturan surat peringatan
   jadwal.ts       jadwal kerja kantor
-  absensi.ts      absensi lapangan + keTanggal()
+  absensi.ts      absensi lapangan + keTanggal() + tanggalWIB()
+  jam-server.ts   jam server Firestore untuk semua jalur absen
   ekspor.ts       Excel berkop Allegro
   impor-karyawan.ts  template & pembaca impor
 types/        model data
