@@ -52,11 +52,17 @@ git push
 
 ---
 
-## 4. firestore.rules harus di-publish manual
+## 4. firestore.rules harus di-publish manual, dan BUKAN berkas ini yang di-publish
 
-`git push` **tidak** memperbarui aturan Firestore. Setiap kali `firestore.rules` berubah:
+**Firestore ini dipakai bersama** aplikasi Allegro Project (`D:\project\allegro-project`, repo `Djebod/allegro-project`). Satu database hanya punya satu rules, dan yang di-publish terakhir menimpa semuanya. `firestore.rules` di repo ini menutup semua koleksi yang tidak disebut, jadi **mem-publish berkas ini akan mematikan Allegro Project** (pernah terjadi 9 Okt 2026).
 
-Firebase Console → Firestore Database → tab Rules → hapus isi lama → tempel yang baru → **Publish**.
+Berkas yang benar untuk di-publish: `D:\project\allegro-project\database\schema\firestore-rules-gabungan.rules`. Isinya bagian EMS (salinan `firestore.rules` di sini) ditambah blok `ap*` milik Allegro Project dan beberapa ubahan bertanda `[ADMIN PROYEK]` di blok `users`, `undangan`, dan `projects`.
+
+Setiap kali `firestore.rules` di repo ini berubah:
+
+1. Terapkan perubahan yang sama ke berkas gabungan itu. Cara cepat: `git diff <commit lama> HEAD -- firestore.rules`, lalu `patch -p1 -F3` ke berkas gabungan (hanya hunk judul yang akan gagal, itu memang beda).
+2. Commit dan push di repo allegro-project.
+3. Firebase Console → Firestore Database → tab Rules → hapus isi lama → tempel **isi berkas gabungan** → **Publish**.
 
 Kalau aturannya tidak di-publish, gejalanya "data tidak bisa dibaca" atau "Missing or insufficient permissions" — dan itu terlihat seperti bug kode, padahal bukan.
 
