@@ -1,13 +1,15 @@
 rules_version = '2';
 
 // ============================================================
-//  ABSENSI & PAYROLL PROYEK — Allegro Global Construction
-//  Security Rules — Tahap 20 (pengakuan lembur, tanda tangan revisi,
-//  rekening diisi sendiri, tukang absen sendiri)
-//  users, projects, sections, employees, employeePrivate,
-//  salaryRates, employeeAssignments, attendance, attendanceCorrections,
-//  employeeLoans, loanLocks, loanRepayments, payroll, payrollItems,
-//  overtimeRequests, officeAttendanceCorrections
+//  FIRESTORE RULES GABUNGAN — Allegro Global Construction
+//
+//  Satu Firebase project dipakai dua aplikasi:
+//    1. ALLEGRO EMS      — absensi, payroll, HRIS   (Tahap 20: pengakuan lembur, tanda tangan revisi, rekening diisi sendiri, tukang absen sendiri)
+//    2. ALLEGRO PROJECT  — admin proyek (Fase 1)    (blok ap* di bagian bawah)
+//
+//  Bagian EMS disalin apa adanya dari rules Tahap 20 (firestore.rules di repo allegro-ems).
+//  Semua tambahan untuk aplikasi Admin Proyek diberi tanda komentar
+//  "[ADMIN PROYEK]" supaya mudah ditelusuri dan dicabut bila perlu.
 //
 //  Prinsip: DEFAULT DENY. Semua yang tidak disebut di sini ditolak.
 //  Menu yang disembunyikan di layar BUKAN keamanan. Aturan di file
@@ -28,6 +30,19 @@ service cloud.firestore {
 
     function emailUser() {
       return request.auth.token.email.lower();
+    }
+
+    /** Email yang dipakai sebagai dasar hak (super admin, undangan) wajib
+        sudah terverifikasi. Login Google selalu terverifikasi; ini menutup
+        jalan bila kelak provider lain (email/password) ikut dinyalakan. */
+    /** Alamat foto / tanda tangan wajib berasal dari Cloudinary. Tanpa ini,
+        field foto bisa diisi alamat apa saja (termasuk javascript:) lewat API. */
+    function fotoCloudinary(u) {
+      return u is string && u.matches('https://res[.]cloudinary[.]com/.+');
+    }
+
+    function emailTerverifikasi() {
+      return request.auth.token.email_verified == true;
     }
 
     function profilSaya() {
@@ -61,10 +76,65 @@ service cloud.firestore {
       return sudahLogin() && profilSaya().status == 'ACTIVE' && profilSaya().role != 'PENDING';
     }
 
+    // ---------- [ADMIN PROYEK] fungsi bantu aplikasi admin proyek ----------
+    // Peran aplikasi Admin Proyek disimpan di field TERPISAH: roleProyek.
+    // Field role milik EMS tidak disentuh, jadi hak di EMS tetap utuh.
+
+    function roleProyek() {
+      return profilSaya().get('roleProyek', 'PENDING');
+    }
+
+    function berperanProyek(daftar) {
+      return sudahLogin()
+        && profilSaya().status == 'ACTIVE'
+        && roleProyek() in daftar;
+    }
+
+    function superProyek() {
+      return sudahLogin() && emailTerverifikasi() && emailUser() == emailSuperAdmin();
+    }
+
+    /** Semua orang DALAM yang sudah diberi peran di aplikasi Admin Proyek.
+        Peran KLIEN sengaja TIDAK pernah masuk daftar ini. */
+    function wargaProyek() {
+      return superProyek() || berperanProyek([
+        'SUPER_ADMIN', 'DIREKSI', 'HEAD_ADMIN', 'PURCHASING',
+        'ADMIN_PROYEK', 'ADMIN_DATA', 'PLANNER', 'QS', 'KOORDINATOR', 'PIC',
+        'STAF_LAPANGAN'
+      ]);
+    }
+
+    // ---------- [ADMIN PROYEK] Fase 5 — klien ----------
+    // KLIEN adalah orang luar. Ia TIDAK pernah masuk wargaProyek(); haknya
+    // diberikan satu per satu, hanya baca, dan hanya untuk proyeknya sendiri.
+
+    function klienAktif() {
+      return sudahLogin()
+        && profilSaya().status == 'ACTIVE'
+        && roleProyek() == 'KLIEN';
+    }
+
+    /** Daftar kode proyek yang boleh dibuka klien ini. */
+    function proyekKlienSaya() {
+      return profilSaya().get('proyekKlien', []);
+    }
+
+    function klienPunya(kodeProyek) {
+      return klienAktif() && kodeProyek in proyekKlienSaya();
+    }
+
+    /** Yang boleh menyetujui & mengesahkan di aplikasi Admin Proyek. */
+    function atasanProyek() {
+      return superProyek() || berperanProyek(['SUPER_ADMIN', 'DIREKSI', 'HEAD_ADMIN']);
+    }
+
     // ---------- users ----------
     match /users/{uid} {
 
       allow read: if sudahLogin() && (request.auth.uid == uid || isAdmin());
+      // [ADMIN PROYEK] Atasan aplikasi ini perlu melihat daftar akun untuk
+      // memberi peran dan membuka akses klien.
+      allow read: if atasanProyek();
 
       // Pendaftaran diri sendiri saat login Google pertama kali.
       // Semua orang masuk sebagai PENDING, kecuali super admin.
@@ -73,10 +143,16 @@ service cloud.firestore {
         && request.resource.data.email == emailUser()
         && request.resource.data.projectIds.size() == 0
         && request.resource.data.sectionIds.size() == 0
+        // [ADMIN PROYEK] Peran aplikasi Admin Proyek tidak boleh diisi sendiri
+        // saat mendaftar. Tanpa dua baris ini, siapa pun bisa "menanam"
+        // roleProyek tinggi yang hidup begitu akunnya diaktifkan.
+        && request.resource.data.get('roleProyek', 'PENDING') == 'PENDING'
+        && request.resource.data.get('proyekKlien', []).size() == 0
         // Sambungan karyawan menentukan data siapa yang boleh dibaca
         // (slip, absen, cuti), jadi tidak boleh diisi sendiri saat mendaftar.
         && (
           (emailUser() == emailSuperAdmin()
+            && emailTerverifikasi()
             && request.resource.data.role == 'ADMIN'
             && request.resource.data.status == 'ACTIVE'
             && request.resource.data.get('employeeId', null) == null)
@@ -89,6 +165,7 @@ service cloud.firestore {
           // Sudah diundang Admin: peran dan sambungan karyawannya harus
           // PERSIS sama dengan undangan, jadi tidak bisa diganti sendiri.
           (emailUser() != emailSuperAdmin()
+            && emailTerverifikasi()
             && exists(/databases/$(database)/documents/undangan/$(emailUser()))
             && request.resource.data.role == get(/databases/$(database)/documents/undangan/$(emailUser())).data.role
             && request.resource.data.status == 'ACTIVE'
@@ -100,6 +177,30 @@ service cloud.firestore {
         && request.resource.data.email == resource.data.email
         && (resource.data.email != emailSuperAdmin() || emailUser() == emailSuperAdmin());
 
+      // [ADMIN PROYEK] Atasan aplikasi ini boleh mengatur roleProyek dan
+      // proyekKlien SAJA. Seluruh field milik EMS wajib sama persis, sehingga
+      // hak di EMS tidak bisa dinaikkan lewat aplikasi ini.
+      allow update: if atasanProyek()
+        && request.resource.data.diff(resource.data).affectedKeys()
+             .hasOnly(['roleProyek', 'proyekKlien', 'status'])
+        && resource.data.email != emailSuperAdmin()
+        && request.resource.data.email == resource.data.email
+        && request.resource.data.role == resource.data.role
+        // Status boleh diaktifkan DARI SINI hanya untuk akun yang TIDAK punya
+        // peran EMS (role masih PENDING) — misalnya akun klien. Dengan begitu
+        // akun itu hidup di aplikasi Admin Proyek, tetapi di EMS tetap nol akses
+        // karena semua fungsi EMS mensyaratkan role != 'PENDING'.
+        && (request.resource.data.status == resource.data.status
+            || (resource.data.role == 'PENDING'
+                && request.resource.data.role == 'PENDING'
+                && request.resource.data.status in ['ACTIVE', 'PENDING']))
+        && request.resource.data.get('employeeId', null) == resource.data.get('employeeId', null)
+        && request.resource.data.get('projectIds', []) == resource.data.get('projectIds', [])
+        && request.resource.data.get('sectionIds', []) == resource.data.get('sectionIds', [])
+        // Tidak boleh mengangkat diri sendiri, dan tidak boleh mencetak super admin baru.
+        && request.auth.uid != uid
+        && request.resource.data.get('roleProyek', 'PENDING') != 'SUPER_ADMIN';
+
       allow delete: if false;
     }
 
@@ -108,7 +209,7 @@ service cloud.firestore {
     // karyawan yang disambungkan. ID dokumen = email huruf kecil.
     // Dipakai sekali saat login pertama, lalu dihapus pemiliknya.
     match /undangan/{email} {
-      allow read: if isAdmin() || (sudahLogin() && email == emailUser());
+      allow read: if isAdmin() || (sudahLogin() && emailTerverifikasi() && email == emailUser());
       allow create: if isAdmin()
         && email == email.lower()
         && email != emailSuperAdmin()
@@ -116,7 +217,7 @@ service cloud.firestore {
         && request.resource.data.role in ['ADMIN', 'HR', 'OWNER', 'FINANCE', 'MANDOR', 'KARYAWAN']
         && (request.resource.data.employeeId == null || request.resource.data.employeeId is string);
       allow update: if false;
-      allow delete: if isAdmin() || (sudahLogin() && email == emailUser());
+      allow delete: if isAdmin() || (sudahLogin() && emailTerverifikasi() && email == emailUser());
     }
 
     // ---------- projects ----------
@@ -134,13 +235,22 @@ service cloud.firestore {
 
     match /projects/{projectId} {
       // Mandor ikut boleh membaca: koordinat proyek dibutuhkan saat absensi.
-      allow read: if pegawaiAktif();
+      // [ADMIN PROYEK] wargaProyek() ditambahkan supaya staf admin proyek
+      // yang belum punya peran EMS tetap bisa melihat daftar proyek.
+      allow read: if pegawaiAktif() || wargaProyek();
+      // [ADMIN PROYEK] Fase 5 — klien boleh membuka data proyeknya sendiri
+      // satu per satu (get), bukan daftar seluruh proyek (list).
+      allow get: if klienPunya(projectId);
 
       // Kode proyek = ID dokumen, jadi keunikannya dijamin Firestore.
-      allow create: if isAdmin() && proyekSah() && request.resource.data.code == projectId;
+      // [ADMIN PROYEK] master proyek dipegang aplikasi Admin Proyek, jadi
+      // Head Admin / Direksi ikut boleh membuat & mengubahnya.
+      allow create: if (isAdmin() || atasanProyek()) && proyekSah()
+        && request.resource.data.code == projectId;
 
       // Kode tidak boleh berubah setelah dibuat.
-      allow update: if isAdmin() && proyekSah() && request.resource.data.code == resource.data.code;
+      allow update: if (isAdmin() || atasanProyek()) && proyekSah()
+        && request.resource.data.code == resource.data.code;
 
       // Proyek tidak dihapus, cukup diubah statusnya jadi ARCHIVED.
       allow delete: if false;
@@ -191,7 +301,11 @@ service cloud.firestore {
             && resource.data.atasanId == karyawanSaya())
         || (isMandor()
             && resource != null
-            && resource.data.currentMandorId == profilSaya().employeeId);
+            && resource.data.currentMandorId == profilSaya().employeeId)
+        // [ADMIN PROYEK] nama tukang & mandor dibutuhkan untuk rekap gaji,
+        // klaim, dan pengajuan transfer. Hanya membaca, tidak menulis.
+        || atasanProyek()
+        || berperanProyek(['ADMIN_PROYEK']);
 
       allow create: if isAdmin() && karyawanSah()
         && request.resource.data.employeeCode == employeeId;
@@ -575,7 +689,11 @@ service cloud.firestore {
     }
 
     match /payroll/{payrollId} {
-      allow read: if isAdmin() || isFinance() || isOwner();
+      // [ADMIN PROYEK] Head Admin, Direksi, Admin Proyek, dan Admin Data
+      // ikut MEMBACA: rekap upah mingguan inilah yang masuk ke antrean
+      // Pengajuan Transfer. Menulis tetap hanya Admin/Finance EMS.
+      allow read: if isAdmin() || isFinance() || isOwner()
+        || atasanProyek() || berperanProyek(['ADMIN_PROYEK', 'ADMIN_DATA']);
 
       // ID dokumen mengunci satu periode per section, sehingga periode
       // yang sama tidak bisa dihitung dua kali.
@@ -605,7 +723,9 @@ service cloud.firestore {
 
     // ---------- payrollItems ----------
     match /payrollItems/{itemId} {
-      allow read: if isAdmin() || isFinance() || isOwner();
+      // [ADMIN PROYEK] ikut membaca, sama alasannya dengan payroll.
+      allow read: if isAdmin() || isFinance() || isOwner()
+        || atasanProyek() || berperanProyek(['ADMIN_PROYEK', 'ADMIN_DATA']);
 
       allow create: if (isAdmin() || isFinance())
         && request.resource.data.payrollId is string
@@ -1121,6 +1241,636 @@ service cloud.firestore {
         );
 
       allow delete: if false;
+    }
+
+    // ============================================================
+    // ================  ALLEGRO PROJECT — ADMIN PROYEK  ===========
+    //  Koleksi baru berawalan "ap" supaya tidak pernah bentrok
+    //  dengan koleksi EMS. Fase 1: toko, katalog material, dan RAB.
+    // ============================================================
+
+    // ---------- apSuppliers (toko / supplier) ----------
+    function tokoSah() {
+      let d = request.resource.data;
+      return d.nama is string && d.nama.size() > 0
+        && d.status in ['BARU', 'TERVERIFIKASI', 'BLOKIR'];
+    }
+
+    /** Rekening toko sama persis dengan yang tersimpan (kolom kosong = ''). */
+    function rekeningTokoTetap() {
+      let lama = resource.data;
+      let baru = request.resource.data;
+      return baru.get('bankPpn', '') == lama.get('bankPpn', '')
+        && baru.get('rekPpn', '') == lama.get('rekPpn', '')
+        && baru.get('atasNamaPpn', '') == lama.get('atasNamaPpn', '')
+        && baru.get('bankNonPpn', '') == lama.get('bankNonPpn', '')
+        && baru.get('rekNonPpn', '') == lama.get('rekNonPpn', '')
+        && baru.get('atasNamaNonPpn', '') == lama.get('atasNamaNonPpn', '');
+    }
+
+    match /apSuppliers/{tokoId} {
+      // Dokumen toko memuat nomor rekening, jadi hanya dibaca peran yang
+      // memang punya menu Toko (lihat "toko.lihat" di roles.js).
+      allow read: if atasanProyek()
+        || berperanProyek(['PURCHASING', 'ADMIN_PROYEK', 'ADMIN_DATA', 'PLANNER']);
+
+      // Purchasing boleh mendaftarkan toko, tetapi selalu berstatus BARU.
+      // Mengesahkan toko (TERVERIFIKASI) hanya Head Admin / Direksi —
+      // itulah pengganti "survei toko" yang selama ini lewat chat.
+      allow create: if tokoSah()
+        && (
+          atasanProyek()
+          || (berperanProyek(['PURCHASING']) && request.resource.data.status == 'BARU')
+        );
+
+      // Purchasing boleh memperbarui datanya, asal tidak mengubah status.
+      // Kalau rekeningnya ikut diganti, toko WAJIB turun lagi ke BARU supaya
+      // disahkan ulang — mengganti rekening toko yang sudah sah adalah cara
+      // klasik membelokkan pembayaran.
+      allow update: if tokoSah()
+        && (
+          atasanProyek()
+          || (berperanProyek(['PURCHASING'])
+              && (
+                (request.resource.data.status == resource.data.status && rekeningTokoTetap())
+                || (resource.data.status in ['BARU', 'TERVERIFIKASI']
+                    && request.resource.data.status == 'BARU')
+              ))
+        );
+
+      // Toko tidak dihapus sembarangan; cukup diblokir. Hanya atasan
+      // yang boleh menghapus, itu pun untuk salah input.
+      allow delete: if atasanProyek();
+    }
+
+    // ---------- apMaterials (katalog material) ----------
+    function materialSah() {
+      let d = request.resource.data;
+      return d.nama is string && d.nama.size() > 0
+        && d.satuan is string && d.satuan.size() > 0;
+    }
+
+    match /apMaterials/{materialId} {
+      allow read: if wargaProyek();
+      allow create, update: if materialSah()
+        && (atasanProyek() || berperanProyek(['PLANNER', 'PURCHASING']));
+      allow delete: if atasanProyek();
+    }
+
+    // ---------- apRabHeaders (satu dokumen per import RAB) ----------
+    function bolehImportRab() {
+      return atasanProyek() || berperanProyek(['QS']);
+    }
+
+    match /apRabHeaders/{rabId} {
+      allow read: if wargaProyek();
+
+      allow create: if bolehImportRab()
+        && request.resource.data.projectCode is string
+        && request.resource.data.projectCode.size() > 0
+        && request.resource.data.totalRab is number
+        && request.resource.data.jumlahItem is number
+        && request.resource.data.aktif is bool;
+
+      // Yang boleh berubah hanya penanda versi aktif. Angka RAB beku:
+      // kalau nilainya bisa diketik ulang, audit biaya kehilangan dasar.
+      // Revisi dilakukan dengan import versi baru.
+      allow update: if bolehImportRab()
+        && request.resource.data.projectCode == resource.data.projectCode
+        && request.resource.data.versi == resource.data.versi
+        && request.resource.data.totalRab == resource.data.totalRab
+        && request.resource.data.jumlahItem == resource.data.jumlahItem;
+
+      allow delete: if false;
+    }
+
+    // ---------- apRabItems (baris RAB) ----------
+    match /apRabItems/{itemId} {
+      allow read: if wargaProyek();
+
+      allow create: if bolehImportRab()
+        && request.resource.data.rabId is string
+        && request.resource.data.rabId.size() > 0
+        && request.resource.data.projectCode is string
+        && request.resource.data.projectCode.size() > 0
+        && request.resource.data.totalHarga is number;
+
+      // Baris RAB adalah salinan dokumen anggaran: tambah-saja.
+      allow update, delete: if false;
+    }
+
+
+    // ---------- [ADMIN PROYEK] Fase 2: PB, PO, hutang, klaim, transfer ----------
+
+    function pengajuProyek() {
+      return superProyek() || berperanProyek(['SUPER_ADMIN','HEAD_ADMIN','PLANNER','PIC','KOORDINATOR']);
+    }
+    function purchasing() {
+      return superProyek() || berperanProyek(['SUPER_ADMIN','HEAD_ADMIN','PURCHASING']);
+    }
+    function adminProyek() {
+      return superProyek() || berperanProyek(['SUPER_ADMIN','HEAD_ADMIN','ADMIN_PROYEK']);
+    }
+    function kasir() {
+      // Yang boleh menandai sudah dibayar & mengupload bukti transfer.
+      return superProyek() || berperanProyek(['SUPER_ADMIN','HEAD_ADMIN','ADMIN_DATA']);
+    }
+
+    // ---------- apMaterialRequests (PB) ----------
+    match /apMaterialRequests/{pbId} {
+      allow read: if wargaProyek();
+
+      allow create: if pengajuProyek()
+        && request.resource.data.projectCode is string
+        && request.resource.data.projectCode.size() > 0
+        && request.resource.data.status == 'DIAJUKAN'
+        && request.resource.data.items.size() > 0;
+
+      // Verifikasi PB hanya Planner / Head Admin. Purchasing boleh menandai
+      // "DIPROSES" saat PB dipakai jadi PO. Isi permintaannya tidak boleh
+      // diubah setelah diajukan, supaya yang disetujui = yang diminta.
+      allow update: if request.resource.data.projectCode == resource.data.projectCode
+        && request.resource.data.items == resource.data.items
+        && (
+          (
+            (superProyek() || berperanProyek(['SUPER_ADMIN','HEAD_ADMIN','PLANNER']))
+            && resource.data.status == 'DIAJUKAN'
+            && request.resource.data.status in ['DIVERIFIKASI','DITOLAK']
+          ) || (
+            // Purchasing hanya boleh memproses PB yang SUDAH diverifikasi.
+            purchasing()
+            && (
+              (resource.data.status == 'DIVERIFIKASI' && request.resource.data.status == 'DIPROSES')
+              || (resource.data.status == 'DIPROSES' && request.resource.data.status in ['DIPROSES','SELESAI'])
+            )
+          )
+        );
+
+      allow delete: if false;
+    }
+
+    // ---------- apPurchaseOrders (PO + nota) ----------
+    match /apPurchaseOrders/{poId} {
+      // PO memuat harga beli; Staf Lapangan tidak punya menu PO.
+      allow read: if atasanProyek()
+        || berperanProyek(['PURCHASING','ADMIN_PROYEK','ADMIN_DATA','PLANNER','QS','KOORDINATOR','PIC']);
+
+      // PO lahir langsung sebagai MENUNGGU_APPROVAL: tidak ada PO yang
+      // "sudah disetujui" sejak awal.
+      allow create: if purchasing()
+        && request.resource.data.status == 'MENUNGGU_APPROVAL'
+        && request.resource.data.projectCode is string
+        && request.resource.data.supplierId is string
+        && request.resource.data.subtotal is number
+        && request.resource.data.items.size() > 0;
+
+      allow update: if (
+          // Approval: hanya Head Admin / Direksi, dan nilainya tidak boleh
+          // ikut berubah saat menyetujui.
+          atasanProyek()
+          && resource.data.status == 'MENUNGGU_APPROVAL'
+          && request.resource.data.status in ['DISETUJUI','DIKEMBALIKAN']
+          && request.resource.data.subtotal == resource.data.subtotal
+          && request.resource.data.supplierId == resource.data.supplierId
+          && request.resource.data.items == resource.data.items
+        ) || (
+          // Purchasing: memperbaiki PO yang dikembalikan, mengisi nota,
+          // meneruskan pembayaran, dan menandai pengiriman.
+          purchasing()
+          && request.resource.data.projectCode == resource.data.projectCode
+          // Nilai, toko, dan item hanya boleh diperbaiki selagi PO
+          // DIKEMBALIKAN. Setelah disetujui semuanya beku — kalau tidak,
+          // persetujuan atasan bisa diakali dengan mengubah angka belakangan.
+          && (resource.data.status == 'DIKEMBALIKAN'
+              || (request.resource.data.subtotal == resource.data.subtotal
+                  && request.resource.data.supplierId == resource.data.supplierId
+                  && request.resource.data.items == resource.data.items))
+          && (
+            (resource.data.status == 'DIKEMBALIKAN' && request.resource.data.status == 'MENUNGGU_APPROVAL')
+            || (resource.data.status in ['DISETUJUI','NOTA_DITERIMA']
+                && request.resource.data.status in ['NOTA_DITERIMA','NOTA_TERVERIFIKASI']
+                // Foto nota boleh kosong, tetapi kalau diisi wajib dari Cloudinary.
+                && (request.resource.data.nota.get('fotoUrl', '') == ''
+                    || fotoCloudinary(request.resource.data.nota.fotoUrl))
+                // Nota baru boleh dinyatakan terverifikasi bila nilainya
+                // tidak melebihi PO yang disetujui (Rp 1 = pembulatan).
+                && (request.resource.data.status != 'NOTA_TERVERIFIKASI'
+                    || (request.resource.data.nota.nilaiNota is number
+                        && request.resource.data.nota.nilaiNota <= resource.data.subtotal + 1)))
+            // Sesudah terverifikasi, isi notanya ikut beku.
+            || (resource.data.status == 'NOTA_TERVERIFIKASI'
+                && request.resource.data.status in ['DIBAYAR','KONTRA_BON']
+                && request.resource.data.get('nota', null) == resource.data.get('nota', null))
+            || (resource.data.status in ['DIBAYAR','KONTRA_BON'] && request.resource.data.status == 'DIKIRIM'
+                && request.resource.data.get('nota', null) == resource.data.get('nota', null))
+          )
+        ) || (
+          // Penerimaan barang di lokasi boleh dicatat PIC / Koordinator.
+          (purchasing() || berperanProyek(['PIC','KOORDINATOR']))
+          && resource.data.status in ['DIBAYAR','KONTRA_BON','DIKIRIM']
+          && request.resource.data.status == 'DITERIMA'
+          && request.resource.data.subtotal == resource.data.subtotal
+        );
+
+      allow delete: if false;
+    }
+
+    // ---------- apDebts (kontra bon) ----------
+    match /apDebts/{hutangId} {
+      allow read: if atasanProyek()
+        || berperanProyek(['PURCHASING','ADMIN_PROYEK','ADMIN_DATA']);
+
+      // Lahir dari PO tempo (poId terisi) oleh Purchasing, atau dicatat manual
+      // (poId kosong, nota tempo tanpa PO) oleh Purchasing / Admin Proyek.
+      // Rincian item per pos RAB wajib ada supaya masuk laporan realisasi.
+      allow create: if (purchasing() || adminProyek())
+        && request.resource.data.poId is string
+        && request.resource.data.nominal is number
+        && request.resource.data.nominal > 0
+        && request.resource.data.jatuhTempo is string
+        && request.resource.data.get('items', []) is list
+        && request.resource.data.status == 'BELUM_JATUH_TEMPO';
+
+      // Nominal, supplier, item, dan jatuh tempo beku. Yang bergerak hanya status.
+      allow update: if (adminProyek() || purchasing())
+        && request.resource.data.nominal == resource.data.nominal
+        && request.resource.data.supplierId == resource.data.supplierId
+        && request.resource.data.jatuhTempo == resource.data.jatuhTempo
+        && request.resource.data.poId == resource.data.poId
+        && request.resource.data.get('items', null) == resource.data.get('items', null)
+        // Alurnya searah: belum dibayar -> diajukan -> lunas. Hutang tidak
+        // bisa langsung dinyatakan lunas tanpa pernah diajukan pembayarannya.
+        && (
+          (resource.data.status in ['BELUM_JATUH_TEMPO','JATUH_TEMPO']
+            && request.resource.data.status in ['BELUM_JATUH_TEMPO','JATUH_TEMPO','DIAJUKAN'])
+          || (resource.data.status == 'DIAJUKAN'
+            && request.resource.data.status in ['DIAJUKAN','LUNAS'])
+        );
+
+      allow delete: if false;
+    }
+
+    // ---------- apClaims (klaim / reimburse) ----------
+    match /apClaims/{klaimId} {
+      // Klaim memuat rekening pribadi pengaju. QS & Planner ikut membaca
+      // karena laporan RAB vs realisasi menghitung klaim.
+      allow read: if atasanProyek()
+        || berperanProyek(['ADMIN_PROYEK','ADMIN_DATA','PIC','KOORDINATOR','QS','PLANNER']);
+
+      // Wajib berfoto bukti sejak awal, lahir sebagai DIAJUKAN, dan memuat
+      // rincian barang (tiap baris ditandai pos RAB) — nominal = jumlah item.
+      allow create: if (superProyek() || berperanProyek(['SUPER_ADMIN','HEAD_ADMIN','ADMIN_PROYEK','PIC','KOORDINATOR']))
+        && request.resource.data.status == 'DIAJUKAN'
+        && request.resource.data.nominal is number
+        && request.resource.data.nominal > 0
+        && request.resource.data.items is list
+        && request.resource.data.items.size() > 0
+        && fotoCloudinary(request.resource.data.fotoUrl);
+
+      // Nominal, rincian item, dan bukti tidak boleh diubah saat diperiksa/disetujui.
+      allow update: if (adminProyek() || atasanProyek())
+        && request.resource.data.nominal == resource.data.nominal
+        && request.resource.data.get('items', null) == resource.data.get('items', null)
+        && request.resource.data.fotoUrl == resource.data.fotoUrl
+        && request.resource.data.diajukanOleh == resource.data.diajukanOleh
+        && request.resource.data.projectCode == resource.data.projectCode
+        // Rekening penerima ikut beku: yang dibayar = yang diajukan.
+        && request.resource.data.get('penerima', null) == resource.data.get('penerima', null)
+        // Alur status dijaga di sini. DIBAYAR hanya bisa sesudah DISETUJUI.
+        && (
+          (resource.data.status == 'DIAJUKAN'
+            && request.resource.data.status in ['DIPERIKSA','DIKEMBALIKAN'])
+          || (resource.data.status == 'DIPERIKSA'
+            && request.resource.data.status == 'DIKEMBALIKAN')
+          // Menyetujui hanya Head Admin / Direksi, dan bukan klaimnya sendiri.
+          || (resource.data.status in ['DIAJUKAN','DIPERIKSA']
+            && request.resource.data.status == 'DISETUJUI'
+            && atasanProyek()
+            && resource.data.diajukanOleh != emailUser())
+          || (resource.data.status == 'DISETUJUI'
+            && request.resource.data.status == 'DIBAYAR')
+        );
+
+      allow delete: if false;
+    }
+
+    // ---------- apPaymentRequests (antrean pengajuan transfer) ----------
+    /** Pengajuan transfer ini lahir dari klaim yang sah: klaimnya sudah
+        disetujui, angka & penerimanya sama, dan klaim itu bukan milik
+        orang yang sekarang hendak menyetujui transfernya. */
+    function transferDariKlaimSah() {
+      let klaim = get(/databases/$(database)/documents/apClaims/$(resource.data.refId)).data;
+      return resource.data.jenis == 'KLAIM'
+        && klaim.status in ['DISETUJUI','DIBAYAR']
+        && klaim.nominal == resource.data.nominal
+        && klaim.get('penerima', null) == resource.data.get('penerima', null)
+        && klaim.diajukanOleh != emailUser();
+    }
+
+    match /apPaymentRequests/{transferId} {
+      // Antrean transfer memuat rekening penerima. QS & Planner ikut membaca
+      // karena laporan RAB vs realisasi menghitung pembayaran gaji.
+      allow read: if atasanProyek()
+        || berperanProyek(['PURCHASING','ADMIN_PROYEK','ADMIN_DATA','QS','PLANNER']);
+
+      allow create: if (superProyek() || berperanProyek(['SUPER_ADMIN','HEAD_ADMIN','PURCHASING','ADMIN_PROYEK','ADMIN_DATA']))
+        && request.resource.data.status == 'DIAJUKAN'
+        && request.resource.data.nominal is number
+        && request.resource.data.nominal > 0
+        && request.resource.data.jenis in ['NOTA','KONTRA_BON','GAJI','KLAIM','LAIN']
+        // Nama pengaju tidak bisa dipalsukan; dipakai untuk aturan
+        // "pengaju tidak boleh menyetujui pengajuannya sendiri".
+        && request.resource.data.diajukanOleh == emailUser();
+
+      allow update: if request.resource.data.get('diajukanOleh', '') == resource.data.get('diajukanOleh', '')
+        && request.resource.data.jenis == resource.data.jenis
+        && request.resource.data.get('refId', '') == resource.data.get('refId', '')
+        // Rincian item (dengan pos RAB-nya) ikut beku sejak diajukan.
+        && request.resource.data.get('items', null) == resource.data.get('items', null)
+        && ((
+          // Approval final: Head Admin / Direksi. Nominal & penerima beku,
+          // supaya angka tidak bisa digeser setelah diperiksa.
+          atasanProyek()
+          && resource.data.status in ['DIAJUKAN','DIKEMBALIKAN']
+          && request.resource.data.status in ['DISETUJUI','DIKEMBALIKAN']
+          && request.resource.data.nominal == resource.data.nominal
+          && request.resource.data.penerima == resource.data.penerima
+          // Empat mata: yang mengajukan tidak boleh menyetujui sendiri.
+          // Pengecualian: transfer yang otomatis lahir saat klaim ORANG LAIN
+          // disetujui — pengajunya memang si penyetuju klaim.
+          && (request.resource.data.status != 'DISETUJUI'
+              || resource.data.get('diajukanOleh', '') != emailUser()
+              || transferDariKlaimSah())
+        ) || (
+          // Upload bukti transfer setelah Direksi Finance mentransfer.
+          kasir()
+          && resource.data.status == 'DISETUJUI'
+          && request.resource.data.status == 'DIBAYAR'
+          && request.resource.data.nominal == resource.data.nominal
+          && request.resource.data.penerima == resource.data.penerima
+          && fotoCloudinary(request.resource.data.buktiTfUrl)
+        ) || (
+          // Pencocokan dengan mutasi giro.
+          kasir()
+          && resource.data.status in ['DIBAYAR','SELISIH']
+          && request.resource.data.status in ['TERCOCOK','SELISIH']
+          && request.resource.data.nominal == resource.data.nominal
+          && request.resource.data.penerima == resource.data.penerima
+        ));
+
+      allow delete: if false;
+    }
+
+
+    // ---------- [ADMIN PROYEK] Fase 3: mutasi giro, faktur pajak, refund ----------
+
+    // ---------- apBankMutations (mutasi rekening giro) ----------
+    match /apBankMutations/{mutasiId} {
+      // Mutasi rekening memuat seluruh pergerakan uang perusahaan, jadi
+      // hanya dibaca yang mengurusnya: Head Admin, Direksi, dan Admin Data.
+      allow read: if atasanProyek() || berperanProyek(['ADMIN_DATA']);
+
+      allow create: if (atasanProyek() || berperanProyek(['ADMIN_DATA']))
+        && request.resource.data.tanggal is string
+        && request.resource.data.tanggal.size() == 10
+        && request.resource.data.status in ['TERCOCOK','SELISIH','BUKAN_PENGELUARAN'];
+
+      // Hasil import bersifat tambah-saja: catatan bank tidak boleh
+      // diubah belakangan, karena itulah pembanding yang jujur.
+      allow update, delete: if false;
+    }
+
+    // ---------- apTaxInvoices (faktur pajak atas nota PPN) ----------
+    match /apTaxInvoices/{fakturId} {
+      allow read: if atasanProyek() || berperanProyek(['PURCHASING','ADMIN_DATA']);
+
+      allow create: if (atasanProyek() || berperanProyek(['PURCHASING']))
+        && request.resource.data.poId is string
+        && request.resource.data.status == 'MENUNGGU';
+
+      // Nilai dan nota sumbernya beku; yang bergerak hanya status faktur.
+      allow update: if (atasanProyek() || berperanProyek(['PURCHASING']))
+        && request.resource.data.poId == resource.data.poId
+        && request.resource.data.nilai == resource.data.nilai
+        && request.resource.data.nomorNota == resource.data.nomorNota
+        && request.resource.data.status in ['MENUNGGU','DITERIMA','TERKIRIM']
+        // Menandai "terkirim ke pajak" wajib ada nomor faktur & fotonya.
+        && (request.resource.data.status != 'TERKIRIM'
+            || (request.resource.data.nomorFaktur is string
+                && request.resource.data.nomorFaktur.size() > 0
+                && fotoCloudinary(request.resource.data.fotoFakturUrl)));
+
+      allow delete: if false;
+    }
+
+    // ---------- apRefunds (saldo mengendap marketplace) ----------
+    match /apRefunds/{refundId} {
+      allow read: if atasanProyek() || berperanProyek(['PURCHASING','ADMIN_DATA']);
+      allow create: if (atasanProyek() || berperanProyek(['PURCHASING','ADMIN_DATA']))
+        && request.resource.data.nominal is number
+        && request.resource.data.nominal > 0
+        && request.resource.data.status == 'MENGENDAP';
+      allow update: if (atasanProyek() || berperanProyek(['PURCHASING','ADMIN_DATA']))
+        && request.resource.data.nominal == resource.data.nominal
+        && request.resource.data.status in ['MENGENDAP','DIAJUKAN','KEMBALI'];
+      allow delete: if false;
+    }
+
+    // ================= [ADMIN PROYEK] Fase 4 — lapangan =================
+
+    // ---------- apQcChecks (lembar cek mutu) ----------
+    match /apQcChecks/{qcId} {
+      allow read: if wargaProyek();
+
+      allow create: if (atasanProyek()
+          || berperanProyek(['PIC','KOORDINATOR','STAF_LAPANGAN','QS']))
+        && request.resource.data.projectCode is string
+        && request.resource.data.projectCode.size() > 0
+        && request.resource.data.items is list
+        && request.resource.data.items.size() > 0
+        && request.resource.data.dibuatOleh == emailUser();
+
+      // Lembar boleh dikoreksi oleh pembuatnya atau atasan; proyek & pembuat beku.
+      allow update: if (atasanProyek()
+          || (berperanProyek(['PIC','KOORDINATOR','STAF_LAPANGAN','QS'])
+              && resource.data.dibuatOleh == emailUser()))
+        && request.resource.data.projectCode == resource.data.projectCode
+        && request.resource.data.dibuatOleh == resource.data.dibuatOleh
+        && request.resource.data.items is list;
+
+      allow delete: if atasanProyek();
+    }
+
+    // ---------- apFindings (temuan & perbaikan) ----------
+    match /apFindings/{temuanId} {
+      allow read: if wargaProyek();
+
+      allow create: if (atasanProyek()
+          || berperanProyek(['PIC','KOORDINATOR','STAF_LAPANGAN','QS']))
+        && request.resource.data.projectCode is string
+        && request.resource.data.projectCode.size() > 0
+        && request.resource.data.uraian is string
+        && request.resource.data.uraian.size() > 0
+        // Temuan selalu lahir sebagai BARU, tidak bisa langsung dianggap beres.
+        && request.resource.data.status == 'BARU'
+        && request.resource.data.riwayat is list;
+
+      allow update: if wargaProyek()
+        && request.resource.data.projectCode == resource.data.projectCode
+        && request.resource.data.uraian == resource.data.uraian
+        && request.resource.data.status in ['BARU','DIKERJAKAN','DIPERBAIKI','DIVERIFIKASI','DITOLAK']
+        // Riwayat hanya boleh bertambah, tidak boleh dipangkas.
+        && request.resource.data.riwayat is list
+        && request.resource.data.riwayat.size() >= resource.data.riwayat.size()
+        // Alur status dijaga di sini, bukan cuma di layar.
+        && (
+          (resource.data.status == 'BARU'
+            && request.resource.data.status in ['BARU','DIKERJAKAN','DIPERBAIKI'])
+          || (resource.data.status == 'DIKERJAKAN'
+            && request.resource.data.status in ['DIKERJAKAN','DIPERBAIKI'])
+          || (resource.data.status == 'DIPERBAIKI'
+            && request.resource.data.status in ['DIPERBAIKI','DIVERIFIKASI','DITOLAK'])
+          || (resource.data.status == 'DITOLAK'
+            && request.resource.data.status in ['DITOLAK','DIKERJAKAN','DIPERBAIKI'])
+          // DIVERIFIKASI adalah titik akhir.
+          || (resource.data.status == 'DIVERIFIKASI'
+            && request.resource.data.status == 'DIVERIFIKASI')
+        )
+        // Menyatakan "sudah diperbaiki" wajib melampirkan foto sesudah.
+        && (request.resource.data.status != 'DIPERBAIKI'
+            || resource.data.status == 'DIPERBAIKI'
+            || fotoCloudinary(request.resource.data.fotoSesudahUrl))
+        // Verifikasi & penolakan hanya boleh oleh pemeriksa/atasan.
+        && (request.resource.data.status == resource.data.status
+            || !(request.resource.data.status in ['DIVERIFIKASI','DITOLAK'])
+            || atasanProyek()
+            || berperanProyek(['QS','KOORDINATOR']));
+
+      allow delete: if atasanProyek();
+    }
+
+    // ---------- apBast (berita acara serah terima) ----------
+    match /apBast/{bastId} {
+      allow read: if wargaProyek();
+      // [ADMIN PROYEK] Fase 5 — klien ikut menandatangani BAST, jadi boleh
+      // melihat BAST proyeknya yang sudah sah.
+      allow read: if klienAktif()
+        && resource.data.projectCode in proyekKlienSaya()
+        && resource.data.status == 'DITANDATANGANI';
+
+      allow create: if (atasanProyek()
+          || berperanProyek(['ADMIN_PROYEK','QS','KOORDINATOR']))
+        && request.resource.data.projectCode is string
+        && request.resource.data.projectCode.size() > 0
+        && request.resource.data.nomor is string
+        && request.resource.data.nomor.size() > 0
+        && request.resource.data.items is list
+        && request.resource.data.items.size() > 0
+        && request.resource.data.nilai is number
+        && request.resource.data.nilai >= 0
+        // BAST lahir menunggu tanda tangan, tidak bisa langsung sah.
+        && request.resource.data.status == 'MENUNGGU_TANDA_TANGAN'
+        && request.resource.data.dibuatOleh == emailUser();
+
+      allow update: if (atasanProyek()
+          || berperanProyek(['ADMIN_PROYEK','QS','KOORDINATOR','PIC']))
+        // Isi pokok BAST beku sejak dibuat.
+        && request.resource.data.projectCode == resource.data.projectCode
+        && request.resource.data.nomor == resource.data.nomor
+        && request.resource.data.items == resource.data.items
+        && request.resource.data.nilai == resource.data.nilai
+        && request.resource.data.dibuatOleh == resource.data.dibuatOleh
+        && request.resource.data.status in ['MENUNGGU_TANDA_TANGAN','DITANDATANGANI','DIBATALKAN']
+        // Yang sudah ditandatangani tidak bisa diutak-atik lagi.
+        && resource.data.status != 'DITANDATANGANI'
+        // Menyatakan sah wajib dua tanda tangan dan hak tanda tangan.
+        && (request.resource.data.status != 'DITANDATANGANI'
+            || (fotoCloudinary(request.resource.data.ttdPerusahaanUrl)
+                && fotoCloudinary(request.resource.data.ttdKlienUrl)
+                && (atasanProyek() || berperanProyek(['KOORDINATOR','PIC']))));
+
+      allow delete: if false;
+    }
+
+    // ================= [ADMIN PROYEK] Fase 5 — portal klien =================
+
+    // ---------- apDailyReports (laporan harian lapangan) ----------
+    match /apDailyReports/{laporanId} {
+      allow read: if wargaProyek();
+      // Klien hanya melihat laporan proyeknya yang sudah TERBIT.
+      allow read: if klienAktif()
+        && resource.data.projectCode in proyekKlienSaya()
+        && resource.data.status == 'TERBIT';
+
+      allow create: if (atasanProyek()
+          || berperanProyek(['ADMIN_PROYEK','PIC','KOORDINATOR','STAF_LAPANGAN']))
+        && request.resource.data.projectCode is string
+        && request.resource.data.projectCode.size() > 0
+        && request.resource.data.tanggal is string
+        && request.resource.data.pekerjaan is string
+        && request.resource.data.pekerjaan.size() > 0
+        // Laporan lahir sebagai draft; menerbitkan adalah langkah tersendiri.
+        && request.resource.data.status == 'DRAFT'
+        && request.resource.data.dibuatOleh == emailUser();
+
+      allow update: if (atasanProyek()
+          || berperanProyek(['ADMIN_PROYEK','PIC','KOORDINATOR','STAF_LAPANGAN']))
+        && request.resource.data.projectCode == resource.data.projectCode
+        && request.resource.data.tanggal == resource.data.tanggal
+        && request.resource.data.dibuatOleh == resource.data.dibuatOleh
+        && request.resource.data.status in ['DRAFT','TERBIT']
+        // Menerbitkan ke klien hanya boleh oleh yang berwenang.
+        && (request.resource.data.status == resource.data.status
+            || atasanProyek()
+            || berperanProyek(['ADMIN_PROYEK','KOORDINATOR']));
+
+      // Yang sudah terbit tidak boleh dihapus — klien sudah melihatnya.
+      allow delete: if (atasanProyek()
+          || berperanProyek(['ADMIN_PROYEK','PIC','KOORDINATOR','STAF_LAPANGAN']))
+        && resource.data.status != 'TERBIT';
+    }
+
+    // ---------- apTours (tur virtual 360°) ----------
+    match /apTours/{turId} {
+      allow read: if wargaProyek();
+      allow read: if klienAktif()
+        && resource.data.projectCode in proyekKlienSaya()
+        && resource.data.status == 'TERBIT';
+
+      allow create: if (atasanProyek()
+          || berperanProyek(['ADMIN_PROYEK','KOORDINATOR']))
+        && request.resource.data.projectCode is string
+        && request.resource.data.projectCode.size() > 0
+        && request.resource.data.judul is string
+        && request.resource.data.judul.size() > 0
+        && request.resource.data.scenes is list
+        && request.resource.data.scenes.size() > 0
+        && request.resource.data.status == 'DRAFT'
+        && request.resource.data.dibuatOleh == emailUser();
+
+      allow update: if (atasanProyek()
+          || berperanProyek(['ADMIN_PROYEK','KOORDINATOR']))
+        && request.resource.data.projectCode == resource.data.projectCode
+        && request.resource.data.dibuatOleh == resource.data.dibuatOleh
+        && request.resource.data.scenes is list
+        && request.resource.data.status in ['DRAFT','TERBIT'];
+
+      allow delete: if (atasanProyek() || berperanProyek(['ADMIN_PROYEK','KOORDINATOR']))
+        && resource.data.status != 'TERBIT';
+    }
+
+    // ---------- apAuditLog (jejak audit aksi sensitif) ----------
+    // Append-only: setiap warga aplikasi boleh menambah entri atas aksinya
+    // sendiri (oleh == emailnya), tapi TIDAK ADA YANG BOLEH mengubah atau
+    // menghapus entri yang sudah tersimpan — itulah yang membuatnya "audit".
+    // Hanya atasan (Super Admin / Direksi / Head Admin) yang boleh membaca.
+    match /apAuditLog/{logId} {
+      allow read: if atasanProyek();
+      allow create: if wargaProyek()
+        && request.resource.data.aksi is string && request.resource.data.aksi.size() > 0
+        && request.resource.data.koleksi is string && request.resource.data.koleksi.size() > 0
+        && request.resource.data.oleh == emailUser();
+      allow update, delete: if false;
     }
 
     // ---------- koleksi lain masih ditutup ----------
