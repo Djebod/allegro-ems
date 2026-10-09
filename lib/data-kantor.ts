@@ -17,7 +17,15 @@ import { pantauDenganCadangan } from "@/lib/pantau-cadangan";
 import { hitungKantor, jamWIB } from "@/lib/kantor";
 import { hariSabtu, jadwalUntuk } from "@/lib/jadwal";
 import { rapikanKode } from "@/lib/data";
-import type { AbsenKantor, Employee, EventAbsenKantor, Kantor, TitikAbsen } from "@/types";
+import type {
+  AbsenKantor,
+  Employee,
+  EventAbsenKantor,
+  Kantor,
+  OfficeAttendanceCorrection,
+  TandaTangan,
+  TitikAbsen,
+} from "@/types";
 
 /* ---------------- Kantor ---------------- */
 
@@ -250,12 +258,56 @@ export async function catatAbsenKantor(opsi: {
   }
 }
 
+/**
+ * Jejak setiap revisi absensi kantor oleh Admin, tambah-saja dan bertanda
+ * tangan. Ditulis LEBIH DULU sebelum absennya diubah, supaya revisi tanpa
+ * tanda tangan tidak pernah sampai ke catatan absen.
+ */
+async function catatJejakKantor(
+  absen: AbsenKantor,
+  isi: Omit<OfficeAttendanceCorrection, "id" | "attendanceId" | "employeeId" | "employeeName" | "date" | "createdAt">
+) {
+  if (!isi.tandaTangan?.url) throw new Error("Tanda tangan wajib dibubuhkan pada setiap revisi absen.");
+  await setDoc(doc(collection(dbClient(), "officeAttendanceCorrections")), {
+    attendanceId: absen.id,
+    employeeId: absen.employeeId,
+    employeeName: absen.employeeName,
+    date: absen.date,
+    ...isi,
+    createdAt: serverTimestamp(),
+  });
+}
+
+export function pantauKoreksiKantor(
+  attendanceId: string,
+  onData: (d: OfficeAttendanceCorrection[]) => void,
+  onGagal: () => void
+) {
+  return onSnapshot(
+    query(collection(dbClient(), "officeAttendanceCorrections"), where("attendanceId", "==", attendanceId)),
+    (snap) => onData(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<OfficeAttendanceCorrection, "id">) }))),
+    onGagal
+  );
+}
+
 export async function putuskanAbsenLuar(opsi: {
   absen: AbsenKantor;
   hasil: "DITERIMA" | "DITOLAK";
   catatan: string;
   oleh: string;
+  tandaTangan: TandaTangan;
 }) {
+  await catatJejakKantor(opsi.absen, {
+    jenis: "KEPUTUSAN_LUAR_RADIUS",
+    koreksiMasuk: null,
+    koreksiIstirahat: null,
+    koreksiSelesaiIstirahat: null,
+    koreksiPulang: null,
+    hasilValidasi: opsi.hasil,
+    alasan: opsi.catatan.trim(),
+    approvedBy: opsi.oleh,
+    tandaTangan: opsi.tandaTangan,
+  });
   await updateDoc(doc(dbClient(), "officeAttendance", opsi.absen.id), {
     hasilValidasi: opsi.hasil,
     catatanValidasi: `${opsi.catatan.trim()} — oleh ${opsi.oleh}`,
@@ -273,6 +325,7 @@ export async function koreksiAbsenKantor(opsi: {
   koreksiSelesaiIstirahat?: string;
   alasan: string;
   oleh: string;
+  tandaTangan: TandaTangan;
 }) {
   if (!opsi.alasan.trim()) throw new Error("Alasan koreksi wajib diisi.");
 
@@ -294,6 +347,18 @@ export async function koreksiAbsenKantor(opsi: {
     pulang,
     jadwalMasuk: a.jadwalMasuk,
     jadwalPulang: a.jadwalPulang,
+  });
+
+  await catatJejakKantor(a, {
+    jenis: "KOREKSI_JAM",
+    koreksiMasuk: opsi.koreksiMasuk || null,
+    koreksiIstirahat: opsi.koreksiIstirahat || null,
+    koreksiSelesaiIstirahat: opsi.koreksiSelesaiIstirahat || null,
+    koreksiPulang: opsi.koreksiPulang || null,
+    hasilValidasi: null,
+    alasan: opsi.alasan.trim(),
+    approvedBy: opsi.oleh,
+    tandaTangan: opsi.tandaTangan,
   });
 
   await updateDoc(doc(dbClient(), "officeAttendance", opsi.absen.id), {

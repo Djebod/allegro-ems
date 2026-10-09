@@ -377,6 +377,7 @@ function Isi() {
                   <FormValidasi
                     absen={rincian}
                     jenis={jenis}
+                    penanda={{ nama: profile?.name || profile?.email || "", email: profile?.email || "" }}
                     onSimpan={async (nilai) => {
                       await simpanValidasi({
                         absen: rincian,
@@ -386,6 +387,7 @@ function Isi() {
                         buktiUrl: nilai.buktiUrl,
                         jamAktual: nilai.jamAktual,
                         oleh: profile?.email || "",
+                        tandaTangan: nilai.tandaTangan,
                       });
                     }}
                   />
@@ -428,6 +430,27 @@ function Isi() {
                             bukti
                           </a>
                         </>
+                      )}
+                      {k.tandaTangan?.url ? (
+                        <a
+                          href={k.tandaTangan.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="mt-1 flex items-center gap-2"
+                          title={`Ditandatangani ${k.tandaTangan.nama}`}
+                        >
+                          <Image
+                            src={fotoKecil(k.tandaTangan.url, 240)}
+                            alt="Tanda tangan"
+                            width={96}
+                            height={32}
+                            className="h-8 w-24 rounded border border-line bg-white object-contain"
+                            unoptimized
+                          />
+                          <span>ttd {k.tandaTangan.nama}</span>
+                        </a>
+                      ) : (
+                        <span className="mt-1 block italic">tanpa tanda tangan (koreksi lama)</span>
                       )}
                     </li>
                   ))}

@@ -34,6 +34,24 @@ export const INCOMPLETE_DAY_FACTOR = 0.5;
 /** Lembur minimum agar sah dihitung (jam). */
 export const MIN_OVERTIME_HOURS = 1;
 
+/**
+ * Pengakuan lembur harus diajukan paling lambat sekian hari SETELAH tanggal
+ * lemburnya, lengkap dengan alasannya. Lewat batas ini karyawan tidak bisa
+ * mengajukan sendiri; jalurnya lewat Admin/HR yang mengajukan atas namanya.
+ * (Keputusan Bang Syam, 9 Okt 2026)
+ */
+export const BATAS_AJUKAN_LEMBUR_HARI = 7;
+
+/** Lembur yang diajukan tidak boleh lebih panjang dari ini dalam sehari (jam). */
+export const MAKS_JAM_LEMBUR_SEHARI = 12;
+
+/**
+ * Posisi yang bekerja di lapangan (dibayar mingguan dari absensi proyek).
+ * Selain ini dianggap staf kantor (dibayar bulanan). Dipakai memisahkan
+ * daftar karyawan dan memilih cara absen yang benar.
+ */
+export const POSISI_LAPANGAN = ["MANDOR", "TUKANG", "KENEK"] as const;
+
 /** Radius maksimum absensi dari titik koordinat Project (meter). */
 export const DEFAULT_ATTENDANCE_RADIUS_METER = 1000;
 

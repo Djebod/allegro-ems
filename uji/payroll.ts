@@ -1,5 +1,5 @@
 import { hitungUpahKaryawan, tarifPadaTanggal, seninMingguIni, tambahHari } from "@/lib/payroll";
-import type { Attendance, Employee, SalaryRate } from "@/types";
+import type { Attendance, Employee, PengajuanLembur, SalaryRate } from "@/types";
 
 let lolos = 0, gagal = 0;
 function cek(nama: string, dapat: unknown, harap: unknown) {
@@ -48,15 +48,53 @@ h = hitungUpahKaryawan({ karyawan: orang, tarif: tarifJam, sisaBon: 0,
 cek("kerja 10 jam dibayar 8 jam saja", h.item.totalWorkHours, 8);
 cek("  upahnya 8 x 20.000", h.item.regularPay, 160000);
 
-console.log("\n== Lembur ==");
-h = hitungUpahKaryawan({ karyawan: orang, tarif: tarifHarian, sisaBon: 0,
-  absensi: [hari("2026-09-14","00:00","08:00",{mulaiIstirahat:"04:00",selesaiIstirahat:"05:00",lemburMulai:"09:00",lemburSelesai:"11:30"})] });
-cek("lembur 2,5 jam dibayar", h.item.totalOvertimeHours, 2.5);
+/** Pengajuan lembur yang sudah disetujui HR/Owner untuk satu tanggal. */
+const lemburOk = (tanggal: string, jam: number, jamDisetujui?: number): PengajuanLembur => ({
+  id: `L-${tanggal}`, employeeId: orang.id, employeeName: orang.name, divisi: "", atasanId: "", mandorId: "MDR-01",
+  tanggal, jamMulai: "17:00", jamSelesai: "19:00", jamLembur: jam, alasan: "Pengecoran", terlambat: false,
+  sumber: "SENDIRI", status: "DISETUJUI", diajukanOleh: "x", jamDisetujui: jamDisetujui ?? null,
+});
+
+console.log("\n== Lembur (hanya dibayar bila ada pengajuan yang disetujui) ==");
+const absenLembur = hari("2026-09-14","00:00","08:00",{mulaiIstirahat:"04:00",selesaiIstirahat:"05:00",lemburMulai:"09:00",lemburSelesai:"11:30"});
+h = hitungUpahKaryawan({ karyawan: orang, tarif: tarifHarian, sisaBon: 0, absensi: [absenLembur],
+  lemburDisetujui: [lemburOk("2026-09-14", 2.5)] });
+cek("lembur 2,5 jam dengan pengajuan disetujui dibayar", h.item.totalOvertimeHours, 2.5);
 cek("  upah lemburnya", h.item.overtimePay, 62500);
+cek("  tidak ada lembur tanpa pengajuan", h.item.lemburTanpaPengajuanJam, 0);
+
+h = hitungUpahKaryawan({ karyawan: orang, tarif: tarifHarian, sisaBon: 0, absensi: [absenLembur] });
+cek("lembur di absensi TANPA pengajuan tidak dibayar", h.item.totalOvertimeHours, 0);
+cek("  upahnya nol", h.item.overtimePay, 0);
+cek("  dicatat sebagai lembur tanpa pengajuan", h.item.lemburTanpaPengajuanJam, 2.5);
+cek("  ada catatan masalah", h.masalah.some((m) => m.includes("pengajuan")), true);
+cek("  upah pokok tetap utuh", h.item.regularPay, 150000);
+
+h = hitungUpahKaryawan({ karyawan: orang, tarif: tarifHarian, sisaBon: 0, absensi: [absenLembur],
+  lemburDisetujui: [lemburOk("2026-09-14", 2.5, 2)] });
+cek("disetujui 2 jam padahal absen 2,5 -> dibayar 2", h.item.totalOvertimeHours, 2);
+cek("  upahnya 2 x 25.000", h.item.overtimePay, 50000);
+
+h = hitungUpahKaryawan({ karyawan: orang, tarif: tarifHarian, sisaBon: 0, absensi: [absenLembur],
+  lemburDisetujui: [lemburOk("2026-09-14", 4)] });
+cek("disetujui 4 jam padahal absen 2,5 -> dibayar 2,5", h.item.totalOvertimeHours, 2.5);
 
 h = hitungUpahKaryawan({ karyawan: orang, tarif: tarifHarian, sisaBon: 0,
-  absensi: [hari("2026-09-14","00:00","08:00",{mulaiIstirahat:"04:00",selesaiIstirahat:"05:00",lemburMulai:"09:00",lemburSelesai:"09:45"})] });
-cek("lembur 45 menit gugur", h.item.totalOvertimeHours, 0);
+  absensi: [hari("2026-09-14","00:00","08:00",{mulaiIstirahat:"04:00",selesaiIstirahat:"05:00"})],
+  lemburDisetujui: [lemburOk("2026-09-14", 2)] });
+cek("disetujui 2 jam, mandor tidak mencatat sesi lembur -> dibayar 2", h.item.totalOvertimeHours, 2);
+cek("  diberi catatan", h.masalah.some((m) => m.includes("sesi lembur")), true);
+
+h = hitungUpahKaryawan({ karyawan: orang, tarif: tarifHarian, sisaBon: 0,
+  absensi: [hari("2026-09-14","00:00","08:00",{mulaiIstirahat:"04:00",selesaiIstirahat:"05:00"})],
+  lemburDisetujui: [lemburOk("2026-09-15", 2)] });
+cek("disetujui pada hari tanpa absensi -> tidak dibayar", h.item.totalOvertimeHours, 0);
+cek("  diberi catatan", h.masalah.some((m) => m.includes("2026-09-15")), true);
+
+h = hitungUpahKaryawan({ karyawan: orang, tarif: tarifHarian, sisaBon: 0,
+  absensi: [hari("2026-09-14","00:00","08:00",{mulaiIstirahat:"04:00",selesaiIstirahat:"05:00",lemburMulai:"09:00",lemburSelesai:"09:45"})],
+  lemburDisetujui: [lemburOk("2026-09-14", 1)] });
+cek("lembur 45 menit gugur walau disetujui", h.item.totalOvertimeHours, 0);
 cek("  dicatat sebagai gugur", h.item.lemburGugurJam, 0.75);
 cek("  tidak dibayar", h.item.overtimePay, 0);
 
@@ -64,8 +102,10 @@ console.log("\n== Sesi tidak valid ==");
 const absenLemburPalsu = hari("2026-09-14","00:00","08:00",{mulaiIstirahat:"04:00",selesaiIstirahat:"05:00",lemburMulai:"09:00",lemburSelesai:"12:00"});
 (absenLemburPalsu.overtimeStart as any).validasi = { hasil:"TIDAK_VALID", oleh:"admin" };
 (absenLemburPalsu.overtimeEnd as any).validasi = { hasil:"TIDAK_VALID", oleh:"admin" };
-h = hitungUpahKaryawan({ karyawan: orang, tarif: tarifHarian, sisaBon: 0, absensi:[absenLemburPalsu] });
-cek("lembur dinyatakan tidak valid -> 0 jam", h.item.totalOvertimeHours, 0);
+h = hitungUpahKaryawan({ karyawan: orang, tarif: tarifHarian, sisaBon: 0, absensi:[absenLemburPalsu],
+  lemburDisetujui: [lemburOk("2026-09-14", 3)] });
+cek("lembur dinyatakan tidak valid oleh Admin -> 0 jam walau pengajuannya disetujui", h.item.totalOvertimeHours, 0);
+cek("  diberi catatan", h.masalah.some((m) => m.includes("tidak valid")), true);
 cek("  upah pokok tetap utuh", h.item.regularPay, 150000);
 
 const absenKoreksi = hari("2026-09-14","00:00","10:30",{mulaiIstirahat:"04:00",selesaiIstirahat:"05:00"});

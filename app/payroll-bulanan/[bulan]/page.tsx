@@ -36,7 +36,9 @@ import {
 } from "@/lib/data-payroll-bulanan";
 import { eksporPayrollBulananExcel, eksporPayrollBulananPdf } from "@/lib/ekspor-payroll-bulanan";
 import { namaBerkasSlip, unduhSlipPdf } from "@/lib/slip-gaji";
-import type { ItemPayrollBulanan, PayrollBulanan, SlipGaji, StatusPayroll } from "@/types";
+import { ambilLemburDisetujui } from "@/lib/data-lembur";
+import { totalJamLemburDisetujui } from "@/lib/lembur";
+import type { ItemPayrollBulanan, PayrollBulanan, PengajuanLembur, SlipGaji, StatusPayroll } from "@/types";
 
 const TOMBOL_MAJU: Record<StatusPayroll, string> = {
   DRAFT: "Ajukan untuk diperiksa",
@@ -114,6 +116,18 @@ function Isi({ bulan }: { bulan: string }) {
       a();
       b();
     };
+  }, [bulan]);
+
+  /**
+   * Lembur staf kantor diisi manual dalam rupiah. Jam yang sudah disetujui
+   * lewat pengakuan lembur ditampilkan sebagai acuan supaya HR tidak
+   * menghitung dari ingatan. Dibaca sekali per bulan, bukan dipantau.
+   */
+  const [lemburDisetujui, setLemburDisetujui] = useState<PengajuanLembur[]>([]);
+  useEffect(() => {
+    const [t, b] = bulan.split("-").map(Number);
+    const akhir = `${bulan}-${String(new Date(t, b, 0).getDate()).padStart(2, "0")}`;
+    ambilLemburDisetujui(`${bulan}-01`, akhir).then(setLemburDisetujui).catch(() => setLemburDisetujui([]));
   }, [bulan]);
 
   const bisaUbah = p?.status === "DRAFT" || p?.status === "REVIEW";
@@ -548,7 +562,14 @@ function Isi({ bulan }: { bulan: string }) {
               <Field label="Uang kerajinan" bantuan={adalahOwner ? undefined : "Hanya Owner yang bisa mengisi"}>
                 <IsianRupiah nilai={isian.uangKerajinan} ubah={set("uangKerajinan")} mati={!bisaUbah || !adalahOwner} />
               </Field>
-              <Field label="Lembur">
+              <Field
+                label="Lembur"
+                bantuan={
+                  totalJamLemburDisetujui(lemburDisetujui, ubah.employeeId) > 0
+                    ? `Pengakuan lembur disetujui bulan ini: ${totalJamLemburDisetujui(lemburDisetujui, ubah.employeeId)} jam`
+                    : "Tidak ada pengakuan lembur yang disetujui bulan ini"
+                }
+              >
                 <IsianRupiah nilai={isian.lembur} ubah={set("lembur")} mati={!bisaUbah} />
               </Field>
               <Field label="Keterangan lembur">

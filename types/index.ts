@@ -155,6 +155,12 @@ export interface Employee {
    * Penugasan utama tetap satu karena dipakai payroll dan tim mandor.
    */
   lokasiAbsenProyekIds?: string[];
+  /**
+   * Terisi bila rekening (bank, nomor, atas nama) terakhir diubah oleh
+   * karyawannya sendiri, bukan Admin. Rekening boleh diisi sendiri sejak
+   * 9 Okt 2026; jejak ini supaya HR tahu perubahan itu bukan dari kantor.
+   */
+  rekeningDiubahSendiriPada?: unknown;
   createdAt?: unknown;
   updatedAt?: unknown;
 }
@@ -252,6 +258,18 @@ export interface EventAbsen {
   validasi?: ValidasiEvent | null;
 }
 
+/**
+ * Tanda tangan Admin yang dibubuhkan pada setiap revisi absen. Digambar di
+ * layar saat itu juga, diunggah sebagai gambar, lalu tautannya disimpan
+ * bersama jejak koreksinya. Tanpa ini, koreksi ditolak Security Rules.
+ */
+export interface TandaTangan {
+  url: string;
+  /** Nama orang yang menandatangani, disalin dari profil saat itu. */
+  nama: string;
+  email: string;
+}
+
 /** Satu baris jejak audit. Tidak pernah diubah atau dihapus. */
 export interface AttendanceCorrection {
   id: string;
@@ -266,6 +284,33 @@ export interface AttendanceCorrection {
   alasan: string;
   attachmentUrl: string | null;
   approvedBy: string;
+  /** Kosong pada koreksi lama (sebelum 9 Okt 2026). */
+  tandaTangan?: TandaTangan | null;
+  createdAt?: unknown;
+}
+
+/**
+ * Jejak koreksi absensi kantor. Sebelum 9 Okt 2026 koreksi kantor hanya
+ * menimpa kolom alasanKoreksi, jadi koreksi kedua menghapus jejak yang
+ * pertama. Sekarang tiap revisi dicatat di sini, tambah-saja, bertanda tangan.
+ */
+export interface OfficeAttendanceCorrection {
+  id: string;
+  attendanceId: string;
+  employeeId: string;
+  employeeName: string;
+  date: string;
+  jenis: "KOREKSI_JAM" | "KEPUTUSAN_LUAR_RADIUS";
+  /** Jam koreksi yang dipasang, "HH:MM" atau null bila tidak diubah. */
+  koreksiMasuk: string | null;
+  koreksiIstirahat: string | null;
+  koreksiSelesaiIstirahat: string | null;
+  koreksiPulang: string | null;
+  /** Untuk keputusan absen luar radius. */
+  hasilValidasi: "DITERIMA" | "DITOLAK" | null;
+  alasan: string;
+  approvedBy: string;
+  tandaTangan: TandaTangan;
   createdAt?: unknown;
 }
 
@@ -389,6 +434,11 @@ export interface PayrollItem {
   totalOvertimeHours: number;
   /** Lembur yang tercatat tetapi gugur karena kurang dari batas minimum. */
   lemburGugurJam: number;
+  /**
+   * Lembur yang tercatat di absensi tetapi tidak punya pengajuan lembur
+   * yang disetujui, jadi tidak dibayar. Kosong pada payroll lama.
+   */
+  lemburTanpaPengajuanJam?: number;
   hariTidakLengkap: number;
 
   /** Salinan tarif yang dipakai. Disimpan supaya histori tidak ikut
@@ -481,6 +531,48 @@ export interface PengajuanCuti {
   catatanKeputusan?: string;
   /** Saldo sudah dipotong atau belum, supaya tidak terpotong dua kali. */
   saldoDipotong: boolean;
+
+  createdAt?: unknown;
+  updatedAt?: unknown;
+}
+
+/* ---------------- Pengajuan lembur ---------------- */
+
+/**
+ * Pengakuan lembur. Jam lembur di absensi saja tidak cukup untuk dibayar:
+ * harus ada pengajuan beralasan yang disetujui HR/Owner, seperti cuti.
+ * Diajukan paling lambat BATAS_AJUKAN_LEMBUR_HARI setelah tanggalnya;
+ * lewat itu hanya Admin/HR yang bisa mengajukan atas nama karyawan.
+ */
+export interface PengajuanLembur {
+  id: string;
+  employeeId: string;
+  employeeName: string;
+  divisi: string;
+  /** Salinan atasan saat pengajuan dibuat, supaya atasan bisa membacanya. */
+  atasanId: string;
+  /** Mandor yang membawahi saat itu (pekerja lapangan), untuk hak baca mandor. */
+  mandorId: string;
+
+  tanggal: string;
+  jamMulai: string;
+  jamSelesai: string;
+  /** Lama lembur yang diminta, jam, dua angka di belakang koma. */
+  jamLembur: number;
+  alasan: string;
+  lampiranUrl?: string | null;
+
+  /** Diajukan lewat batas waktu, jadi dimasukkan Admin/HR atas nama karyawan. */
+  terlambat: boolean;
+  /** Siapa yang menekan tombol ajukan: pemilik sendiri, mandornya, atau pengelola. */
+  sumber: "SENDIRI" | "MANDOR" | "PENGELOLA";
+
+  status: StatusPengajuan;
+  diajukanOleh: string;
+  diputuskanOleh?: string | null;
+  catatanKeputusan?: string;
+  /** Jam yang disetujui; boleh lebih kecil dari yang diminta. */
+  jamDisetujui?: number | null;
 
   createdAt?: unknown;
   updatedAt?: unknown;

@@ -353,6 +353,14 @@ function Isi({ id }: { id: string }) {
                       (−{i.lemburGugurJam})
                     </span>
                   )}
+                  {(i.lemburTanpaPengajuanJam || 0) > 0 && (
+                    <span
+                      className="ml-1 text-[10px] text-bahaya"
+                      title="Lembur tercatat di absensi tetapi tidak ada pengajuan lembur yang disetujui, tidak dibayar"
+                    >
+                      (tanpa pengajuan {i.lemburTanpaPengajuanJam})
+                    </span>
+                  )}
                 </td>
                 <td className="whitespace-nowrap text-right text-muted">
                   {i.paymentMode === "DAILY" ? keRupiah(i.dailyRate) : keRupiah(i.hourlyRate)}

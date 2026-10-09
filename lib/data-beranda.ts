@@ -4,7 +4,7 @@ import { collection, getDocs, query, where } from "firebase/firestore";
 import { dbClient } from "@/lib/firebase";
 import { keTanggal } from "@/lib/absensi";
 import { BATAS_INGAT_KONTRAK_HARI } from "@/lib/constants";
-import type { AbsenKantor, Employee, EmployeeLoan, Payroll, PengajuanCuti, Role } from "@/types";
+import type { AbsenKantor, Employee, EmployeeLoan, Payroll, PengajuanCuti, PengajuanLembur, Role } from "@/types";
 
 /**
  * Bahan kotak "Perlu tindakan" dan "Sedang cuti hari ini" di beranda.
@@ -22,6 +22,7 @@ export interface RingkasanTindakan {
   absenLuarKantor: AbsenKantor[] | null;
   izinKeluarMenunggu: { employeeName: string }[] | null;
   cutiMenunggu: PengajuanCuti[] | null;
+  lemburMenunggu: PengajuanLembur[] | null;
   cutiHariIni: PengajuanCuti[] | null;
   kontrakHampirHabis: Employee[] | null;
   bonBerjalan: EmployeeLoan[] | null;
@@ -55,7 +56,7 @@ export async function ambilRingkasanTindakan(role: Role, hariIni: string): Promi
 
   const batasKontrak = tambahHari(hariIni, BATAS_INGAT_KONTRAK_HARI);
 
-  const [absenLuarKantor, cutiMenunggu, cutiBerjalan, kontrakHampirHabis, bonBerjalan, payrollBelumSah, izinKeluarMenunggu] =
+  const [absenLuarKantor, cutiMenunggu, cutiBerjalan, kontrakHampirHabis, bonBerjalan, payrollBelumSah, izinKeluarMenunggu, lemburMenunggu] =
     await Promise.all([
       aman(bolehKepegawaian(role), async () => {
         // perluValidasi kembali false begitu Admin memutuskan.
@@ -113,10 +114,18 @@ export async function ambilRingkasanTindakan(role: Role, hariIni: string): Promi
         const snap = await getDocs(query(collection(db, "izinKeluar"), where("status", "==", "MENUNGGU")));
         return snap.docs.map((d) => ({ employeeName: String(d.data().employeeName || "") }));
       }),
+      aman(bolehKepegawaian(role), async () => {
+        const snap = await getDocs(
+          query(collection(db, "overtimeRequests"), where("status", "==", "DIAJUKAN"))
+        );
+        return snap.docs
+          .map((d) => ({ id: d.id, ...(d.data() as Omit<PengajuanLembur, "id">) }))
+          .sort((a, b) => a.tanggal.localeCompare(b.tanggal));
+      }),
     ]);
 
   const cutiHariIni =
     cutiBerjalan?.filter((c) => c.status === "DISETUJUI" && c.tanggalMulai <= hariIni) ?? null;
 
-  return { absenLuarKantor, izinKeluarMenunggu, cutiMenunggu, cutiHariIni, kontrakHampirHabis, bonBerjalan, payrollBelumSah };
+  return { absenLuarKantor, izinKeluarMenunggu, cutiMenunggu, lemburMenunggu, cutiHariIni, kontrakHampirHabis, bonBerjalan, payrollBelumSah };
 }

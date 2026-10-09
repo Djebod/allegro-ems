@@ -126,6 +126,14 @@ export default function PerluTindakan({ hariIni }: { hariIni: string }) {
                 rincian={d.cutiMenunggu.length ? nama(d.cutiMenunggu) : undefined}
               />
             )}
+            {d.lemburMenunggu && (
+              <Baris
+                label="Pengakuan lembur menunggu"
+                jumlah={d.lemburMenunggu.length}
+                href="/lembur/kelola"
+                rincian={d.lemburMenunggu.length ? nama(d.lemburMenunggu) : undefined}
+              />
+            )}
             {d.kontrakHampirHabis && (
               <Baris
                 label="Kontrak habis dalam 30 hari"

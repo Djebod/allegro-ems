@@ -2,10 +2,12 @@ rules_version = '2';
 
 // ============================================================
 //  ABSENSI & PAYROLL PROYEK — Allegro Global Construction
-//  Security Rules — Tahap 19 (izin meninggalkan kantor)
+//  Security Rules — Tahap 20 (pengakuan lembur, tanda tangan revisi,
+//  rekening diisi sendiri, tukang absen sendiri)
 //  users, projects, sections, employees, employeePrivate,
 //  salaryRates, employeeAssignments, attendance, attendanceCorrections,
-//  employeeLoans, loanLocks, loanRepayments, payroll, payrollItems
+//  employeeLoans, loanLocks, loanRepayments, payroll, payrollItems,
+//  overtimeRequests, officeAttendanceCorrections
 //
 //  Prinsip: DEFAULT DENY. Semua yang tidak disebut di sini ditolak.
 //  Menu yang disembunyikan di layar BUKAN keamanan. Aturan di file
@@ -199,14 +201,40 @@ service cloud.firestore {
         && request.resource.data.nik == resource.data.nik;
 
       // Karyawan boleh memperbarui data pribadinya sendiri, tetapi HANYA
-      // kolom di bawah ini. Nama, NIK, jabatan, divisi, jadwal, tarif,
-      // dan rekening tetap wilayah Admin — kalau rekening bisa diubah
-      // sendiri, satu akun yang dibajak berarti gaji berpindah diam-diam.
+      // kolom di bawah ini. Nama, NIK, jabatan, divisi, jadwal, dan tarif
+      // tetap wilayah Admin.
+      //
+      // Rekening (bank, nomor, atas nama) boleh diisi sendiri sejak
+      // 9 Okt 2026 (keputusan client). Risikonya: akun Google yang dibajak
+      // bisa memindahkan rekening. Pagarnya: setiap perubahan rekening wajib
+      // menulis penanda waktu rekeningDiubahSendiriPada = jam server, supaya
+      // HR melihat bahwa itu bukan isian kantor, dan ketiganya harus lengkap.
       allow update: if sudahLogin()
         && employeeId == karyawanSaya()
         && request.resource.data.diff(resource.data).affectedKeys()
              .hasOnly(['nickname', 'phone', 'address',
-                       'profilePhotoUrl', 'profilePublicId', 'updatedAt']);
+                       'profilePhotoUrl', 'profilePublicId',
+                       'bankName', 'bankAccountNumber', 'bankAccountName',
+                       'rekeningDiubahSendiriPada', 'updatedAt'])
+        && (
+          !request.resource.data.diff(resource.data).affectedKeys()
+             .hasAny(['bankName', 'bankAccountNumber', 'bankAccountName'])
+          || (
+            request.resource.data.rekeningDiubahSendiriPada == request.time
+            && request.resource.data.bankName is string
+            && request.resource.data.bankAccountNumber is string
+            && request.resource.data.bankAccountName is string
+            && (
+              (request.resource.data.bankName.size() == 0
+                && request.resource.data.bankAccountNumber.size() == 0
+                && request.resource.data.bankAccountName.size() == 0)
+              ||
+              (request.resource.data.bankName.size() > 0
+                && request.resource.data.bankAccountNumber.size() > 0
+                && request.resource.data.bankAccountName.size() > 0)
+            )
+          )
+        );
 
       // Hanya boleh dihapus kalau memang salah input dan belum dipakai
       // di mana pun. Setelah ada absensi, karyawan cukup dinonaktifkan.
@@ -317,6 +345,23 @@ service cloud.firestore {
             && t.jarakMeter <= radiusProyek(request.resource.data.projectId));
     }
 
+    /**
+     * Pekerja lapangan (tukang/kenek) yang punya akun boleh mengabsen
+     * dirinya sendiri (9 Okt 2026), tetapi hanya di proyek dan di bawah
+     * mandor yang sedang ditugaskan kepadanya menurut dokumen karyawannya.
+     * Dengan begitu catatannya tetap muncul di tim mandor yang benar.
+     */
+    function absenDiriSendiri() {
+      let d = request.resource.data;
+      let k = get(/databases/$(database)/documents/employees/$(d.employeeId)).data;
+      return sudahLogin()
+        && d.employeeId == karyawanSaya()
+        // Dibaca dengan nilai bawaan null supaya karyawan yang belum
+        // ditugaskan ditolak dengan rapi, bukan lewat galat kolom hilang.
+        && d.mandorId == k.get('currentMandorId', null)
+        && d.projectId == k.get('currentProjectId', null);
+    }
+
     match /attendance/{absenId} {
       // Catatan: "resource == null" berarti dokumennya belum ada. Itu
       // keadaan normal saat absen pertama hari itu diperiksa lebih dulu,
@@ -334,16 +379,19 @@ service cloud.firestore {
       // ID dokumen wajib "<employeeId>_<tanggal>". Inilah yang membuat
       // satu orang mustahil punya dua catatan di hari yang sama, termasuk
       // ketika sinyal putus lalu aplikasi mengirim ulang.
-      allow create: if (isAdmin() || isMandor())
-        && absensiSah()
+      allow create: if absensiSah()
         && jarakWajar()
         && absenId == request.resource.data.employeeId + '_' + request.resource.data.date
-        && (isAdmin() || request.resource.data.mandorId == profilSaya().employeeId);
+        && (
+          isAdmin()
+          || (isMandor() && request.resource.data.mandorId == profilSaya().employeeId)
+          || absenDiriSendiri()
+        );
 
       // Mandor hanya boleh menambah sesi pada catatan miliknya sendiri,
       // dan tidak boleh memindahkan catatan itu ke orang atau hari lain.
-      allow update: if (isAdmin() || isMandor())
-        && absensiSah()
+      // Pekerja lapangan boleh menambah sesi pada catatannya sendiri.
+      allow update: if absensiSah()
         && jarakWajar()
         && request.resource.data.employeeId == resource.data.employeeId
         && request.resource.data.date == resource.data.date
@@ -351,11 +399,14 @@ service cloud.firestore {
         && (
           isAdmin()
           || (
-            resource.data.mandorId == profilSaya().employeeId
-            // Setelah Admin mengoreksi, mandor tidak bisa menulis lagi
-            // pada catatan itu. Kalau masih ada yang keliru, jalurnya
-            // lewat Admin, supaya tetap berjejak.
-            && resource.data.isOverridden == false
+            // Setelah Admin mengoreksi, mandor maupun pemiliknya tidak bisa
+            // menulis lagi pada catatan itu. Kalau masih ada yang keliru,
+            // jalurnya lewat Admin, supaya tetap berjejak.
+            resource.data.isOverridden == false
+            && (
+              (isMandor() && resource.data.mandorId == profilSaya().employeeId)
+              || (sudahLogin() && resource.data.employeeId == karyawanSaya())
+            )
           )
         );
 
@@ -364,6 +415,14 @@ service cloud.firestore {
     }
 
     // ---------- attendanceCorrections (jejak audit) ----------
+    /** Tanda tangan yang digoreskan saat itu: tautan gambar + nama penanda. */
+    function tandaTanganSah(d) {
+      return d.tandaTangan is map
+        && d.tandaTangan.url is string && d.tandaTangan.url.size() > 0
+        && d.tandaTangan.nama is string && d.tandaTangan.nama.size() > 0
+        && d.tandaTangan.email is string;
+    }
+
     function koreksiSah() {
       let d = request.resource.data;
       return d.attendanceId is string && d.attendanceId.size() > 0
@@ -373,6 +432,8 @@ service cloud.firestore {
                        'overtimeStart', 'overtimeEnd']
         && d.hasil in ['VALID', 'TIDAK_VALID']
         && d.approvedBy is string && d.approvedBy.size() > 0
+        // Setiap revisi absen wajib bertanda tangan Admin (9 Okt 2026).
+        && tandaTanganSah(d)
         // Penilaian "tidak valid" tidak boleh sekadar diklik: wajib
         // menyebut alasannya dan melampirkan bukti. Ini ditegakkan di
         // server, bukan hanya di formulir, supaya tidak bisa dilewati.
@@ -389,6 +450,24 @@ service cloud.firestore {
 
       // Jejak audit bersifat tambah-saja. Sekali tertulis, tidak bisa
       // diubah maupun dihapus oleh siapa pun, termasuk Admin.
+      allow update, delete: if false;
+    }
+
+    // ---------- officeAttendanceCorrections (jejak revisi absen kantor) ----------
+    // Koreksi jam dan keputusan absen luar radius oleh Admin/HR/Owner.
+    // Tambah-saja dan wajib bertanda tangan, sama seperti attendanceCorrections.
+    match /officeAttendanceCorrections/{koreksiId} {
+      allow read: if urusKepegawaian() || isFinance();
+      allow create: if urusKepegawaian()
+        && request.resource.data.attendanceId is string
+        && request.resource.data.attendanceId.size() > 0
+        && request.resource.data.employeeId is string
+        && request.resource.data.date is string
+        && request.resource.data.date.size() == 10
+        && request.resource.data.jenis in ['KOREKSI_JAM', 'KEPUTUSAN_LUAR_RADIUS']
+        && request.resource.data.approvedBy is string
+        && request.resource.data.approvedBy.size() > 0
+        && tandaTanganSah(request.resource.data);
       allow update, delete: if false;
     }
 
@@ -816,6 +895,106 @@ service cloud.firestore {
           || (
             resource.data.employeeId == karyawanSaya()
             && request.resource.data.status == 'DIBATALKAN'
+          )
+        );
+
+      allow delete: if false;
+    }
+
+    // ---------- pengakuan lembur ----------
+    // Lembur hanya dibayar bila ada pengajuan beralasan yang disetujui
+    // (9 Okt 2026). Diajukan sendiri (atau oleh mandor untuk anak buahnya)
+    // paling lambat 7 hari setelah tanggalnya; lewat itu hanya pengelola.
+    function lemburSah() {
+      let d = request.resource.data;
+      return d.employeeId is string && d.employeeId.size() > 0
+        && d.tanggal is string && d.tanggal.size() == 10
+        && d.jamLembur is number && d.jamLembur > 0
+        && d.alasan is string && d.alasan.size() > 0
+        && d.terlambat is bool
+        && d.sumber in ['SENDIRI', 'MANDOR', 'PENGELOLA']
+        && d.status in ['DIAJUKAN', 'DISETUJUI', 'DITOLAK', 'DIBATALKAN'];
+    }
+
+    /**
+     * Batas 7 hari ditegakkan di server, bukan hanya di formulir.
+     * Tanggal lembur "YYYY-MM-DD" adalah tanggal WIB (UTC+7):
+     *  - awal harinya   = tengah malam UTC tanggal itu dikurangi 7 jam
+     *  - akhir hari ke-7 = tanggal + 7 hari pukul 24.00 WIB
+     *                    = tengah malam UTC + 7 hari + 17 jam
+     * Tanggal di masa depan ditolak lewat syarat pertama.
+     */
+    function tanggalLemburMasihBoleh(tanggal) {
+      let awal = timestamp.date(int(tanggal.split('-')[0]), int(tanggal.split('-')[1]), int(tanggal.split('-')[2]));
+      return awal - duration.value(7, 'h') <= request.time
+        && request.time <= awal + duration.value(7, 'd') + duration.value(17, 'h');
+    }
+
+    match /overtimeRequests/{lemburId} {
+      // Finance membaca karena lembur yang disetujui masuk payroll.
+      allow read: if urusKepegawaian()
+        || isFinance()
+        || (sudahLogin() && (resource == null || resource.data.employeeId == karyawanSaya()))
+        || (sudahLogin() && resource != null && resource.data.atasanId == karyawanSaya())
+        || (isMandor() && resource != null && resource.data.mandorId == profilSaya().employeeId);
+
+      // Selalu lahir DIAJUKAN, belum diputuskan, belum ada jam disetujui.
+      allow create: if lemburSah()
+        && request.resource.data.status == 'DIAJUKAN'
+        && request.resource.data.jamDisetujui == null
+        && request.resource.data.diputuskanOleh == null
+        && (
+          // Pengelola mengajukan atas nama siapa pun, tanpa batas waktu
+          // (jalur untuk pengajuan yang terlambat).
+          (urusKepegawaian() && request.resource.data.sumber == 'PENGELOLA')
+          ||
+          // Diri sendiri, di dalam batas waktu.
+          (sudahLogin()
+            && request.resource.data.sumber == 'SENDIRI'
+            && request.resource.data.employeeId == karyawanSaya()
+            && request.resource.data.terlambat == false
+            && tanggalLemburMasihBoleh(request.resource.data.tanggal))
+          ||
+          // Mandor untuk anak buah yang sedang ditugaskan kepadanya.
+          (isMandor()
+            && request.resource.data.sumber == 'MANDOR'
+            && request.resource.data.terlambat == false
+            && request.resource.data.mandorId == profilSaya().employeeId
+            && get(/databases/$(database)/documents/employees/$(request.resource.data.employeeId)).data.currentMandorId
+                 == profilSaya().employeeId
+            && tanggalLemburMasihBoleh(request.resource.data.tanggal))
+        );
+
+      // Isi pengajuan beku. Yang boleh berubah hanya keputusannya (HR/Owner/Admin)
+      // atau pembatalan oleh pengajunya selagi masih menunggu.
+      allow update: if lemburSah()
+        && resource.data.status == 'DIAJUKAN'
+        && request.resource.data.employeeId == resource.data.employeeId
+        && request.resource.data.tanggal == resource.data.tanggal
+        && request.resource.data.jamMulai == resource.data.jamMulai
+        && request.resource.data.jamSelesai == resource.data.jamSelesai
+        && request.resource.data.jamLembur == resource.data.jamLembur
+        && request.resource.data.alasan == resource.data.alasan
+        && request.resource.data.sumber == resource.data.sumber
+        && request.resource.data.terlambat == resource.data.terlambat
+        && (
+          (
+            urusKepegawaian()
+            && request.resource.data.status in ['DISETUJUI', 'DITOLAK']
+            // Jam yang disetujui tidak boleh melebihi yang diajukan.
+            && (
+              request.resource.data.status == 'DITOLAK'
+              || (request.resource.data.jamDisetujui is number
+                  && request.resource.data.jamDisetujui > 0
+                  && request.resource.data.jamDisetujui <= resource.data.jamLembur)
+            )
+          )
+          ||
+          (
+            sudahLogin()
+            && request.resource.data.status == 'DIBATALKAN'
+            && (resource.data.employeeId == karyawanSaya()
+                || resource.data.diajukanOleh == emailUser())
           )
         );
 

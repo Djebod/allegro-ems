@@ -167,7 +167,11 @@ Koreksi disimpan di kolom terpisah, dan yang dipakai menghitung adalah hasil kor
 
 ### 6.3 Jejak audit bersifat tambah-saja
 
-`attendanceCorrections` dan `loanRepayments` menolak `update` dan `delete` untuk **semua orang, termasuk Admin**. Jejaknya bisa ditambah, tidak bisa dirapikan.
+`attendanceCorrections`, `officeAttendanceCorrections`, dan `loanRepayments` menolak `update` dan `delete` untuk **semua orang, termasuk Admin**. Jejaknya bisa ditambah, tidak bisa dirapikan.
+
+### 6.3b Setiap revisi absen bertanda tangan (9 Okt 2026)
+
+Validasi/koreksi absensi lapangan, koreksi jam absen kantor, dan keputusan absen luar radius wajib disertai **tanda tangan yang digoreskan saat itu** di `components/TandaTangan.tsx`. Gambarnya diunggah ke Cloudinary (`FOLDER_TANDA_TANGAN`) dan tautannya disimpan di `tandaTangan` pada baris jejak. Rules menolak jejak tanpa `tandaTangan.url`. Jejaknya **ditulis lebih dulu**, baru dokumen absennya diubah: kalau jejak ditolak, absen tidak pernah tersentuh. Tanda tangan sengaja tidak disimpan untuk dipakai ulang.
 
 ### 6.4 Security Rules yang menegakkan, bukan tampilan
 
@@ -224,9 +228,27 @@ Masa penilaian **3 bulan** sejak terbit. Kenaikan tingkat dihitung **per kategor
 
 Kategori **wajib dipilih dari daftar**, tidak boleh diketik bebas — kalau bebas, "Keterlambatan" dan "Telat" jadi dua kategori dan tingkatnya tidak pernah naik.
 
+### Pengakuan lembur (9 Okt 2026)
+
+Jam lembur di absensi **bukan dasar pembayaran**. Lembur harus diajukan lewat `overtimeRequests` (menu Lembur) dengan alasan, lalu disetujui HR/Owner/Admin, persis alur cuti. Aturannya di `lib/lembur.ts`, angkanya di `lib/constants.ts`:
+
+| | |
+|---|---|
+| Batas pengajuan sendiri | `BATAS_AJUKAN_LEMBUR_HARI` = 7 hari setelah tanggal lembur |
+| Lewat batas | hanya Admin/HR/Owner yang bisa memasukkan, atas nama karyawan, ditandai `terlambat` |
+| Siapa boleh mengajukan | diri sendiri; mandor untuk anak buahnya (`sumber: MANDOR`); pengelola (`sumber: PENGELOLA`) |
+| Tanggal | tidak boleh di masa depan; minimal 1 jam, maksimal `MAKS_JAM_LEMBUR_SEHARI` = 12 jam |
+| Jam disetujui | boleh dikurangi dari yang diajukan, tidak boleh ditambah |
+| Payroll mingguan | dibayar yang **terkecil** dari jam absen dan jam disetujui; tanpa pengajuan = 0 dan dicatat `lemburTanpaPengajuanJam`; ada pengajuan tanpa sesi lembur di absensi = jam disetujui (dengan catatan); sesi dinyatakan tidak valid oleh Admin = 0 walau disetujui |
+| Payroll bulanan | kolom lembur tetap rupiah manual; jam disetujui ditampilkan sebagai acuan |
+
+Batas 7 hari juga ditegakkan di `firestore.rules` (`tanggalLemburMasihBoleh`) memakai `int()` dan `timestamp.date()`. **Belum pernah diuji di Firestore sungguhan** — kalau pengajuan sendiri selalu ditolak "insufficient permissions", curigai fungsi itu lebih dulu.
+
 ### Absensi lapangan
 
 GPS wajib, radius per proyek (bawaan 1.000 m), foto wajib dari kamera belakang, satu foto per orang per sesi. Mandor mencatat timnya dan dirinya sendiri. Urutan sesi tidak bisa dilompati.
+
+**Tukang/kenek yang punya akun Google boleh absen sendiri** (9 Okt 2026) lewat menu Absen saya, yang untuk posisi lapangan menampilkan `components/AbsenLapanganSendiri.tsx`. Aturannya sama (radius proyek penugasan, swafoto, urutan sesi) dan catatannya masuk dokumen `attendance` yang sama, jadi tetap terlihat di tim mandor. Rules hanya menerima bila `mandorId` dan `projectId` cocok dengan `currentMandorId`/`currentProjectId` di dokumen karyawannya. Halaman mandor punya menu tarik-turun "Anak buah saya" untuk menyaring kartu.
 
 ### Absensi kantor
 
@@ -250,6 +272,12 @@ Mesin fingerprint **tidak dipakai lagi**. Staf kantor absen sendiri lewat HP:
 ### Kasbon
 
 Satu karyawan satu bon aktif. Bisa dicicil; besarnya dibulatkan ke atas supaya cicilan terakhir yang mengecil. Potongan tidak pernah melebihi upah periode itu.
+
+### Data karyawan (9 Okt 2026)
+
+- **Foto, rekening bank, dan nama penerima diisi sendiri** oleh karyawan dari Beranda → Data Pribadi. Rules mengizinkan `bankName`, `bankAccountNumber`, `bankAccountName` diubah pemiliknya, dengan syarat ketiganya lengkap (atau ketiganya kosong) dan `rekeningDiubahSendiriPada` diisi jam server. Detail Karyawan menampilkan penanda "diisi sendiri" supaya HR mencocokkan dengan buku tabungan sebelum transfer pertama. Risiko akun dibajak sudah disampaikan dan diterima client.
+- **Daftar karyawan dipisah**: tab Staf kantor (STAF, PIC) dan Pekerja lapangan (MANDOR, TUKANG, KENEK). Pemilahnya `jenisPekerja()` di `lib/karyawan.ts`, berdasar posisi (`POSISI_LAPANGAN` di constants), bukan `kantorId`.
+- Detail karyawan berposisi MANDOR menampilkan daftar anak buah yang penugasannya berjalan di bawahnya.
 
 ### Potongan BPJS (8 Okt 2026)
 
@@ -284,8 +312,12 @@ lib/          aturan bisnis, akses data, util
   data.ts         akses Firestore inti
   data-cuti.ts    cuti, saldo, hari libur
   data-sp.ts      surat peringatan
+  data-lembur.ts  pengakuan lembur (overtimeRequests)
   payroll.ts      mesin hitung upah
   cuti.ts         aturan cuti
+  lembur.ts       aturan pengakuan lembur + jam lembur yang dibayar
+  karyawan.ts     pemilah staf kantor / pekerja lapangan
+  tanda-tangan.ts unggah tanda tangan revisi absen
   sp.ts           aturan surat peringatan
   jadwal.ts       jadwal kerja kantor
   absensi.ts      absensi lapangan + keTanggal()

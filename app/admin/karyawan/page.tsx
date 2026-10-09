@@ -15,6 +15,7 @@ import {
   STATUS_PTKP,
 } from "@/lib/constants";
 import { selisihHariDariSekarang } from "@/lib/cuti";
+import { LABEL_JENIS_PEKERJA, jenisPekerja, type JenisPekerja } from "@/lib/karyawan";
 import type {
   Employee,
   EmployeeStatus,
@@ -23,7 +24,11 @@ import type {
   StatusKepegawaian,
 } from "@/types";
 
-const POSISI: Position[] = ["MANDOR", "TUKANG", "KENEK", "STAF", "PIC"];
+/** Posisi per kelompok. Daftar karyawan dipisah kantor dan lapangan (9 Okt 2026). */
+const POSISI_PER_JENIS: Record<JenisPekerja, Position[]> = {
+  KANTOR: ["STAF", "PIC"],
+  LAPANGAN: ["MANDOR", "TUKANG", "KENEK"],
+};
 
 const kosong = {
   employeeCode: "",
@@ -55,7 +60,9 @@ function Isi() {
   const [gagalBaca, setGagalBaca] = useState(false);
 
   const [cari, setCari] = useState("");
+  const [jenis, setJenis] = useState<JenisPekerja>("KANTOR");
   const [filterPosisi, setFilterPosisi] = useState<"SEMUA" | Position>("SEMUA");
+  const POSISI = POSISI_PER_JENIS[jenis];
 
   const [buka, setBuka] = useState(false);
   const [form, setForm] = useState(kosong);
@@ -76,18 +83,27 @@ function Isi() {
     );
   }, []);
 
+  const jumlahPerJenis = useMemo(
+    () => ({
+      KANTOR: karyawan.filter((e) => jenisPekerja(e) === "KANTOR").length,
+      LAPANGAN: karyawan.filter((e) => jenisPekerja(e) === "LAPANGAN").length,
+    }),
+    [karyawan]
+  );
+
   const terlihat = useMemo(() => {
     const k = cari.trim().toLowerCase();
     return karyawan.filter((e) => {
+      const cocokJenis = jenisPekerja(e) === jenis;
       const cocokPosisi = filterPosisi === "SEMUA" || e.position === filterPosisi;
       const cocokCari =
         !k ||
         e.name.toLowerCase().includes(k) ||
         e.employeeCode.toLowerCase().includes(k) ||
         e.nik.includes(k);
-      return cocokPosisi && cocokCari;
+      return cocokJenis && cocokPosisi && cocokCari;
     });
-  }, [karyawan, cari, filterPosisi]);
+  }, [karyawan, cari, jenis, filterPosisi]);
 
   function isi(k: keyof typeof kosong, v: string) {
     setForm((f) => ({ ...f, [k]: v }));
@@ -163,9 +179,33 @@ function Isi() {
 
   return (
     <>
+      {/* Staf kantor dan pekerja lapangan dipisah: cara absen, cara bayar,
+          dan kolom yang penting bagi keduanya berbeda. */}
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        {(["KANTOR", "LAPANGAN"] as JenisPekerja[]).map((j) => (
+          <button
+            key={j}
+            className={jenis === j ? "btn-utama" : "btn-ringan"}
+            onClick={() => {
+              setJenis(j);
+              setFilterPosisi("SEMUA");
+            }}
+          >
+            {LABEL_JENIS_PEKERJA[j]}
+            <span className="ml-2 text-xs opacity-80">{jumlahPerJenis[j]}</span>
+          </button>
+        ))}
+      </div>
+
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <button className="btn-utama" onClick={() => setBuka(true)}>
-          Tambah karyawan
+        <button
+          className="btn-utama"
+          onClick={() => {
+            setForm({ ...kosong, position: POSISI[0] });
+            setBuka(true);
+          }}
+        >
+          Tambah {LABEL_JENIS_PEKERJA[jenis].toLowerCase()}
         </button>
         <Link className="btn-ringan" href="/admin/karyawan/impor">
           Impor dari Excel
@@ -201,6 +241,8 @@ function Isi() {
           <p className="text-sm text-muted">
             {karyawan.length === 0
               ? "Belum ada karyawan. Tambahkan mandor lebih dulu, karena merekalah yang mencatat absensi tim."
+              : jumlahPerJenis[jenis] === 0
+              ? `Belum ada ${LABEL_JENIS_PEKERJA[jenis].toLowerCase()}.`
               : "Tidak ada yang cocok dengan pencarian ini."}
           </p>
         </div>
@@ -259,7 +301,7 @@ function Isi() {
         </div>
       )}
 
-      <Modal judul="Karyawan baru" terbuka={buka} onTutup={() => setBuka(false)}>
+      <Modal judul={`${LABEL_JENIS_PEKERJA[jenis]} baru`} terbuka={buka} onTutup={() => setBuka(false)}>
         <div className="space-y-4">
           {salah && <Pesan jenis="gagal" isi={salah} />}
 
@@ -490,7 +532,10 @@ function Isi() {
           </div>
 
           <p className="text-xs text-muted">
-            Foto, tarif gaji, dan penugasan diisi di halaman detail setelah karyawan tersimpan.
+            {jenis === "LAPANGAN"
+              ? "Tarif gaji dan penugasan proyek diisi di halaman detail setelah karyawan tersimpan."
+              : "Jadwal kerja dan gaji bulanan diisi di halaman detail dan Payroll bulanan setelah karyawan tersimpan."}{" "}
+            Foto dan rekening bisa diisi sendiri oleh karyawan dari berandanya.
           </p>
 
           <button className="btn-utama w-full" onClick={simpan} disabled={menyimpan}>
@@ -505,7 +550,7 @@ function Isi() {
 export default function HalamanKaryawan() {
   return (
     <Guard izinkan={["ADMIN"]}>
-      <Shell judul="Data Karyawan" keterangan="Mandor, tukang, dan kenek yang bekerja di proyek.">
+      <Shell judul="Data Karyawan" keterangan="Staf kantor dan pekerja lapangan (mandor, tukang, kenek), dipisah.">
         <Isi />
       </Shell>
     </Guard>

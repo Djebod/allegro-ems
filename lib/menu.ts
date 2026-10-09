@@ -30,6 +30,9 @@ export const MENU: GrupMenu[] = [
       { label: "Absen saya", href: "/absen", peran: ["ADMIN", "FINANCE", "HR", "OWNER", "KARYAWAN"] },
       { label: "Absen tim", href: "/mandor", peran: ["MANDOR"] },
       { label: "Cuti dan izin", href: "/cuti", peran: SEMUA },
+      // Pengakuan lembur: diajukan sendiri (mandor juga untuk anak buahnya),
+      // disetujui HR/Owner. Lembur tanpa ini tidak dibayar.
+      { label: "Lembur", href: "/lembur", peran: SEMUA },
       { label: "Izin keluar kantor", href: "/izin-keluar", peran: ["ADMIN", "FINANCE", "HR", "OWNER", "KARYAWAN"] },
       // Slip gaji bulanan hanya untuk staf kantor; mandor dibayar mingguan.
       { label: "Slip gaji", href: "/slip-gaji", peran: ["ADMIN", "FINANCE", "HR", "OWNER", "KARYAWAN"] },
@@ -52,6 +55,8 @@ export const MENU: GrupMenu[] = [
       { label: "Data karyawan", href: "/admin/karyawan", peran: ["ADMIN"] },
       { label: "Impor karyawan", href: "/admin/karyawan/impor", peran: KEPEGAWAIAN },
       { label: "Kelola cuti", href: "/cuti/kelola", peran: KEPEGAWAIAN },
+      // Finance ikut membaca karena lembur yang disetujui masuk payroll.
+      { label: "Kelola lembur", href: "/lembur/kelola", peran: ["ADMIN", "HR", "OWNER", "FINANCE"] },
       { label: "Kelola izin keluar", href: "/izin-keluar/kelola", peran: ["ADMIN", "HR", "OWNER", "FINANCE"] },
       { label: "Hari libur", href: "/hari-libur", peran: KEPEGAWAIAN },
     ],
@@ -94,6 +99,7 @@ export function menuAktif(pathname: string, href: string): boolean {
   // /admin/karyawan/impor punya menu sendiri, jadi jangan ikut menyalakan Data karyawan.
   if (href === "/admin/karyawan" && pathname.startsWith("/admin/karyawan/impor")) return false;
   if (href === "/cuti" && pathname.startsWith("/cuti/kelola")) return false;
+  if (href === "/lembur" && pathname.startsWith("/lembur/kelola")) return false;
   if (href === "/izin-keluar" && pathname.startsWith("/izin-keluar/kelola")) return false;
   if (href === "/absensi-kantor" && pathname.startsWith("/absensi-kantor/rekap")) return false;
   return pathname.startsWith(`${href}/`);

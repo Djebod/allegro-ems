@@ -48,6 +48,8 @@ function Isi() {
 
   const [antrean, setAntrean] = useState<Antrean | null>(null);
   const [titikSaya, setTitikSaya] = useState<TitikAbsen | null>(null);
+  /** Anak buah yang dipilih di menu tarik-turun; kosong berarti semua. */
+  const [pilihAnakBuah, setPilihAnakBuah] = useState("");
   const [mengirim, setMengirim] = useState(false);
   const [mencariLokasi, setMencariLokasi] = useState(false);
 
@@ -190,6 +192,8 @@ function Isi() {
 
   const belum = tim.filter((t) => !absensi[t.id]?.checkIn).length;
   const selesai = tim.filter((t) => absensi[t.id]?.status === "SELESAI").length;
+  const anakBuah = tim.filter((t) => t.id !== mandorId);
+  const timTerlihat = pilihAnakBuah ? tim.filter((t) => t.id === pilihAnakBuah || t.id === mandorId) : tim;
 
   return (
     <>
@@ -211,7 +215,8 @@ function Isi() {
         </div>
         <p className="mt-3 text-xs text-muted">
           Absen hanya bisa dicatat dalam radius {proyekSaya.attendanceRadiusMeter} meter dari titik
-          proyek, dan wajib berfoto.
+          proyek, dan wajib berfoto. Anak buah yang punya akun juga bisa absen sendiri lewat menu Absen saya;
+          catatannya tetap muncul di sini.
         </p>
 
         <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-line pt-4">
@@ -256,8 +261,37 @@ function Isi() {
         <p className="mt-4 text-sm text-muted">Mengambil lokasi…</p>
       )}
 
+      {/* Daftar anak buah: siapa saja yang sedang bekerja di bawah mandor ini.
+          Memilih satu nama menyaring kartu di bawah, supaya di HP tidak perlu
+          menggulir panjang saat timnya besar. */}
+      <div className="kartu mt-4">
+        <label className="block">
+          <span className="mb-1 block text-sm font-medium text-ink">
+            Anak buah saya
+            <span className="ml-2 font-normal text-muted">{anakBuah.length} orang</span>
+          </span>
+          <select
+            className="input-dasar"
+            value={pilihAnakBuah}
+            onChange={(e) => setPilihAnakBuah(e.target.value)}
+          >
+            <option value="">Tampilkan semua</option>
+            {anakBuah.map((k) => (
+              <option key={k.id} value={k.id}>
+                {k.name} · {k.position} · {absensi[k.id]?.status || "BELUM"}
+              </option>
+            ))}
+          </select>
+        </label>
+        {anakBuah.length === 0 && (
+          <p className="mt-2 text-xs text-muted">
+            Belum ada tukang atau kenek yang ditugaskan di bawah Anda. Minta Admin memeriksa penugasannya.
+          </p>
+        )}
+      </div>
+
       <div className="mt-4 space-y-3">
-        {tim.map((k) => {
+        {timTerlihat.map((k) => {
           const absen = absensi[k.id];
           const hitung = absen ? hitungJam(absen) : null;
 

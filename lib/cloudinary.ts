@@ -164,6 +164,8 @@ async function kirimKeCloudinary(kecil: Blob, folder: string, publicId: string):
 export const FOLDER_PROFIL = "allegro/profil";
 export const FOLDER_KTP = "allegro/ktp";
 export const FOLDER_ABSENSI = "allegro/absensi";
+export const FOLDER_TANDA_TANGAN = "allegro/tanda-tangan";
+export const FOLDER_LEMBUR = "allegro/lembur";
 
 /**
  * Mengubah tautan Cloudinary menjadi versi kecil yang dipotong persegi.

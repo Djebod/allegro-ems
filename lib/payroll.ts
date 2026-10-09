@@ -6,7 +6,8 @@ import {
   MIN_OVERTIME_HOURS,
 } from "@/lib/constants";
 import { hitungJam, keTanggal } from "@/lib/absensi";
-import type { Attendance, Employee, PayrollItem, SalaryRate } from "@/types";
+import { jamLemburDibayar, petaLemburDisetujui } from "@/lib/lembur";
+import type { Attendance, Employee, PayrollItem, PengajuanLembur, SalaryRate } from "@/types";
 
 /** Senin pada minggu tanggal tertentu. */
 export function seninMingguIni(acuan = new Date()): string {
@@ -62,6 +63,12 @@ export function hitungUpahKaryawan(opsi: {
   sisaBon: number;
   /** Cicilan bulanan bon, bila bonnya memang dicicil. */
   cicilanBon?: number;
+  /**
+   * Pengajuan lembur yang disetujui. Lembur di absensi HANYA dibayar bila
+   * tanggalnya ada di sini (keputusan Bang Syam, 9 Okt 2026): catatan jam
+   * saja bukan bukti bahwa lemburnya memang diperintahkan.
+   */
+  lemburDisetujui?: PengajuanLembur[];
 }): HasilHitung {
   const masalah: string[] = [];
 
@@ -69,12 +76,16 @@ export function hitungUpahKaryawan(opsi: {
   let totalWorkHours = 0;
   let totalOvertimeHours = 0;
   let lemburGugurJam = 0;
+  let lemburTanpaPengajuanJam = 0;
   let hariTidakLengkap = 0;
   let regularPay = 0;
   let overtimePay = 0;
 
   const tarifTerpakai = new Set<string>();
   let tarifTerakhir: SalaryRate | null = null;
+
+  const lemburPerTanggal = petaLemburDisetujui(opsi.lemburDisetujui || [], opsi.karyawan.id);
+  const tanggalAbsen = new Set(opsi.absensi.map((a) => a.date));
 
   const urut = [...opsi.absensi].sort((a, b) => a.date.localeCompare(b.date));
 
@@ -112,18 +123,58 @@ export function hitungUpahKaryawan(opsi: {
     regularPay +=
       t.paymentMode === "DAILY" ? faktorHari * t.dailyRate : jamDibayar * t.hourlyRate;
 
-    if (h.overtimeHours > 0) {
-      if (h.overtimeHours < MIN_OVERTIME_HOURS) {
-        lemburGugurJam += h.overtimeHours;
+    const disetujui = lemburPerTanggal.get(hari.date);
+    // Admin yang menyatakan sesi lemburnya TIDAK VALID menang atas pengajuan:
+    // persetujuan HR berarti lemburnya diperintahkan, penilaian Admin berarti
+    // lemburnya tidak dikerjakan.
+    const dibatalkanAdmin =
+      hari.overtimeStart?.validasi?.hasil === "TIDAK_VALID" ||
+      hari.overtimeEnd?.validasi?.hasil === "TIDAK_VALID";
+
+    if (h.overtimeHours > 0 && !disetujui) {
+      lemburTanpaPengajuanJam += h.overtimeHours;
+      masalah.push(
+        `${hari.date}: lembur ${h.overtimeHours} jam tercatat di absensi tetapi tidak ada pengajuan lembur yang disetujui, tidak dibayar.`
+      );
+    }
+
+    let jamLembur = jamLemburDibayar(h.overtimeHours, disetujui);
+    if (disetujui && dibatalkanAdmin) {
+      masalah.push(
+        `${hari.date}: pengajuan lembur ${disetujui} jam disetujui, tetapi sesi lemburnya dinyatakan tidak valid oleh Admin. Tidak dibayar.`
+      );
+      jamLembur = 0;
+    }
+
+    if (jamLembur > 0) {
+      if (jamLembur < MIN_OVERTIME_HOURS) {
+        lemburGugurJam += jamLembur;
         masalah.push(
-          `${hari.date}: lembur ${h.overtimeHours} jam kurang dari ${MIN_OVERTIME_HOURS} jam, tidak dibayar.`
+          `${hari.date}: lembur ${jamLembur} jam kurang dari ${MIN_OVERTIME_HOURS} jam, tidak dibayar.`
         );
       } else {
-        totalOvertimeHours += h.overtimeHours;
-        overtimePay += h.overtimeHours * t.overtimeHourlyRate;
+        totalOvertimeHours += jamLembur;
+        overtimePay += jamLembur * t.overtimeHourlyRate;
+        if (h.overtimeHours === 0) {
+          masalah.push(
+            `${hari.date}: lembur ${jamLembur} jam dibayar dari pengajuan yang disetujui; mandor tidak mencatat sesi lembur di absensi.`
+          );
+        } else if (h.overtimeHours !== jamLembur) {
+          masalah.push(
+            `${hari.date}: lembur tercatat ${h.overtimeHours} jam, disetujui ${disetujui} jam, dibayar ${jamLembur} jam.`
+          );
+        }
       }
     }
   }
+
+  lemburPerTanggal.forEach((jam, tanggal) => {
+    if (!tanggalAbsen.has(tanggal)) {
+      masalah.push(
+        `${tanggal}: lembur ${jam} jam disetujui, tetapi tidak ada absensi hari itu. Tidak dibayar.`
+      );
+    }
+  });
 
   const grossPay = Math.round(regularPay + overtimePay);
 
@@ -153,6 +204,7 @@ export function hitungUpahKaryawan(opsi: {
       totalWorkHours: bulat2(totalWorkHours),
       totalOvertimeHours: bulat2(totalOvertimeHours),
       lemburGugurJam: bulat2(lemburGugurJam),
+      lemburTanpaPengajuanJam: bulat2(lemburTanpaPengajuanJam),
       hariTidakLengkap,
 
       dailyRate: tarifTerakhir?.dailyRate || 0,

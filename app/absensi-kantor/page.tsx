@@ -6,12 +6,14 @@ import Guard from "@/components/Guard";
 import Shell from "@/components/Shell";
 import Modal from "@/components/Modal";
 import { Field, Pesan } from "@/components/Field";
+import TandaTangan from "@/components/TandaTangan";
 import { useAuth } from "@/lib/auth";
-import { koreksiAbsenKantor, pantauAbsenKantor, putuskanAbsenLuar } from "@/lib/data-kantor";
+import { koreksiAbsenKantor, pantauAbsenKantor, pantauKoreksiKantor, putuskanAbsenLuar } from "@/lib/data-kantor";
 import { ISTIRAHAT_BAKU_MENIT, jamEfektifKantor, jamWIB, tambahMenit } from "@/lib/kantor";
 import { fotoKecil } from "@/lib/cloudinary";
+import { unggahTandaTangan } from "@/lib/tanda-tangan";
 import { jamDari, tanggalHariIni, tanggalPendek } from "@/lib/absensi";
-import type { AbsenKantor } from "@/types";
+import type { AbsenKantor, OfficeAttendanceCorrection } from "@/types";
 
 function awalBulan(b: string) {
   return `${b}-01`;
@@ -38,6 +40,9 @@ function Isi() {
   const [kSelesaiIstirahat, setKSelesaiIstirahat] = useState("");
   const [kAlasan, setKAlasan] = useState("");
   const [catatanValidasi, setCatatanValidasi] = useState("");
+  /** Goresan tanda tangan Admin; satu goresan dipakai untuk satu simpanan. */
+  const [berkasTtd, setBerkasTtd] = useState<File | null>(null);
+  const [jejak, setJejak] = useState<OfficeAttendanceCorrection[]>([]);
 
   useEffect(() => {
     return pantauAbsenKantor(awalBulan(bulan), akhirBulan(bulan), setData, () =>
@@ -68,7 +73,22 @@ function Isi() {
     setKSelesaiIstirahat(a.koreksiSelesaiIstirahat || "");
     setKAlasan("");
     setCatatanValidasi("");
+    setBerkasTtd(null);
   };
+
+  useEffect(() => {
+    if (!rincian) {
+      setJejak([]);
+      return;
+    }
+    return pantauKoreksiKantor(rincian, setJejak, () => setJejak([]));
+  }, [rincian]);
+
+  /** Tanda tangan yang sudah terunggah, siap disimpan bersama jejak. */
+  async function tandaTanganSiap() {
+    if (!berkasTtd) throw new Error("Bubuhkan tanda tangan dulu. Setiap revisi absen wajib ditandatangani.");
+    return unggahTandaTangan(berkasTtd, { nama: profile?.name || profile?.email || "", email: profile?.email || "" });
+  }
 
   useEffect(() => {
     if (!tujuan) return;
@@ -376,41 +396,37 @@ function Isi() {
                   />
                 </Field>
                 <div className="mt-3 flex gap-2">
-                  <button
-                    className="btn-utama"
-                    disabled={sibuk}
-                    onClick={async () => {
-                      setSibuk(true);
-                      await putuskanAbsenLuar({
-                        absen: buka,
-                        hasil: "DITERIMA",
-                        catatan: catatanValidasi,
-                        oleh: profile?.email || "",
-                      });
-                      setSibuk(false);
-                      setPesan("Absen dari luar kantor diterima.");
-                    }}
-                  >
-                    Terima
-                  </button>
-                  <button
-                    className="btn-ringan text-bahaya"
-                    disabled={sibuk}
-                    onClick={async () => {
-                      setSibuk(true);
-                      await putuskanAbsenLuar({
-                        absen: buka,
-                        hasil: "DITOLAK",
-                        catatan: catatanValidasi,
-                        oleh: profile?.email || "",
-                      });
-                      setSibuk(false);
-                      setPesan("Absen dari luar kantor ditolak.");
-                    }}
-                  >
-                    Tolak
-                  </button>
+                  {(["DITERIMA", "DITOLAK"] as const).map((hasil) => (
+                    <button
+                      key={hasil}
+                      className={hasil === "DITERIMA" ? "btn-utama" : "btn-ringan text-bahaya"}
+                      disabled={sibuk}
+                      onClick={async () => {
+                        setSalah(null);
+                        setSibuk(true);
+                        try {
+                          const tandaTangan = await tandaTanganSiap();
+                          await putuskanAbsenLuar({
+                            absen: buka,
+                            hasil,
+                            catatan: catatanValidasi,
+                            oleh: profile?.email || "",
+                            tandaTangan,
+                          });
+                          setPesan(hasil === "DITERIMA" ? "Absen dari luar kantor diterima." : "Absen dari luar kantor ditolak.");
+                          setRincianId(null);
+                        } catch (e) {
+                          setSalah(e instanceof Error ? e.message : "Keputusan gagal disimpan.");
+                        } finally {
+                          setSibuk(false);
+                        }
+                      }}
+                    >
+                      {hasil === "DITERIMA" ? "Terima" : "Tolak"}
+                    </button>
+                  ))}
                 </div>
+                <p className="mt-2 text-xs text-muted">Keputusan ini juga memakai tanda tangan di kotak paling bawah.</p>
               </div>
             )}
 
@@ -487,6 +503,7 @@ function Isi() {
                   setSalah(null);
                   setSibuk(true);
                   try {
+                    const tandaTangan = await tandaTanganSiap();
                     await koreksiAbsenKantor({
                       absen: buka,
                       koreksiMasuk: kMasuk,
@@ -495,6 +512,7 @@ function Isi() {
                       koreksiSelesaiIstirahat: kSelesaiIstirahat,
                       alasan: kAlasan,
                       oleh: profile?.email || "",
+                      tandaTangan,
                     });
                     setRincianId(null);
                     setPesan("Koreksi tersimpan.");
@@ -511,6 +529,53 @@ function Isi() {
                 Jam asli beserta foto dan titik GPS-nya tetap tersimpan.
               </p>
             </div>
+
+            <div className="rounded-lg border border-line p-3">
+              <TandaTangan
+                bantuan={`Ditandatangani sebagai ${profile?.name || profile?.email || ""}. Wajib untuk koreksi jam maupun keputusan absen luar kantor; tersimpan di jejak revisi dan tidak bisa dihapus.`}
+                onUbah={setBerkasTtd}
+              />
+            </div>
+
+            {jejak.length > 0 && (
+              <details className="rounded-lg border border-line p-3">
+                <summary className="cursor-pointer text-sm font-medium text-ink">
+                  Jejak revisi ({jejak.length})
+                </summary>
+                <ul className="mt-3 space-y-3 text-xs text-muted">
+                  {jejak.map((k) => (
+                    <li key={k.id}>
+                      <span className="font-semibold text-ink">
+                        {k.jenis === "KOREKSI_JAM" ? "Koreksi jam" : `Absen luar kantor ${k.hasilValidasi?.toLowerCase()}`}
+                      </span>
+                      {k.jenis === "KOREKSI_JAM" &&
+                        ` · masuk ${k.koreksiMasuk || "—"} · istirahat ${k.koreksiIstirahat || "—"}–${k.koreksiSelesaiIstirahat || "—"} · pulang ${k.koreksiPulang || "—"}`}
+                      {k.alasan ? ` · ${k.alasan}` : ""} · oleh {k.approvedBy}
+                      <a
+                        href={k.tandaTangan.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-1 flex items-center gap-2"
+                        title={`Ditandatangani ${k.tandaTangan.nama}`}
+                      >
+                        <Image
+                          src={fotoKecil(k.tandaTangan.url, 240)}
+                          alt="Tanda tangan"
+                          width={96}
+                          height={32}
+                          className="h-8 w-24 rounded border border-line bg-white object-contain"
+                          unoptimized
+                        />
+                        <span>ttd {k.tandaTangan.nama}</span>
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </details>
+            )}
+            {buka.isOverridden && jejak.length === 0 && buka.alasanKoreksi && (
+              <p className="text-xs text-muted">Koreksi lama (sebelum ada jejak bertanda tangan): {buka.alasanKoreksi}</p>
+            )}
           </div>
         )}
       </Modal>

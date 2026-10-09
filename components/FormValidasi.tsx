@@ -2,24 +2,30 @@
 
 import { useRef, useState } from "react";
 import { Field, Pesan } from "@/components/Field";
+import TandaTangan from "@/components/TandaTangan";
 import { unggahFoto } from "@/lib/cloudinary";
+import { unggahTandaTangan } from "@/lib/tanda-tangan";
 import { keKotakJam } from "@/lib/absensi";
-import type { Attendance, HasilValidasi, JenisSesi } from "@/types";
+import type { Attendance, HasilValidasi, JenisSesi, TandaTangan as TandaTanganTersimpan } from "@/types";
 
 const FOLDER_KOREKSI = "allegro/koreksi";
 
 export default function FormValidasi({
   absen,
   jenis,
+  penanda,
   onSimpan,
 }: {
   absen: Attendance;
   jenis: JenisSesi;
+  /** Admin yang sedang login; namanya disalin ke tanda tangan. */
+  penanda: { nama: string; email: string };
   onSimpan: (data: {
     hasil: HasilValidasi;
     alasan: string;
     buktiUrl: string | null;
     jamAktual: string;
+    tandaTangan: TandaTanganTersimpan;
   }) => Promise<void>;
 }) {
   const event = absen[jenis];
@@ -30,6 +36,7 @@ export default function FormValidasi({
   const [alasan, setAlasan] = useState(sudah?.alasan || "");
   const [bukti, setBukti] = useState<string | null>(sudah?.buktiUrl || null);
   const [jam, setJam] = useState(keKotakJam(event?.waktuAktual));
+  const [tandaTangan, setTandaTangan] = useState<File | null>(null);
   const [salah, setSalah] = useState<string | null>(null);
   const [sibuk, setSibuk] = useState(false);
   const berkas = useRef<HTMLInputElement>(null);
@@ -59,10 +66,15 @@ export default function FormValidasi({
     if (hasil === "TIDAK_VALID" && !bukti) {
       return setSalah("Foto bukti wajib dilampirkan.");
     }
+    if (!tandaTangan) {
+      return setSalah("Bubuhkan tanda tangan dulu. Setiap revisi absen wajib ditandatangani.");
+    }
     setSibuk(true);
     try {
-      await onSimpan({ hasil, alasan, buktiUrl: bukti, jamAktual: jam });
+      const ttd = await unggahTandaTangan(tandaTangan, penanda);
+      await onSimpan({ hasil, alasan, buktiUrl: bukti, jamAktual: jam, tandaTangan: ttd });
       setBuka(false);
+      setTandaTangan(null);
     } catch (e) {
       setSalah(e instanceof Error ? e.message : "Validasi gagal disimpan.");
     } finally {
@@ -167,6 +179,11 @@ export default function FormValidasi({
           </div>
         </>
       )}
+
+      <TandaTangan
+        bantuan={`Ditandatangani sebagai ${penanda.nama}. Tersimpan bersama jejak koreksi dan tidak bisa dihapus.`}
+        onUbah={setTandaTangan}
+      />
 
       <div className="flex gap-2">
         <button className="btn-utama" onClick={simpan} disabled={sibuk}>

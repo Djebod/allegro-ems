@@ -87,6 +87,9 @@ function Isi() {
   const [uNickname, setUNickname] = useState("");
   const [uPhone, setUPhone] = useState("");
   const [uAddress, setUAddress] = useState("");
+  const [uBank, setUBank] = useState("");
+  const [uRekening, setURekening] = useState("");
+  const [uAtasNama, setUAtasNama] = useState("");
   const [sibuk, setSibuk] = useState(false);
   const berkas = useRef<HTMLInputElement>(null);
 
@@ -358,6 +361,10 @@ function Isi() {
           <h3 className="font-semibold text-ink">Cuti &amp; Izin</h3>
           <p className="mt-1 text-sm text-muted">Ajukan dan lihat saldo.</p>
         </Link>
+        <Link href="/lembur" className="kartu hover:border-allegro-600">
+          <h3 className="font-semibold text-ink">Lembur</h3>
+          <p className="mt-1 text-sm text-muted">Ajukan pengakuan lembur.</p>
+        </Link>
         <Link href="/sp" className="kartu hover:border-allegro-600">
           <h3 className="font-semibold text-ink">Surat Peringatan</h3>
           <p className="mt-1 text-sm text-muted">Catatan atas nama Anda.</p>
@@ -368,12 +375,18 @@ function Isi() {
             setUNickname(karyawan.nickname || "");
             setUPhone(karyawan.phone || "");
             setUAddress(karyawan.address || "");
+            setUBank(karyawan.bankName || "");
+            setURekening(karyawan.bankAccountNumber || "");
+            setUAtasNama(karyawan.bankAccountName || "");
             setSalah(null);
             setBuka(true);
           }}
         >
           <h3 className="font-semibold text-ink">Data Pribadi</h3>
-          <p className="mt-1 text-sm text-muted">Ubah foto, HP, dan alamat.</p>
+          <p className="mt-1 text-sm text-muted">Foto, HP, alamat, dan rekening gaji.</p>
+          {!karyawan.bankAccountNumber && (
+            <p className="mt-1 text-xs font-semibold text-bahaya">Rekening belum diisi</p>
+          )}
         </button>
       </div>
 
@@ -626,15 +639,36 @@ function Isi() {
             />
           </Field>
 
+          <div className="rounded-lg border border-line p-4">
+            <p className="mb-1 text-sm font-medium text-ink">Rekening penerima gaji</p>
+            <p className="mb-3 text-xs text-muted">
+              Isi sesuai buku tabungan. Gaji ditransfer ke rekening ini, jadi periksa angkanya dua kali. Setiap
+              perubahan tercatat waktunya dan terlihat oleh HR.
+            </p>
+            <div className="space-y-4">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Nama bank">
+                  <input className="input-dasar" value={uBank} onChange={(e) => setUBank(e.target.value)} placeholder="BCA" />
+                </Field>
+                <Field label="Nomor rekening">
+                  <input
+                    className="input-dasar"
+                    inputMode="numeric"
+                    value={uRekening}
+                    onChange={(e) => setURekening(e.target.value.replace(/[^\d-]/g, ""))}
+                  />
+                </Field>
+              </div>
+              <Field label="Atas nama" bantuan="Nama pemilik rekening persis seperti di buku tabungan.">
+                <input className="input-dasar" value={uAtasNama} onChange={(e) => setUAtasNama(e.target.value)} />
+              </Field>
+            </div>
+          </div>
+
           <div className="rounded-lg bg-surface p-3 text-xs text-muted">
             <p className="font-semibold text-ink">Yang hanya bisa diubah Admin</p>
             <p className="mt-1">
-              Nama lengkap, NIK, jabatan, divisi, jadwal kerja, tarif, dan nomor rekening. Kalau ada
-              yang keliru, hubungi HR.
-            </p>
-            <p className="mt-2">
-              Nomor rekening sengaja dikunci: kalau bisa diubah sendiri, satu akun yang dibajak
-              berarti gaji berpindah tanpa ada yang tahu.
+              Nama lengkap, NIK, jabatan, divisi, jadwal kerja, dan tarif. Kalau ada yang keliru, hubungi HR.
             </p>
           </div>
 
@@ -645,16 +679,23 @@ function Isi() {
               setSalah(null);
               setSibuk(true);
               try {
-                await ubahDataPribadi(employeeId, {
-                  nickname: uNickname,
-                  phone: uPhone,
-                  address: uAddress,
-                });
+                await ubahDataPribadi(
+                  employeeId,
+                  {
+                    nickname: uNickname,
+                    phone: uPhone,
+                    address: uAddress,
+                    bankName: uBank,
+                    bankAccountNumber: uRekening,
+                    bankAccountName: uAtasNama,
+                  },
+                  karyawan
+                );
                 await muatKaryawan();
                 setBuka(false);
                 setPesan("Data pribadi diperbarui.");
-              } catch {
-                setSalah("Data gagal disimpan.");
+              } catch (e) {
+                setSalah(e instanceof Error ? e.message : "Data gagal disimpan.");
               } finally {
                 setSibuk(false);
               }

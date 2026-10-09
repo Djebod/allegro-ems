@@ -6,7 +6,9 @@ import { doc, getDoc } from "firebase/firestore";
 import Guard from "@/components/Guard";
 import Shell from "@/components/Shell";
 import KameraBelakang from "@/components/KameraBelakang";
+import AbsenLapanganSendiri from "@/components/AbsenLapanganSendiri";
 import { Field, Pesan } from "@/components/Field";
+import { jenisPekerja } from "@/lib/karyawan";
 import { useAuth } from "@/lib/auth";
 import { dbClient } from "@/lib/firebase";
 import { ambilAbsenHariIni, catatAbsenKantor, semuaKantor } from "@/lib/data-kantor";
@@ -241,6 +243,10 @@ function Isi() {
 
   if (!karyawan) return <Pesan jenis="gagal" isi="Data karyawan Anda tidak ditemukan." />;
 
+  // Tukang dan kenek yang punya akun absen di titik proyek dengan aturan
+  // lapangan (sesi masuk/istirahat/pulang/lembur), bukan aturan kantor.
+  if (jenisPekerja(karyawan) === "LAPANGAN") return <AbsenLapanganSendiri karyawan={karyawan} />;
+
   if (karyawan.tidakWajibAbsen)
     return (
       <div className="kartu text-center">
@@ -437,7 +443,7 @@ function Isi() {
 export default function HalamanAbsenSaya() {
   return (
     <Guard izinkan={["ADMIN", "FINANCE", "HR", "OWNER", "KARYAWAN"]}>
-      <Shell judul="Absen Saya" keterangan="Absen masuk, istirahat, dan pulang dari lokasi kantor.">
+      <Shell judul="Absen Saya" keterangan="Absen masuk, istirahat, dan pulang dari lokasi kantor atau proyek.">
         <Isi />
       </Shell>
     </Guard>

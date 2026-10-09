@@ -35,8 +35,10 @@ import type {
   Section,
   StatusBon,
   StatusPayroll,
+  TandaTangan,
   TitikAbsen,
 } from "@/types";
+import { ambilLemburDisetujui } from "@/lib/data-lembur";
 import {
   gabungTanggalJam,
   hitungJam,
@@ -507,6 +509,10 @@ export function pantauAbsensiRentang(
  * terpisah, dan seluruh perubahan dicatat di attendanceCorrections
  * yang tidak bisa diubah maupun dihapus. Itu syarat dasar audit:
  * harus selalu bisa dilihat apa yang semula tercatat.
+ *
+ * Sejak 9 Okt 2026 setiap revisi wajib bertanda tangan Admin. Jejaknya
+ * ditulis LEBIH DULU, baru absennya diubah: kalau jejak ditolak (misalnya
+ * tanpa tanda tangan), absennya tidak pernah tersentuh.
  */
 export async function simpanValidasi(opsi: {
   absen: Attendance;
@@ -516,6 +522,7 @@ export async function simpanValidasi(opsi: {
   buktiUrl: string | null;
   jamAktual: string;
   oleh: string;
+  tandaTangan: TandaTangan;
 }) {
   const event = opsi.absen[opsi.jenis];
   if (!event) throw new Error("Sesi ini belum pernah tercatat.");
@@ -524,6 +531,7 @@ export async function simpanValidasi(opsi: {
     if (!opsi.alasan.trim()) throw new Error("Alasan wajib diisi bila sesi dinyatakan tidak valid.");
     if (!opsi.buktiUrl) throw new Error("Foto bukti wajib dilampirkan bila sesi dinyatakan tidak valid.");
   }
+  if (!opsi.tandaTangan?.url) throw new Error("Tanda tangan wajib dibubuhkan pada setiap revisi absen.");
 
   const waktuBaru = opsi.jamAktual
     ? gabungTanggalJam(opsi.absen.date, opsi.jamAktual)
@@ -542,16 +550,6 @@ export async function simpanValidasi(opsi: {
 
   const db = dbClient();
 
-  await updateDoc(doc(db, "attendance", opsi.absen.id), {
-    [`${opsi.jenis}.waktuAktual`]: waktuBaru,
-    [`${opsi.jenis}.validasi`]: validasi,
-    workHours: hitung.workHours,
-    overtimeHours: hitung.overtimeHours,
-    status: hitung.status,
-    isOverridden: Boolean(waktuBaru) || opsi.hasil === "TIDAK_VALID",
-    updatedAt: serverTimestamp(),
-  });
-
   const jejak = doc(collection(db, "attendanceCorrections"));
   await setDoc(jejak, {
     attendanceId: opsi.absen.id,
@@ -565,7 +563,18 @@ export async function simpanValidasi(opsi: {
     alasan: opsi.alasan.trim(),
     attachmentUrl: opsi.buktiUrl,
     approvedBy: opsi.oleh,
+    tandaTangan: opsi.tandaTangan,
     createdAt: serverTimestamp(),
+  });
+
+  await updateDoc(doc(db, "attendance", opsi.absen.id), {
+    [`${opsi.jenis}.waktuAktual`]: waktuBaru,
+    [`${opsi.jenis}.validasi`]: validasi,
+    workHours: hitung.workHours,
+    overtimeHours: hitung.overtimeHours,
+    status: hitung.status,
+    isOverridden: Boolean(waktuBaru) || opsi.hasil === "TIDAK_VALID",
+    updatedAt: serverTimestamp(),
   });
 
   return hitung;
@@ -995,11 +1004,13 @@ export async function susunItemPayroll(opsi: {
   periodStart: string;
   periodEnd: string;
 }) {
-  const [absensi, karyawan, tarif, bon] = await Promise.all([
+  const [absensi, karyawan, tarif, bon, lemburDisetujui] = await Promise.all([
     ambilAbsensiRentang(opsi.periodStart, opsi.periodEnd),
     semuaKaryawan(),
     semuaTarif(),
     bonBerjalan(),
+    // Lembur hanya dibayar bila ada pengajuan yang disetujui pada tanggalnya.
+    ambilLemburDisetujui(opsi.periodStart, opsi.periodEnd),
   ]);
 
   // Karyawan diambil dari absensinya, bukan dari penugasan saat ini.
@@ -1030,6 +1041,7 @@ export async function susunItemPayroll(opsi: {
       tarif: tarif.filter((t) => t.employeeId === employeeId),
       sisaBon: bon.find((b) => b.employeeId === employeeId)?.remainingAmount || 0,
       cicilanBon: bon.find((b) => b.employeeId === employeeId)?.cicilanPerBulan || 0,
+      lemburDisetujui,
     });
     items.push(hasil.item);
     hasil.masalah.forEach((m) => masalah.push(`${orang.name} — ${m}`));
@@ -1185,20 +1197,55 @@ export function pantauAbsensiSaya(
 }
 
 /**
- * Perubahan data pribadi oleh karyawan sendiri.
- * Sengaja dibatasi pada hal yang memang miliknya: nama panggilan, nomor
- * HP, alamat, dan foto. Nama, NIK, jabatan, divisi, jadwal, dan rekening
- * tetap wilayah Admin — kalau rekening bisa diubah sendiri, satu akun
- * yang dibajak berarti gaji berpindah tanpa ada yang tahu.
+ * Perubahan data pribadi oleh karyawan sendiri: nama panggilan, nomor HP,
+ * alamat, foto, dan rekening penerima gaji (bank, nomor, atas nama).
+ *
+ * Rekening boleh diisi sendiri sejak 9 Okt 2026 (keputusan Bang Syam).
+ * Risikonya: akun Google yang dibajak bisa memindahkan rekening. Sebagai
+ * pagar, setiap perubahan rekening oleh pemiliknya diberi penanda waktu
+ * terpisah supaya HR melihat bahwa itu bukan isian kantor. Nama, NIK,
+ * jabatan, divisi, jadwal, dan tarif tetap wilayah Admin.
  */
 export async function ubahDataPribadi(
   employeeId: string,
-  data: { nickname: string; phone: string; address: string }
+  data: {
+    nickname: string;
+    phone: string;
+    address: string;
+    bankName: string;
+    bankAccountNumber: string;
+    bankAccountName: string;
+  },
+  sebelumnya?: Pick<Employee, "bankName" | "bankAccountNumber" | "bankAccountName">
 ) {
+  const bank = data.bankName.trim();
+  const nomor = data.bankAccountNumber.replace(/[^\d-]/g, "").trim();
+  const atasNama = data.bankAccountName.trim();
+  if ((bank || nomor || atasNama) && !(bank && nomor && atasNama)) {
+    throw new Error("Rekening harus lengkap: nama bank, nomor rekening, dan atas nama.");
+  }
+
+  const rekeningBerubah =
+    bank !== (sebelumnya?.bankName || "") ||
+    nomor !== (sebelumnya?.bankAccountNumber || "") ||
+    atasNama !== (sebelumnya?.bankAccountName || "");
+
+  // Kolom rekening hanya dikirim bila memang berubah, dan selalu bersama
+  // penanda waktunya: Security Rules menolak perubahan rekening tanpa
+  // penanda itu. Mengirim nilai yang sama pada dokumen lama yang belum
+  // punya kolomnya akan terbaca sebagai "berubah" oleh server.
   await updateDoc(doc(dbClient(), "employees", employeeId), {
     nickname: data.nickname.trim(),
     phone: data.phone.trim(),
     address: data.address.trim(),
+    ...(rekeningBerubah
+      ? {
+          bankName: bank,
+          bankAccountNumber: nomor,
+          bankAccountName: atasNama,
+          rekeningDiubahSendiriPada: serverTimestamp(),
+        }
+      : {}),
     updatedAt: serverTimestamp(),
   });
 }

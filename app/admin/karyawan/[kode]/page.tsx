@@ -17,6 +17,7 @@ import {
   daftarMandor,
   pantauPenugasan,
   pantauTarif,
+  pantauTimMandor,
   pasangTarifBaru,
   semuaProyek,
   semuaSection,
@@ -85,6 +86,8 @@ function Isi({ kode }: { kode: string }) {
   /** Proyek tambahan tempat absen kantornya diterima, di luar penugasan utama. */
   const [lokasiAbsen, setLokasiAbsen] = useState<string[]>([]);
   const [menyimpanLokasi, setMenyimpanLokasi] = useState(false);
+  /** Anak buah yang sedang ditugaskan di bawah orang ini (hanya terisi bila ia mandor). */
+  const [anakBuah, setAnakBuah] = useState<Employee[]>([]);
 
   async function muatKaryawan() {
     const snap = await getDoc(doc(dbClient(), "employees", kode));
@@ -103,9 +106,11 @@ function Isi({ kode }: { kode: string }) {
 
     const lepasTarif = pantauTarif(kode, setTarif, () => {});
     const lepasTugas = pantauPenugasan(kode, setTugas, () => {});
+    const lepasTim = pantauTimMandor(kode, (d) => setAnakBuah(d.filter((e) => e.id !== kode)), () => {});
     return () => {
       lepasTarif();
       lepasTugas();
+      lepasTim();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [kode]);
@@ -306,6 +311,23 @@ function Isi({ kode }: { kode: string }) {
               {karyawan.iuranBpjs ? `Rp ${keRupiah(karyawan.iuranBpjs)}` : "—"}
             </dd>
           </div>
+          <div>
+            <dt className="text-muted">Rekening gaji</dt>
+            <dd className="font-medium text-ink">
+              {karyawan.bankAccountNumber
+                ? `${karyawan.bankName || "?"} ${karyawan.bankAccountNumber} a.n. ${karyawan.bankAccountName || "?"}`
+                : "—"}
+            </dd>
+            {karyawan.rekeningDiubahSendiriPada ? (
+              <dd className="text-xs text-allegro-700">
+                Diisi/diubah sendiri oleh karyawan
+                {typeof (karyawan.rekeningDiubahSendiriPada as { toDate?: () => Date }).toDate === "function"
+                  ? ` pada ${(karyawan.rekeningDiubahSendiriPada as { toDate: () => Date }).toDate().toLocaleDateString("id-ID")}`
+                  : ""}
+                . Cocokkan dengan buku tabungan sebelum transfer pertama.
+              </dd>
+            ) : null}
+          </div>
         </dl>
 
         <div className="mt-5 grid gap-6 sm:grid-cols-2">
@@ -424,6 +446,36 @@ function Isi({ kode }: { kode: string }) {
             <p className="text-sm text-muted">
               Belum ditugaskan. Mandor hanya bisa mengabsen karyawan yang ditugaskan kepadanya.
             </p>
+          </div>
+        )}
+
+        {karyawan.position === "MANDOR" && (
+          <div className="kartu">
+            <p className="text-sm font-medium text-ink">
+              Anak buah <span className="ml-1 font-normal text-muted">{anakBuah.length} orang</span>
+            </p>
+            <p className="mt-1 text-xs text-muted">
+              Tukang dan kenek yang penugasannya berjalan di bawah mandor ini. Diatur dari halaman detail
+              masing-masing lewat tombol Tugaskan.
+            </p>
+            {anakBuah.length === 0 ? (
+              <p className="mt-3 text-sm text-muted">Belum ada yang ditugaskan di bawahnya.</p>
+            ) : (
+              <select
+                className="input-dasar mt-3"
+                defaultValue=""
+                onChange={(e) => {
+                  if (e.target.value) window.location.href = `/admin/karyawan/${encodeURIComponent(e.target.value)}`;
+                }}
+              >
+                <option value="">— pilih anak buah untuk membuka datanya —</option>
+                {anakBuah.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name} ({a.employeeCode}) · {a.position} · {a.currentProjectId || "tanpa proyek"}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
         )}
 
