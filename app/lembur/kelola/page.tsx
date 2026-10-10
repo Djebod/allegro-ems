@@ -110,7 +110,7 @@ function Isi() {
       setPesan(
         status === "DISETUJUI"
           ? libur
-            ? "Masuk hari libur disetujui. Jamnya tercatat; pembayarannya menunggu tarif hari libur ditetapkan."
+            ? "Masuk hari libur disetujui. Bila karyawannya absen hari itu, harinya dihitung hari kerja biasa di rekap."
             : "Lembur disetujui dan akan ikut dibayar di payroll."
           : libur
           ? "Pengajuan masuk hari libur ditolak."
@@ -327,8 +327,8 @@ function Isi() {
       <p className="mt-2 text-xs text-muted">
         Hanya lembur berstatus Disetujui yang dibayar. Payroll mingguan membayar yang terkecil antara jam yang
         disetujui dan jam lembur di absensi; untuk staf kantor, jam yang disetujui menjadi acuan HR mengisi kolom
-        lembur di payroll bulanan. Pengajuan bertanda <b>libur</b> (masuk hari Minggu / libur nasional) hanya
-        dicatat jamnya, belum dibayar sebagai lembur sampai tarif hari libur ditetapkan.
+        lembur di payroll bulanan. Pengajuan bertanda <b>libur</b> (masuk hari Minggu / libur nasional) bukan lembur:
+        bila disetujui dan orangnya absen hari itu, harinya dihitung hari kerja biasa di rekap bulanan.
       </p>
 
       {/* Keputusan */}

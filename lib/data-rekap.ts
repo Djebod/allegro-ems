@@ -3,7 +3,7 @@
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { dbClient } from "@/lib/firebase";
 import { tanggalDalamBulan } from "@/lib/rekap-kantor";
-import type { AbsenKantor, Employee, HariLibur, PengajuanCuti } from "@/types";
+import type { AbsenKantor, Employee, HariLibur, PengajuanCuti, PengajuanLembur } from "@/types";
 
 /**
  * Bahan rekap bulanan. Dibaca SEKALI per pilihan bulan (getDocs), bukan
@@ -19,7 +19,7 @@ export async function ambilBahanRekap(bulan: string) {
   const awal = tanggal[0];
   const akhir = tanggal[tanggal.length - 1];
 
-  const [absenSnap, cutiSnap, karyawanSnap, liburSnap] = await Promise.all([
+  const [absenSnap, cutiSnap, karyawanSnap, liburSnap, lemburSnap] = await Promise.all([
     getDocs(
       query(collection(db, "officeAttendance"), where("date", ">=", awal), where("date", "<=", akhir))
     ),
@@ -30,9 +30,15 @@ export async function ambilBahanRekap(bulan: string) {
     getDocs(
       query(collection(db, "holidays"), where("tanggal", ">=", awal), where("tanggal", "<=", akhir))
     ),
+    // Pengajuan masuk hari libur yang disetujui: hari itu dihitung hari kerja
+    // biasa (client, 10 Okt 2026). Status dan jenisnya disaring di hitungRekap.
+    getDocs(
+      query(collection(db, "overtimeRequests"), where("tanggal", ">=", awal), where("tanggal", "<=", akhir))
+    ).catch(() => null),
   ]);
 
   return {
+    masukLibur: (lemburSnap?.docs || []).map((d) => ({ id: d.id, ...(d.data() as Omit<PengajuanLembur, "id">) })),
     absen: absenSnap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<AbsenKantor, "id">) })),
     cuti: cutiSnap.docs
       .map((d) => ({ id: d.id, ...(d.data() as Omit<PengajuanCuti, "id">) }))

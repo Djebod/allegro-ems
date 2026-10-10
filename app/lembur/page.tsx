@@ -229,8 +229,9 @@ function Isi() {
         </p>
         <p className="mt-1">
           Masuk pada hari Minggu atau hari libur nasional diajukan lewat <b className="text-ink">Ajukan masuk hari
-          libur</b>, boleh sebelum harinya, dan disetujui HR/Owner. Jamnya dicatat, belum otomatis dibayar sebagai
-          lembur sampai tarif hari libur ditetapkan.
+          libur</b>, boleh sebelum harinya, dan disetujui HR/Owner. Bila disetujui dan Anda absen hari itu, harinya
+          dihitung <b className="text-ink">hari kerja biasa</b> (hadir dan tunjangan harian), bukan lembur. Sabtu
+          adalah hari kerja biasa.
         </p>
       </div>
 

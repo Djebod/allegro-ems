@@ -570,8 +570,8 @@ export interface PengajuanLembur {
   /**
    * LEMBUR = pengakuan lembur sesudah dikerjakan (bawaan; kosong pada data
    * lama). MASUK_LIBUR = pengajuan masuk pada hari Minggu / hari libur,
-   * boleh diajukan sebelum harinya. Jamnya TIDAK ikut dibayar sebagai lembur
-   * sampai tarif hari libur ditetapkan client (10 Okt 2026).
+   * boleh diajukan sebelum harinya. Bukan lembur: bila disetujui, hari itu
+   * dihitung hari kerja biasa di rekap kantor (client, 10 Okt 2026).
    */
   jenis?: "LEMBUR" | "MASUK_LIBUR";
 

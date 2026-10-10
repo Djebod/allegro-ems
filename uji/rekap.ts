@@ -144,6 +144,43 @@ cek("telat berizin", d.terlambatBerizin, 1);
 cek("telat menunggu izin", d.terlambatMenungguIzin, 1);
 cek("tetap tercatat 6 kali telat", d.terlambatKali, 6);
 
+console.log("\n== Masuk hari libur yang disetujui = hari kerja biasa ==");
+const masukLibur = (employeeId: string, tanggal: string, status = "DISETUJUI", jenis: "LEMBUR" | "MASUK_LIBUR" = "MASUK_LIBUR") =>
+  ({ id: `${employeeId}-${tanggal}`, employeeId, employeeName: employeeId, divisi: "", atasanId: "", mandorId: "",
+     jenis, tanggal, jamMulai: "08:00", jamSelesai: "16:00", jamLembur: 8, alasan: "cor", terlambat: false,
+     sumber: "SENDIRI", status, diajukanOleh: "" }) as import("@/types").PengajuanLembur;
+// Sep 2026: 6, 13, 20, 27 = Minggu; 16 = libur contoh
+const ml = hitungRekap({
+  bulan: "2026-09", hariIni: "2026-09-30", karyawan: [kar("A")], libur,
+  cuti: [cuti("A", "TAHUNAN", "2026-09-01", "2026-09-30")], // cuti sebulan supaya hari kerja lain tidak alpa
+  absen: [
+    absen("A", "2026-09-06"),                              // Minggu, disetujui
+    absen("A", "2026-09-13", { terlambatMenit: 10 }),      // Minggu, disetujui, telat
+    absen("A", "2026-09-16"),                              // libur nasional, tidak ada pengajuan
+    absen("A", "2026-09-20"),                              // Minggu, pengajuan masih DIAJUKAN
+  ],
+  masukLibur: [
+    masukLibur("A", "2026-09-06"),
+    masukLibur("A", "2026-09-13"),
+    masukLibur("A", "2026-09-20", "DIAJUKAN"),
+    masukLibur("A", "2026-09-27"),                         // disetujui tapi tidak datang
+    masukLibur("A", "2026-09-16", "DISETUJUI", "LEMBUR"),  // lembur biasa, bukan masuk libur
+  ],
+}).baris[0];
+cek("Minggu disetujui -> hadir", ml.harian["2026-09-06"], "H");
+cek("Minggu disetujui, telat -> T", ml.harian["2026-09-13"], "T");
+cek("libur tanpa pengajuan -> tetap L", ml.harian["2026-09-16"], "L");
+cek("pengajuan masih menunggu -> tetap L", ml.harian["2026-09-20"], "L");
+cek("disetujui tapi tidak datang -> L, bukan alpa", ml.harian["2026-09-27"], "L");
+// 30 hari - 4 Minggu - 1 libur - hari ini (30 Sep belum dinilai) = 24 hari kerja, + 2 Minggu yang disetujui.
+cek("dua hari libur dihitung hari kerja", [ml.hariKerja, ml.hadir], [26, 2]);
+cek("masuk libur tanpa persetujuan tetap dicatat terpisah", ml.masukHariLibur, 2);
+cek("masuk libur disetujui dihitung", ml.masukLiburDisetujui, 2);
+cek("telat di hari libur disetujui ikut dihitung", ml.terlambatKali, 1);
+cek("tanpa daftar pengajuan: perilaku lama", hitungRekap({
+  bulan: "2026-09", hariIni: "2026-09-30", karyawan: [kar("A")], libur, cuti: [], absen: [absen("A", "2026-09-06")],
+}).baris[0].harian["2026-09-06"], "L");
+
 console.log("\n== Istirahat dalam rekap ==");
 const ist = hitungRekap({
   bulan: "2026-09", hariIni: "2026-09-10", karyawan: [kar("A")], libur: [], cuti: [],

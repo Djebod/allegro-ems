@@ -1,7 +1,8 @@
 import { keTanggal } from "@/lib/absensi";
 import { JENIS_CUTI } from "@/lib/cuti";
 import { BATAS_SKOR_SP, golonganTelat } from "@/lib/denda-telat";
-import type { AbsenKantor, Employee, HariLibur, PengajuanCuti } from "@/types";
+import { jenisPengajuan } from "@/lib/lembur";
+import type { AbsenKantor, Employee, HariLibur, PengajuanCuti, PengajuanLembur } from "@/types";
 
 /**
  * REKAP BULANAN ABSENSI KANTOR
@@ -14,6 +15,9 @@ import type { AbsenKantor, Employee, HariLibur, PengajuanCuti } from "@/types";
  *
  *   1. Di luar masa kerja (sebelum tanggal masuk)  -> kosong
  *   2. Ada catatan absen                          -> hadir (H/T/P)
+ *      (di hari libur: hanya bila ada pengajuan masuk hari libur yang
+ *      DISETUJUI; hari itu lalu dihitung hari kerja biasa - keputusan
+ *      client 10 Okt 2026. Tanpa persetujuan tetap L, dicatat terpisah)
  *   3. Hari libur atau Minggu                      -> L
  *   4. Cuti/izin yang sudah DISETUJUI              -> C/S/I/D
  *   5. Pengajuan yang masih DIAJUKAN               -> M (bukan alpa)
@@ -88,7 +92,10 @@ export interface BarisRekap {
   dinas: number;
   menunggu: number;
   alpa: number;
+  /** Datang di hari libur TANPA pengajuan yang disetujui: tidak dihitung hadir. */
   masukHariLibur: number;
+  /** Datang di hari libur dengan pengajuan masuk hari libur yang disetujui: dihitung hari kerja biasa. */
+  masukLiburDisetujui: number;
   jamKerja: number;
   /** Persen hadir (termasuk dinas) dari hari kerja yang sudah lewat. */
   persenHadir: number;
@@ -166,12 +173,21 @@ export function hitungRekap(opsi: {
   absen: AbsenKantor[];
   cuti: PengajuanCuti[];
   libur: HariLibur[];
+  /** Pengajuan masuk hari libur (overtimeRequests jenis MASUK_LIBUR); hanya yang DISETUJUI yang dipakai. */
+  masukLibur?: PengajuanLembur[];
 }): HasilRekap {
   const tanggal = tanggalDalamBulan(opsi.bulan);
 
   const libur: Record<string, string> = {};
   tanggal.forEach((t) => hariMinggu(t) && (libur[t] = "Minggu"));
   opsi.libur.forEach((l) => tanggal.includes(l.tanggal) && (libur[l.tanggal] = l.nama));
+
+  // Masuk hari libur yang disetujui dianggap hari kerja biasa (client, 10 Okt 2026).
+  const liburDisetujui = new Set(
+    (opsi.masukLibur || [])
+      .filter((p) => p.status === "DISETUJUI" && jenisPengajuan(p) === "MASUK_LIBUR")
+      .map((p) => `${p.employeeId}_${p.tanggal}`)
+  );
 
   const absenPer = new Map<string, AbsenKantor>();
   opsi.absen.forEach((a) => absenPer.set(`${a.employeeId}_${a.date}`, a));
@@ -205,6 +221,7 @@ export function hitungRekap(opsi: {
       menunggu: 0,
       alpa: 0,
       masukHariLibur: 0,
+      masukLiburDisetujui: 0,
       jamKerja: 0,
       persenHadir: 0,
       harian: {},
@@ -224,8 +241,12 @@ export function hitungRekap(opsi: {
       if (a?.masuk) {
         r.jamKerja += a.workHours || 0;
         if (hariLibur) {
-          r.masukHariLibur++;
-          return "L";
+          if (!liburDisetujui.has(`${e.id}_${t}`)) {
+            r.masukHariLibur++;
+            return "L";
+          }
+          // Disetujui: hari ini diperlakukan persis hari kerja biasa di bawah.
+          r.masukLiburDisetujui++;
         }
         r.hariKerja++;
         r.hadir++;
@@ -264,6 +285,8 @@ export function hitungRekap(opsi: {
         return a.terlambatMenit > 0 ? "T" : "H";
       }
 
+      // Disetujui masuk libur tetapi tidak datang: tetap libur, bukan alpa.
+      // Rencana masuk hari libur bisa batal tanpa sanksi.
       if (hariLibur) return "L";
       if (t >= opsi.hariIni) return "";
 
@@ -334,6 +357,7 @@ export function barisTanpaAbsen(e: Employee): BarisRekap {
     menunggu: 0,
     alpa: 0,
     masukHariLibur: 0,
+    masukLiburDisetujui: 0,
     jamKerja: 0,
     persenHadir: 0,
     harian: {},

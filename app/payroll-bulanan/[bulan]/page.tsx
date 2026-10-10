@@ -582,7 +582,7 @@ function Isi({ bulan }: { bulan: string }) {
                           ? `Pengakuan lembur disetujui bulan ini: ${totalJamLemburDisetujui(lemburDisetujui, ubah.employeeId)} jam`
                           : "Tidak ada pengakuan lembur yang disetujui bulan ini",
                         totalJamMasukLiburDisetujui(lemburDisetujui, ubah.employeeId) > 0
-                          ? `masuk hari libur disetujui: ${totalJamMasukLiburDisetujui(lemburDisetujui, ubah.employeeId)} jam (tarif belum ditetapkan)`
+                          ? `masuk hari libur disetujui: ${totalJamMasukLiburDisetujui(lemburDisetujui, ubah.employeeId)} jam (dihitung hari kerja biasa, bukan lembur)`
                           : "",
                       ]
                         .filter(Boolean)

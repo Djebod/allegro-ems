@@ -255,7 +255,7 @@ Jam lembur di absensi **bukan dasar pembayaran**. Lembur harus diajukan lewat `o
 | Payroll mingguan | dibayar yang **terkecil** dari jam absen dan jam disetujui; tanpa pengajuan = 0 dan dicatat `lemburTanpaPengajuanJam`; ada pengajuan tanpa sesi lembur di absensi = jam disetujui (dengan catatan); sesi dinyatakan tidak valid oleh Admin = 0 walau disetujui |
 | Payroll bulanan | kolom lembur tetap rupiah manual; jam disetujui ditampilkan sebagai acuan |
 | Tidak dihitung lembur | `employees.tanpaLembur` (Data Karyawan → "Tidak dihitung lembur"; contoh Reinaldo, 10 Okt 2026): pengakuan lembur ditolak di form dan rules (`bolehDihitungLembur`), kolom lembur payroll bulanan dikunci nol |
-| Masuk hari libur | `overtimeRequests.jenis = 'MASUK_LIBUR'` (kosong = `LEMBUR`), diajukan dari menu Lembur → "Ajukan masuk hari libur", **boleh untuk tanggal yang akan datang**, tanggal harus Minggu atau terdaftar di `holidays` (`hariLibur()`, dicek di form, bukan rules), disetujui HR/Owner seperti lembur. Jamnya **tidak dibayar** sebagai lembur (`petaLemburDisetujui` melewatinya) sampai tarif hari libur ditetapkan; payroll bulanan hanya menampilkannya sebagai petunjuk |
+| Masuk hari libur | `overtimeRequests.jenis = 'MASUK_LIBUR'` (kosong = `LEMBUR`), diajukan dari menu Lembur → "Ajukan masuk hari libur", **boleh untuk tanggal yang akan datang**, tanggal harus Minggu atau terdaftar di `holidays` (`hariLibur()`, dicek di form, bukan rules), disetujui HR/Owner seperti lembur. **Bukan lembur: dianggap hari kerja biasa** (client, 10 Okt 2026). Di rekap kantor (`hitungRekap`, opsi `masukLibur` dari `ambilBahanRekap`), absen di hari libur yang pengajuannya DISETUJUI dihitung hadir + hari kerja (telat, tunjangan harian ikut), dicatat `masukLiburDisetujui`; tanpa persetujuan tetap `L` (`masukHariLibur`); disetujui tapi tidak datang tetap `L`, bukan alpa. `petaLemburDisetujui` melewatinya, jadi tidak pernah dibayar sebagai lembur. Pekerja lapangan tidak perlu apa-apa: payroll mingguan sudah membayar per hari absen. **Sabtu hari kerja biasa** |
 
 Batas 7 hari juga ditegakkan di `firestore.rules` (`tanggalLemburMasihBoleh`) memakai `int()` dan `timestamp.date()`. **Belum pernah diuji di Firestore sungguhan** — kalau pengajuan sendiri selalu ditolak "insufficient permissions", curigai fungsi itu lebih dulu.
 
@@ -386,7 +386,7 @@ npm run uji
 - **Rumus potongan telat** — menit keterlambatan sudah tercatat, nominalnya masih manual
 - Definisi **uang rajin**: apa yang membatalkannya
 - **Tunjangan luar kota**: per jam atau per hari
-- **Tarif lembur** hari kerja dan hari libur
+- **Tarif lembur** hari kerja (hari libur sudah dijawab 10 Okt 2026: masuk hari libur = hari kerja biasa, bukan lembur)
 - Apakah **SP mempengaruhi gaji** atau hanya dicatat
 - Apakah **rekening pembayar** tetap per orang atau berpindah tiap periode
 

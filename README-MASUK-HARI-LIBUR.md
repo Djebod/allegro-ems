@@ -34,13 +34,13 @@ buahnya) atau Kelola Lembur → *Ajukan atas nama karyawan* → jenis
 | Alasan | wajib: pekerjaan apa dan siapa yang memerintahkan |
 | Keputusan | HR/Owner/Admin menyetujui (jam boleh dikurangi) atau menolak, di Kelola Lembur; disaring dengan pilihan "Masuk hari libur saja" |
 | Batas 7 hari | hanya untuk tanggal yang sudah lewat, sama seperti lembur |
-| Pembayaran | **belum**. Jamnya dicatat (`jenis = MASUK_LIBUR` di `overtimeRequests`) dan tampil di payroll bulanan sebagai petunjuk; tidak masuk hitungan lembur mingguan maupun bulanan sampai tarif hari libur ditetapkan |
+| Pembayaran | **bukan lembur, dianggap hari kerja biasa** (jawaban client 10 Okt 2026). Jamnya tidak pernah masuk hitungan lembur. Di rekap bulanan kantor, absen pada hari libur yang pengajuannya disetujui dihitung **hadir dan hari kerja** seperti hari biasa: telat dihitung, tunjangan harian (uang makan, transport) ikut bertambah. Tanpa pengajuan yang disetujui, absen di hari libur tetap "L" dan hanya dicatat terpisah. Disetujui tetapi tidak datang: tetap "L", bukan alpa |
+
+Pekerja lapangan (payroll mingguan) tidak perlu perlakuan khusus: upahnya
+sudah dihitung per hari absen, hari Minggu sama seperti hari lain.
+
+**Sabtu adalah hari kerja biasa** untuk semua posisi (jadwal pulang Sabtu
+diatur per karyawan). Pengajuan masuk hari libur untuk tanggal Sabtu
+ditolak form.
 
 Pengajuan lama tanpa kolom `jenis` dibaca sebagai lembur biasa.
-
-## Yang perlu ditanyakan ke client
-
-- Tarif masuk hari libur: dibayar sebagai lembur, sebagai hari kerja biasa,
-  atau pengganti libur (cuti pengganti)?
-- Apakah Sabtu dihitung hari libur untuk posisi tertentu (sekarang: Sabtu
-  hari kerja, sesuai jadwal kantor).

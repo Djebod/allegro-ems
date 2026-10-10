@@ -70,7 +70,8 @@ export interface HasilPeriksaLembur {
  *  - LEMBUR: pengakuan lembur sesudah dikerjakan, dibayar bila disetujui.
  *  - MASUK_LIBUR: pengajuan masuk pada hari Minggu / hari libur, boleh
  *    diajukan sebelum harinya. Disetujui HR/Owner seperti lembur, tetapi
- *    jamnya TIDAK dibayar sebagai lembur sampai tarif hari libur ditetapkan.
+ *    BUKAN lembur: hari itu dihitung hari kerja biasa (client, 10 Okt 2026)
+ *    di rekap kantor (hadir, tunjangan harian), tanpa bayaran lembur.
  */
 export type JenisPengajuanLembur = NonNullable<PengajuanLembur["jenis"]>;
 
@@ -157,7 +158,8 @@ export function periksaPengajuanLembur(opsi: {
  * Jam lembur yang disetujui per tanggal untuk satu karyawan. Dipakai mesin
  * payroll: lembur di absensi hanya dibayar bila ada angkanya di sini.
  * Kalau satu tanggal punya dua pengajuan yang disetujui, jamnya dijumlah.
- * Pengajuan MASUK_LIBUR sengaja tidak ikut: tarif hari libur belum ada.
+ * Pengajuan MASUK_LIBUR tidak ikut: masuk hari libur dihitung hari kerja
+ * biasa, bukan lembur (client, 10 Okt 2026).
  */
 export function petaLemburDisetujui(daftar: PengajuanLembur[], employeeId: string): Map<string, number> {
   const peta = new Map<string, number>();
@@ -195,7 +197,7 @@ export function totalJamLemburDisetujui(daftar: PengajuanLembur[], employeeId: s
   return Math.round(total * 100) / 100;
 }
 
-/** Total jam masuk hari libur yang disetujui, untuk petunjuk HR (tidak otomatis dibayar). */
+/** Total jam masuk hari libur yang disetujui, untuk petunjuk HR (harinya dihitung hari kerja biasa, bukan lembur). */
 export function totalJamMasukLiburDisetujui(daftar: PengajuanLembur[], employeeId: string): number {
   let total = 0;
   for (const p of daftar) {
