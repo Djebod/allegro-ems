@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Guard from "@/components/Guard";
 import Shell from "@/components/Shell";
@@ -215,7 +216,11 @@ function Isi() {
         <p className="mt-3 text-xs text-muted">
           Absen hanya bisa dicatat dalam radius {proyekSaya.attendanceRadiusMeter} meter dari titik
           proyek, dan wajib berfoto. Anak buah yang punya akun juga bisa absen sendiri lewat menu Absen saya;
-          catatannya tetap muncul di sini.
+          catatannya tetap muncul di sini. Tabel jam seluruh tim ada di{" "}
+          <Link href="/tim-lapangan" className="text-allegro-600 underline">
+            Tim lapangan
+          </Link>
+          .
         </p>
 
         <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-line pt-4">

@@ -108,10 +108,9 @@ function Isi() {
       jumlah: daftar.filter((i) => i.status !== "DIBATALKAN").length,
       dinas: daftar.filter((i) => i.keperluan === "DINAS" && i.status !== "DIBATALKAN").length,
       pribadi: daftar.filter((i) => i.keperluan === "PRIBADI" && i.status !== "DIBATALKAN").length,
-      lebih: daftar.filter((i) => i.lebihDuaJam).length,
-      diLuar: semua.filter((i) => i.keluar && !i.kembali && i.status !== "DITOLAK").length,
+      sudahPulang: daftar.filter((i) => i.keluar && i.status !== "DITOLAK" && i.status !== "DIBATALKAN").length,
     }),
-    [daftar, semua]
+    [daftar]
   );
 
   async function jalankan(kerja: () => Promise<void>, berhasil: string) {
@@ -138,10 +137,9 @@ function Isi() {
           <p className="text-[10px] text-muted">{i.divisi}</p>
         </td>
         <td>{NAMA_KEPERLUAN[i.keperluan]}</td>
-        <td className="max-w-[240px] truncate">{i.alasan}</td>
-        <td className="whitespace-nowrap">{i.keluar ? jamWIB(i.keluar.waktu) : `${i.rencanaKeluar}*`}</td>
-        <td className="whitespace-nowrap">{i.kembali ? jamWIB(i.kembali.waktu) : "-"}</td>
-        <td className={`whitespace-nowrap ${i.lebihDuaJam ? "font-semibold text-amber-800" : ""}`}>{teksDurasi(i.durasiMenit)}</td>
+        <td className="max-w-[280px] truncate">{i.alasan}</td>
+        <td className="whitespace-nowrap">{i.rencanaKeluar}</td>
+        <td className="whitespace-nowrap">{i.keluar ? jamWIB(i.keluar.waktu) : "-"}</td>
         <td className="whitespace-nowrap text-[11px]">{i.diketahuiOleh ? "✓ HR" : "—"}</td>
         <td>
           <span className={`label-status ${warnaKeadaan(k)}`}>{k}</span>
@@ -168,9 +166,8 @@ function Isi() {
         <th>Karyawan</th>
         <th>Keperluan</th>
         <th>Alasan</th>
-        <th>Keluar</th>
-        <th>Kembali</th>
-        <th>Lama</th>
+        <th>Rencana</th>
+        <th>Pulang</th>
         <th>HR</th>
         <th>Keadaan</th>
         <th></th>
@@ -186,7 +183,7 @@ function Isi() {
             Menunggu keputusan <span className="label-status ml-1 bg-red-100 text-bahaya">{menunggu.length}</span>
           </p>
           <div className="overflow-x-auto rounded-xl border border-kuning-500 bg-white">
-            <table className="tabel-padat min-w-[1000px]">
+            <table className="tabel-padat min-w-[960px]">
               <Kepala />
               <tbody>
                 {menunggu.map((i) => (
@@ -216,12 +213,7 @@ function Isi() {
             <span className="text-muted">
               {ringkas.dinas} dinas · {ringkas.pribadi} pribadi
             </span>
-            <span className={ringkas.lebih ? "font-semibold text-amber-800" : "text-muted"}>
-              {ringkas.lebih} pribadi &gt; 2 jam
-            </span>
-            <span className={ringkas.diLuar ? "font-semibold text-allegro-700" : "text-muted"}>
-              {ringkas.diLuar} sedang di luar
-            </span>
+            <span className="text-muted">{ringkas.sudahPulang} sudah mencatat pulang</span>
           </div>
         </div>
       </div>
@@ -243,7 +235,7 @@ function Isi() {
         </div>
       ) : (
         <div className="mt-4 overflow-x-auto rounded-xl border border-line bg-white">
-          <table className="tabel-padat min-w-[1000px]">
+          <table className="tabel-padat min-w-[960px]">
             <Kepala />
             <tbody>
               {terlihat.map((i) => (
@@ -254,8 +246,8 @@ function Isi() {
         </div>
       )}
       <p className="mt-2 text-xs text-muted">
-        * jam keluar rencana, karena karyawan belum menekan Keluar kantor. Izin pribadi lebih dari 2 jam hanya dicatat,
-        tanpa sanksi.
+        Kolom Pulang terisi setelah karyawan menekan Pulang sekarang (swafoto + GPS). Izin pulang tidak mengubah
+        absen kantor; jam pulang di absensi kantor tetap mengikuti sesi pulang yang diabsenkan.
       </p>
 
       <Modal judul={izinBuka ? `${izinBuka.employeeName} · ${tanggalPendek(izinBuka.tanggal)}` : ""} terbuka={!!izinBuka} onTutup={() => setBukaId(null)}>
@@ -267,13 +259,13 @@ function Isi() {
               </p>
               <p className="mt-1 text-ink">{izinBuka.alasan}</p>
               <p className="mt-1 text-xs text-muted">
-                Rencana keluar {izinBuka.rencanaKeluar} · lama di luar {teksDurasi(izinBuka.durasiMenit)}
-                {izinBuka.lebihDuaJam ? " (pribadi lebih dari 2 jam)" : ""}
+                Rencana pulang {izinBuka.rencanaKeluar}
+                {izinBuka.kembali ? ` · catatan lama: kembali ${jamWIB(izinBuka.kembali.waktu)}, lama di luar ${teksDurasi(izinBuka.durasiMenit)}` : ""}
               </p>
             </div>
 
-            <Sesi judul="Keluar kantor" s={izinBuka.keluar} />
-            <Sesi judul="Kembali ke kantor" s={izinBuka.kembali} />
+            <Sesi judul={izinBuka.kembali ? "Keluar kantor" : "Pulang"} s={izinBuka.keluar} />
+            {izinBuka.kembali && <Sesi judul="Kembali ke kantor" s={izinBuka.kembali} />}
 
             <div className="rounded-lg border border-line p-3 text-sm">
               <p>
@@ -345,8 +337,8 @@ export default function HalamanKelolaIzinKeluar() {
   return (
     <Guard izinkan={["ADMIN", "HR", "OWNER", "FINANCE"]}>
       <Shell
-        judul="Kelola Izin Meninggalkan Kantor"
-        keterangan="HR menandai diketahui, Owner menyetujui. Jam keluar dan kembali dicatat karyawan dengan swafoto dan GPS."
+        judul="Kelola Izin Pulang"
+        keterangan="Izin pulang di luar jam kantor: HR menandai diketahui, Owner menyetujui. Jam pulang dicatat karyawan dengan swafoto dan GPS."
         lebar
       >
         <Isi />

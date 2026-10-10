@@ -55,6 +55,17 @@ export const POSISI_LAPANGAN = ["MANDOR", "TUKANG", "KENEK"] as const;
 /** Radius maksimum absensi dari titik koordinat Project (meter). */
 export const DEFAULT_ATTENDANCE_RADIUS_METER = 1000;
 
+/**
+ * Pembanding wajah foto absen dengan foto KTP (10 Okt 2026). Angkanya jarak
+ * antara dua sidik wajah (128 angka) dari model face-api; semakin kecil
+ * semakin mirip. 0,6 adalah ambang bawaan model untuk "orang yang sama";
+ * dua batas di bawahnya hanya memperhalus panduan untuk Admin. Hasilnya
+ * panduan, bukan keputusan: foto KTP sering buram, lama, dan berkilau.
+ */
+export const BATAS_WAJAH_SANGAT_MIRIP = 0.4;
+export const BATAS_WAJAH_MIRIP = 0.5;
+export const BATAS_WAJAH_RAGU = 0.6;
+
 /** Target ukuran foto setelah dikompres sebelum diupload (byte). */
 export const MAX_PHOTO_SIZE_BYTE = 300 * 1024;
 

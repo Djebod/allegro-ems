@@ -112,7 +112,7 @@ export default function PerluTindakan({ hariIni }: { hariIni: string }) {
             )}
             {d.izinKeluarMenunggu && (
               <Baris
-                label="Izin meninggalkan kantor menunggu"
+                label="Izin pulang di luar jam kantor menunggu"
                 jumlah={d.izinKeluarMenunggu.length}
                 href="/izin-keluar/kelola"
                 rincian={d.izinKeluarMenunggu.length ? nama(d.izinKeluarMenunggu) : undefined}

@@ -280,7 +280,8 @@ function Isi({ kelola }: { kelola: boolean }) {
             >
               <option value="">— pilih karyawan —</option>
               {karyawan
-                .filter((k) => k.status === "ACTIVE")
+                // Mandor adalah pihak ketiga: tidak menerima SP (client, 10 Okt 2026).
+                .filter((k) => k.status === "ACTIVE" && k.position !== "MANDOR")
                 .map((k) => (
                   <option key={k.id} value={k.id}>
                     {k.name} ({k.employeeCode})
@@ -477,7 +478,8 @@ export default function HalamanSP() {
     profile?.role === "HR" || profile?.role === "OWNER" || profile?.role === "ADMIN";
 
   return (
-    <Guard izinkan={["ADMIN", "FINANCE", "MANDOR", "HR", "OWNER", "KARYAWAN"]}>
+    // Mandor (pihak ketiga) tidak menerima SP — keputusan client 10 Okt 2026.
+    <Guard izinkan={["ADMIN", "FINANCE", "HR", "OWNER", "KARYAWAN"]}>
       <Shell
         judul={kelola ? "Surat Peringatan" : "Surat Peringatan Saya"}
         keterangan={

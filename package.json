@@ -7,9 +7,10 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "uji": "tsx uji/payroll.ts && tsx uji/sp.ts && tsx uji/jadwal.ts && tsx uji/kantor.ts && tsx uji/rekap.ts && tsx uji/payroll-bulanan.ts && tsx uji/slip.ts && tsx uji/izin-keluar.ts && tsx uji/batas-waktu.ts && tsx uji/lembur.ts && tsx uji/jam-server.ts"
+    "uji": "tsx uji/payroll.ts && tsx uji/sp.ts && tsx uji/jadwal.ts && tsx uji/kantor.ts && tsx uji/rekap.ts && tsx uji/payroll-bulanan.ts && tsx uji/slip.ts && tsx uji/izin-keluar.ts && tsx uji/batas-waktu.ts && tsx uji/lembur.ts && tsx uji/jam-server.ts && tsx uji/wajah.ts"
   },
   "dependencies": {
+    "@vladmandic/face-api": "^1.7.15",
     "exceljs": "^4.4.0",
     "firebase": "^12.19.0",
     "jspdf": "^4.2.1",

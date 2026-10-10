@@ -7,8 +7,9 @@ import Shell from "@/components/Shell";
 import Modal from "@/components/Modal";
 import BadgeLokasi from "@/components/BadgeLokasi";
 import FormValidasi from "@/components/FormValidasi";
+import BandingWajah from "@/components/BandingWajah";
 import { Pesan } from "@/components/Field";
-import { pantauAbsensiRentang, pantauKoreksi, semuaProyek, semuaSection, simpanValidasi } from "@/lib/data";
+import { ambilKtp, pantauAbsensiRentang, pantauKoreksi, semuaProyek, semuaSection, simpanValidasi } from "@/lib/data";
 import { eksporAbsensi } from "@/lib/ekspor";
 import { useAuth } from "@/lib/auth";
 import { fotoKecil } from "@/lib/cloudinary";
@@ -85,6 +86,27 @@ function Isi() {
     }
     return pantauKoreksi(rincianId, setKoreksi, () => setKoreksi([]));
   }, [rincianId]);
+
+  // Foto KTP untuk mencocokkan wajah di foto absen. Hanya Admin/HR/Owner yang
+  // boleh membacanya (employeePrivate); Finance melihat rincian tanpa KTP.
+  const bolehLihatKtp = profile?.role === "ADMIN" || profile?.role === "HR" || profile?.role === "OWNER";
+  const [ktp, setKtp] = useState<{ employeeId: string; url: string | null } | undefined>(undefined);
+  useEffect(() => {
+    const id = rincian?.employeeId;
+    if (!id || !bolehLihatKtp) {
+      setKtp(undefined);
+      return;
+    }
+    let batal = false;
+    setKtp(undefined);
+    ambilKtp(id)
+      .then((k) => !batal && setKtp({ employeeId: id, url: k?.ktpPhotoUrl || null }))
+      .catch(() => !batal && setKtp({ employeeId: id, url: null }));
+    return () => {
+      batal = true;
+    };
+  }, [rincian?.employeeId, bolehLihatKtp]);
+  const fotoKtp = ktp && ktp.employeeId === rincian?.employeeId ? ktp.url : undefined;
 
   const terlihat = useMemo(
     () =>
@@ -341,20 +363,26 @@ function Isi() {
                     />
                   </div>
 
-                  <div className="mt-3 flex gap-3">
+                  <div className="mt-3 flex flex-wrap gap-3">
                     {ev.photoUrl && (
-                      <a href={ev.photoUrl} target="_blank" rel="noopener noreferrer">
-                        <Image
-                          src={fotoKecil(ev.photoUrl, 160)}
-                          alt={NAMA_SESI[jenis]}
-                          width={80}
-                          height={80}
-                          className="h-20 w-20 rounded-lg border border-line object-cover"
-                          unoptimized
-                        />
-                      </a>
+                      <div className="shrink-0 text-center">
+                        <a href={ev.photoUrl} target="_blank" rel="noopener noreferrer">
+                          <Image
+                            src={fotoKecil(ev.photoUrl, 160)}
+                            alt={NAMA_SESI[jenis]}
+                            width={80}
+                            height={80}
+                            className="h-20 w-20 rounded-lg border border-line object-cover"
+                            unoptimized
+                          />
+                        </a>
+                        <p className="mt-1 text-[10px] text-muted">Foto absen</p>
+                      </div>
                     )}
-                    <div className="text-xs text-muted">
+                    {ev.photoUrl && bolehLihatKtp && (
+                      <BandingWajah fotoAbsen={ev.photoUrl} fotoKtp={fotoKtp} namaSesi={NAMA_SESI[jenis]} />
+                    )}
+                    <div className="w-full text-xs text-muted">
                       <p>Dicatat oleh {ev.recordedBy}</p>
                       <p className="mt-1">
                         Ketelitian GPS ±{ev.location?.accuracy ?? "?"} m ·{" "}

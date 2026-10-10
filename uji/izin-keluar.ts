@@ -9,7 +9,7 @@ function cek(nama: string, dapat: unknown, harap: unknown) {
   sama ? lolos++ : gagal++;
 }
 
-console.log("\n== Izin meninggalkan kantor ==");
+console.log("\n== Izin pulang di luar jam kantor (durasi hanya untuk catatan lama) ==");
 cek("durasi 1 jam 30", durasiMenit("2026-09-28T03:00:00.000Z", "2026-09-28T04:30:00.000Z"), 90);
 cek("jam kembali lebih awal = 0", durasiMenit("2026-09-28T04:00:00.000Z", "2026-09-28T03:00:00.000Z"), 0);
 cek("pribadi tepat 2 jam belum lebih", lebihDuaJam("PRIBADI", 120), false);
@@ -21,8 +21,9 @@ const dasar = { status: "MENUNGGU", diketahuiOleh: null, keluar: null, kembali: 
 cek("baru diajukan", keadaanIzin(dasar), "Menunggu");
 cek("sudah diketahui HR", keadaanIzin({ ...dasar, diketahuiOleh: "Firda" }), "Diketahui HR, menunggu Owner");
 cek("disetujui", keadaanIzin({ ...dasar, status: "DISETUJUI" }), "Disetujui");
-cek("sedang di luar", keadaanIzin({ ...dasar, keluar: {} }), "Sedang di luar");
-cek("sudah kembali", keadaanIzin({ ...dasar, keluar: {}, kembali: {} }), "Sudah kembali");
+cek("sudah mencatat pulang", keadaanIzin({ ...dasar, keluar: {} }), "Sudah pulang");
+cek("pulang menang atas disetujui", keadaanIzin({ ...dasar, status: "DISETUJUI", keluar: {} }), "Sudah pulang");
+cek("catatan lama: sudah kembali", keadaanIzin({ ...dasar, keluar: {}, kembali: {} }), "Sudah kembali");
 cek("ditolak menang", keadaanIzin({ ...dasar, status: "DITOLAK", keluar: {} }), "Ditolak");
 
 console.log("\n== Pengaman foto: hanya dari kamera ==");

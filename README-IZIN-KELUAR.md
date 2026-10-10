@@ -1,39 +1,51 @@
-# Izin meninggalkan kantor saat jam kerja
+# Izin pulang di luar jam kantor
 
-Dibuat 28 September 2026. Pengganti form kertas "Form Izin Meninggalkan
-Kantor Saat Jam Kerja".
+Dibuat 28 September 2026 sebagai "izin meninggalkan kantor saat jam kerja"
+(keluar lalu kembali). Pada presentasi 10 Oktober 2026 client menjelaskan
+bahwa form kertasnya sebenarnya dipakai untuk **izin pulang di luar jam
+kantor**: karyawan pulang lebih awal atau di luar jadwal, karena dinas atau
+keperluan pribadi, dan tidak kembali hari itu. Halaman, label, dan cetakan
+disesuaikan; alamatnya tetap `/izin-keluar` dan koleksinya tetap `izinKeluar`.
 
 ## Alur
 
-1. **Karyawan** (menu *Izin keluar kantor*): pilih keperluan **Dinas** atau
-   **Pribadi**, tanggal, jam keluar rencana, dan alasan. Kirim.
-2. **HR** (menu *Kelola izin keluar*): tekan **Tandai diketahui** - pengganti
+1. **Karyawan** (menu *Izin pulang*): pilih keperluan **Dinas** atau
+   **Pribadi**, tanggal, jam pulang rencana, dan alasan. Kirim.
+2. **HR** (menu *Kelola izin pulang*): tekan **Tandai diketahui** - pengganti
    tanda tangan "Diketahui oleh".
 3. **Owner**: **Setujui** atau **Tolak** (tolak wajib beralasan) - pengganti
    "Disetujui oleh".
-4. Saat berangkat, karyawan menekan **Keluar kantor**; saat tiba lagi,
-   **Sudah kembali**. Keduanya dengan swafoto dan GPS. Lama di luar dihitung
-   otomatis.
+4. Saat benar-benar pulang, karyawan menekan **Pulang sekarang**: swafoto dan
+   GPS tercatat bersama jam server.
 
 Keputusan client:
-- Karyawan boleh menekan Keluar kantor sebelum izin diputuskan (keadaan
+- Karyawan boleh menekan Pulang sekarang sebelum izin diputuskan (keadaan
   mendesak); status persetujuannya tetap terlihat.
-- Izin **pribadi lebih dari 2 jam hanya dicatat**, tanpa sanksi.
-- Kembali di luar jangkauan kantor tetap tercatat dan ditandai untuk HR.
+- Pulang di luar jangkauan kantor tetap tercatat dan ditandai untuk HR.
 
-Tombol **Cetak form** membuat PDF dengan bentuk form kertas perusahaan; kolom
-tanda tangan berisi nama dan waktu persetujuan di aplikasi.
+Yang belum ditanyakan: apakah izin pulang yang disetujui menghapus hitungan
+*pulang cepat* di absensi kantor. Sekarang **tidak** - `pulangCepatMenit`
+tetap dihitung dari sesi pulang yang diabsenkan.
+
+Tombol **Cetak form** membuat PDF "FORM IZIN PULANG DI LUAR JAM KANTOR";
+kolom tanda tangan berisi nama dan waktu persetujuan di aplikasi.
 
 Beranda HR/Owner: kotak *Perlu tindakan* menampilkan izin yang menunggu.
 
-Jenis izin "Meninggalkan kantor saat jam kerja" di menu Cuti dan izin
-disembunyikan supaya tidak dobel. Data lama tetap terbaca.
+Mandor tidak punya menu ini (pihak ketiga, tanpa cuti/izin/SP).
 
-## Security Rules (Tahap 19)
+## Catatan lama
 
-Koleksi `izinKeluar`:
-- karyawan membuat untuk dirinya sendiri, mencatat keluar/kembali sekali
-  (tidak bisa ditimpa), dan membatalkan yang belum dipakai;
+Izin yang dibuat sebelum 10 Oktober 2026 punya sesi **kembali** dan lama di
+luar. Keduanya tetap ditampilkan dan dicetak bila ada. Kolom `kembali`,
+`durasiMenit`, dan `lebihDuaJam` tidak dihapus dari model data.
+
+## Security Rules
+
+Koleksi `izinKeluar` (tidak berubah sejak Tahap 19, ditambah penolakan
+untuk mandor di Tahap 22):
+- karyawan membuat untuk dirinya sendiri (bukan posisi MANDOR), mencatat
+  pulang sekali (tidak bisa ditimpa), dan membatalkan yang belum dipakai;
 - HR/Admin hanya bisa mengisi "diketahui", sekali;
 - Owner hanya bisa menyetujui/menolak yang masih menunggu;
 - tidak ada yang bisa menghapus.

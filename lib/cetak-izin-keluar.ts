@@ -6,9 +6,10 @@ import { NAMA_KEPERLUAN, teksDurasi } from "@/lib/izin-keluar";
 import type { IzinKeluar } from "@/types";
 
 /*
- * Mencetak "FORM IZIN MENINGGALKAN KANTOR SAAT JAM KERJA" sesuai form
- * perusahaan. Tanda tangan diganti keterangan persetujuan digital beserta
- * waktunya, karena persetujuan terjadi di aplikasi.
+ * Mencetak "FORM IZIN PULANG DI LUAR JAM KANTOR" dengan tata letak form
+ * kertas perusahaan. Tanda tangan diganti keterangan persetujuan digital
+ * beserta waktunya, karena persetujuan terjadi di aplikasi. Catatan lama
+ * (sebelum 10 Okt 2026) yang punya sesi kembali tetap dicetak lengkap.
  */
 
 const HARI = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
@@ -41,7 +42,7 @@ export async function cetakFormIzinKeluar(izin: IzinKeluar) {
   doc.setFont("helvetica", "bold");
   doc.setFontSize(11);
   doc.setTextColor(20, 20, 20);
-  doc.text("FORM IZIN MENINGGALKAN KANTOR SAAT JAM KERJA", (x0 + 42 + x1) / 2, 25, { align: "center" });
+  doc.text("FORM IZIN PULANG DI LUAR JAM KANTOR", (x0 + 42 + x1) / 2, 25, { align: "center" });
 
   // Keperluan
   doc.setFontSize(9);
@@ -66,9 +67,14 @@ export async function cetakFormIzinKeluar(izin: IzinKeluar) {
     ["NAMA KARYAWAN", izin.employeeName],
     ["DIVISI", izin.divisi || "-"],
     ["HARI / TANGGAL", tanggalPanjang(izin.tanggal)],
-    ["JAM KELUAR KANTOR", izin.keluar ? jamWIB(izin.keluar.waktu) || "" : `${izin.rencanaKeluar} (rencana)`],
-    ["JAM KEMBALI KANTOR", izin.kembali ? `${jamWIB(izin.kembali.waktu)}  (lama di luar ${teksDurasi(izin.durasiMenit)})` : "-"],
+    [
+      izin.kembali ? "JAM KELUAR KANTOR" : "JAM PULANG",
+      izin.keluar ? jamWIB(izin.keluar.waktu) || "" : `${izin.rencanaKeluar} (rencana)`,
+    ],
   ];
+  if (izin.kembali) {
+    baris.push(["JAM KEMBALI KANTOR", `${jamWIB(izin.kembali.waktu)}  (lama di luar ${teksDurasi(izin.durasiMenit)})`]);
+  }
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8.5);
   baris.forEach(([l, v], i) => {
@@ -85,10 +91,10 @@ export async function cetakFormIzinKeluar(izin: IzinKeluar) {
   });
   doc.setFontSize(7.5);
   doc.setTextColor(90, 90, 90);
-  doc.text("( jam keluar dan kembali dicatat karyawan di aplikasi dengan swafoto dan lokasi GPS )", x0 + 24, 94);
+  doc.text("( jam pulang dicatat karyawan di aplikasi dengan swafoto dan lokasi GPS )", x0 + 24, 94);
   doc.setTextColor(20, 20, 20);
   doc.setFontSize(8.5);
-  doc.text("ALASAN MENINGGALKAN KANTOR", x0 + 14, 100);
+  doc.text("ALASAN PULANG", x0 + 14, 100);
   doc.text(":", x0 + 72, 100);
   doc.setFont("helvetica", "bold");
   doc.text(doc.splitTextToSize(izin.alasan, x1 - x0 - 100) as string[], x0 + 86, 100);
@@ -138,5 +144,5 @@ export async function cetakFormIzinKeluar(izin: IzinKeluar) {
   doc.setTextColor(120, 120, 120);
   doc.text(`Status: ${izin.status} · Keperluan: ${NAMA_KEPERLUAN[izin.keperluan]} · ID ${izin.id}`, x0, 137);
 
-  doc.save(`Izin-Keluar-${izin.tanggal}-${izin.employeeId}.pdf`);
+  doc.save(`Izin-Pulang-${izin.tanggal}-${izin.employeeId}.pdf`);
 }

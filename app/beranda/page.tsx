@@ -357,18 +357,28 @@ function Isi() {
             {mandor ? "Catat kehadiran tim dan diri sendiri." : "Absen masuk dan pulang."}
           </p>
         </Link>
-        <Link href="/cuti" className="kartu hover:border-allegro-600">
-          <h3 className="font-semibold text-ink">Cuti &amp; Izin</h3>
-          <p className="mt-1 text-sm text-muted">Ajukan dan lihat saldo.</p>
-        </Link>
+        {/* Mandor adalah pihak ketiga: tanpa cuti, izin, dan SP (client, 10 Okt 2026). */}
+        {mandor ? (
+          <Link href="/tim-lapangan" className="kartu hover:border-allegro-600">
+            <h3 className="font-semibold text-ink">Tim Lapangan</h3>
+            <p className="mt-1 text-sm text-muted">Tabel jam absen anak buah hari ini.</p>
+          </Link>
+        ) : (
+          <Link href="/cuti" className="kartu hover:border-allegro-600">
+            <h3 className="font-semibold text-ink">Cuti &amp; Izin</h3>
+            <p className="mt-1 text-sm text-muted">Ajukan dan lihat saldo.</p>
+          </Link>
+        )}
         <Link href="/lembur" className="kartu hover:border-allegro-600">
           <h3 className="font-semibold text-ink">Lembur</h3>
           <p className="mt-1 text-sm text-muted">Ajukan pengakuan lembur.</p>
         </Link>
-        <Link href="/sp" className="kartu hover:border-allegro-600">
-          <h3 className="font-semibold text-ink">Surat Peringatan</h3>
-          <p className="mt-1 text-sm text-muted">Catatan atas nama Anda.</p>
-        </Link>
+        {!mandor && (
+          <Link href="/sp" className="kartu hover:border-allegro-600">
+            <h3 className="font-semibold text-ink">Surat Peringatan</h3>
+            <p className="mt-1 text-sm text-muted">Catatan atas nama Anda.</p>
+          </Link>
+        )}
         <button
           className="kartu text-left hover:border-allegro-600"
           onClick={() => {

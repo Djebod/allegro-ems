@@ -49,6 +49,7 @@ import {
   tanggalWIB,
 } from "@/lib/absensi";
 import { jamServer, selisihJamPerangkatDetik } from "@/lib/jam-server";
+import { posisiLapangan } from "@/lib/karyawan";
 import { hitungUpahKaryawan, segarkanItem } from "@/lib/payroll";
 
 /**
@@ -383,6 +384,62 @@ export function pantauAbsensiHarian(
     query(
       collection(dbClient(), "attendance"),
       where("mandorId", "==", mandorId),
+      where("date", "==", tanggal)
+    ),
+    (snap) => {
+      const peta: Record<string, Attendance> = {};
+      snap.docs.forEach((d) => {
+        const isi = { id: d.id, ...(d.data() as Omit<Attendance, "id">) };
+        peta[isi.employeeId] = isi;
+      });
+      onData(peta);
+    },
+    onGagal
+  );
+}
+
+/**
+ * Pekerja lapangan (mandor, tukang, kenek) yang penugasannya sedang berjalan
+ * di satu proyek. Dipakai halaman Tim lapangan oleh staf kantor yang
+ * ditugaskan ke proyek itu; rules mengizinkannya membaca karyawan yang
+ * currentProjectId-nya sama dengan proyek penugasannya sendiri.
+ */
+export function pantauPekerjaProyek(
+  projectId: string,
+  onData: (data: Employee[]) => void,
+  onGagal: () => void
+) {
+  return onSnapshot(
+    query(collection(dbClient(), "employees"), where("currentProjectId", "==", projectId)),
+    (snap) => {
+      const isi = snap.docs
+        .map((d) => ({ id: d.id, ...(d.data() as Omit<Employee, "id">) }))
+        .filter((e) => e.status === "ACTIVE" && posisiLapangan(e.position));
+      isi.sort((a, b) => {
+        // Satu mandor dan anak buahnya berdekatan; mandor di atas timnya.
+        const ma = a.currentMandorId || "";
+        const mb = b.currentMandorId || "";
+        if (ma !== mb) return ma.localeCompare(mb);
+        if (a.position !== b.position) return a.position === "MANDOR" ? -1 : 1;
+        return a.name.localeCompare(b.name);
+      });
+      onData(isi);
+    },
+    onGagal
+  );
+}
+
+/** Absensi satu proyek pada satu tanggal, dipetakan per kode karyawan. */
+export function pantauAbsensiProyek(
+  projectId: string,
+  tanggal: string,
+  onData: (data: Record<string, Attendance>) => void,
+  onGagal: () => void
+) {
+  return onSnapshot(
+    query(
+      collection(dbClient(), "attendance"),
+      where("projectId", "==", projectId),
       where("date", "==", tanggal)
     ),
     (snap) => {

@@ -7,7 +7,9 @@ import Shell from "@/components/Shell";
 import Modal from "@/components/Modal";
 import { Field, Pesan } from "@/components/Field";
 import TandaTangan from "@/components/TandaTangan";
+import BandingWajah from "@/components/BandingWajah";
 import { useAuth } from "@/lib/auth";
+import { ambilKtp } from "@/lib/data";
 import { koreksiAbsenKantor, pantauAbsenKantor, pantauKoreksiKantor, putuskanAbsenLuar } from "@/lib/data-kantor";
 import { ISTIRAHAT_BAKU_MENIT, jamEfektifKantor, jamWIB, tambahMenit } from "@/lib/kantor";
 import { fotoKecil } from "@/lib/cloudinary";
@@ -99,6 +101,27 @@ function Isi() {
   }, [data, tujuan]);
 
   const buka = useMemo(() => data.find((a) => a.id === rincian) || null, [data, rincian]);
+
+  // Foto KTP untuk mencocokkan wajah swafoto. Hanya Admin/HR/Owner yang boleh
+  // membacanya (employeePrivate); Finance melihat rincian tanpa KTP.
+  const bolehLihatKtp = profile?.role === "ADMIN" || profile?.role === "HR" || profile?.role === "OWNER";
+  const [ktp, setKtp] = useState<{ employeeId: string; url: string | null } | undefined>(undefined);
+  useEffect(() => {
+    const id = buka?.employeeId;
+    if (!id || !bolehLihatKtp) {
+      setKtp(undefined);
+      return;
+    }
+    let batal = false;
+    setKtp(undefined);
+    ambilKtp(id)
+      .then((k) => !batal && setKtp({ employeeId: id, url: k?.ktpPhotoUrl || null }))
+      .catch(() => !batal && setKtp({ employeeId: id, url: null }));
+    return () => {
+      batal = true;
+    };
+  }, [buka?.employeeId, bolehLihatKtp]);
+  const fotoKtp = ktp && ktp.employeeId === buka?.employeeId ? ktp.url : undefined;
 
   const perluPeriksa = (a: AbsenKantor) =>
     a.perluValidasi || !a.pulang || (!!a.istirahatTerbuka && (!!a.pulang || a.date < tanggalHariIni()));
@@ -366,16 +389,22 @@ function Isi() {
                   </div>
                   {ev.alasan && <p className="mt-2 text-sm text-muted">Alasan: {ev.alasan}</p>}
                   {ev.photoUrl && (
-                    <a href={ev.photoUrl} target="_blank" rel="noopener noreferrer">
-                      <Image
-                        src={fotoKecil(ev.photoUrl, 160)}
-                        alt={jenis}
-                        width={80}
-                        height={80}
-                        className="mt-3 h-20 w-20 rounded-lg border border-line object-cover"
-                        unoptimized
-                      />
-                    </a>
+                    <div className="mt-3 flex flex-wrap gap-3">
+                      <div className="shrink-0 text-center">
+                        <a href={ev.photoUrl} target="_blank" rel="noopener noreferrer">
+                          <Image
+                            src={fotoKecil(ev.photoUrl, 160)}
+                            alt={jenis}
+                            width={80}
+                            height={80}
+                            className="h-20 w-20 rounded-lg border border-line object-cover"
+                            unoptimized
+                          />
+                        </a>
+                        <p className="mt-1 text-[10px] text-muted">Swafoto</p>
+                      </div>
+                      {bolehLihatKtp && <BandingWajah fotoAbsen={ev.photoUrl} fotoKtp={fotoKtp} namaSesi={judul} />}
+                    </div>
                   )}
                 </div>
               );

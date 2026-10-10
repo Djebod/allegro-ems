@@ -64,8 +64,8 @@ export async function ajukanIzinKeluar(opsi: {
   alasan: string;
   rencanaKeluar: string;
 }) {
-  if (!opsi.alasan.trim()) throw new Error("Alasan meninggalkan kantor wajib diisi.");
-  if (!/^\d{2}:\d{2}$/.test(opsi.rencanaKeluar)) throw new Error("Jam keluar belum diisi.");
+  if (!opsi.alasan.trim()) throw new Error("Alasan pulang di luar jam kantor wajib diisi.");
+  if (!/^\d{2}:\d{2}$/.test(opsi.rencanaKeluar)) throw new Error("Jam pulang belum diisi.");
   const ref = await addDoc(collection(dbClient(), KOLEKSI), {
     employeeId: opsi.karyawan.id,
     employeeName: opsi.karyawan.name,

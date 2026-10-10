@@ -13,7 +13,7 @@ import { cariKantorTerdekat, jamWIB } from "@/lib/kantor";
 import { jarakMeter } from "@/lib/lokasi";
 import { cloudinarySiap, unggahFoto } from "@/lib/cloudinary";
 import { tanggalHariIni, tanggalPendek } from "@/lib/absensi";
-import { BATAS_IZIN_KELUAR_MENIT, NAMA_KEPERLUAN, keadaanIzin, teksDurasi, warnaKeadaan } from "@/lib/izin-keluar";
+import { NAMA_KEPERLUAN, keadaanIzin, teksDurasi, warnaKeadaan } from "@/lib/izin-keluar";
 import { ajukanIzinKeluar, batalkanIzinKeluar, catatSesiIzin, pantauIzinSaya } from "@/lib/data-izin-keluar";
 import { cetakFormIzinKeluar } from "@/lib/cetak-izin-keluar";
 import type { Employee, IzinKeluar, Kantor, KeperluanIzinKeluar, SesiIzinKeluar } from "@/types";
@@ -39,7 +39,8 @@ function Isi() {
   const [alasan, setAlasan] = useState("");
   const [mengirim, setMengirim] = useState(false);
 
-  const [antrean, setAntrean] = useState<{ izin: IzinKeluar; jenis: "keluar" | "kembali" } | null>(null);
+  /** Izin yang sedang dicatat jam pulangnya (menunggu swafoto). */
+  const [antrean, setAntrean] = useState<IzinKeluar | null>(null);
   const [titik, setTitik] = useState<Omit<SesiIzinKeluar, "waktu" | "photoUrl"> | null>(null);
   const [mencari, setMencari] = useState(false);
   const [menyimpan, setMenyimpan] = useState(false);
@@ -64,7 +65,7 @@ function Isi() {
     try {
       await ajukanIzinKeluar({ karyawan, tanggal, keperluan, alasan, rencanaKeluar: rencana });
       setAlasan("");
-      setPesan("Izin terkirim. Saat berangkat, tekan Keluar kantor; saat tiba lagi, tekan Sudah kembali.");
+      setPesan("Izin terkirim. Saat benar-benar pulang, tekan Pulang sekarang supaya jam pulangnya tercatat.");
     } catch (e) {
       setSalah(e instanceof Error ? e.message : "Izin gagal dikirim.");
     } finally {
@@ -106,28 +107,27 @@ function Isi() {
     [kantor]
   );
 
-  async function mulai(izin: IzinKeluar, jenis: "keluar" | "kembali") {
+  async function mulaiPulang(izin: IzinKeluar) {
     setSalah(null);
     setPesan(null);
     if (!cloudinarySiap()) return setSalah("Penyimpanan foto belum diatur. Hubungi Admin.");
     const t = await ambilLokasi();
     if (!t) return;
     setTitik(t);
-    setAntrean({ izin, jenis });
+    setAntrean(izin);
   }
 
   async function simpanFoto(file: File) {
     if (!antrean || !titik) return;
     setMenyimpan(true);
     try {
-      const foto = await unggahFoto(file, `${FOLDER}/${antrean.izin.tanggal}`);
-      await catatSesiIzin(antrean.izin, antrean.jenis, { ...titik, photoUrl: foto.url });
+      const foto = await unggahFoto(file, `${FOLDER}/${antrean.tanggal}`);
+      // Jam pulang tersimpan di kolom `keluar` (nama kolom dari rancangan lama).
+      await catatSesiIzin(antrean, "keluar", { ...titik, photoUrl: foto.url });
       setPesan(
-        antrean.jenis === "keluar"
-          ? "Jam keluar tercatat. Jangan lupa tekan Sudah kembali saat tiba di kantor."
-          : titik.diDalamRadius
-          ? "Jam kembali tercatat. Selamat bekerja kembali."
-          : "Jam kembali tercatat, tetapi lokasi Anda di luar jangkauan kantor. HR akan melihat catatan ini."
+        titik.diDalamRadius
+          ? "Jam pulang tercatat. Hati-hati di jalan."
+          : "Jam pulang tercatat, tetapi lokasi Anda di luar jangkauan kantor. HR akan melihat catatan ini."
       );
       setAntrean(null);
     } catch (e) {
@@ -145,7 +145,7 @@ function Isi() {
     <>
       {/* Formulir */}
       <div className="kartu">
-        <p className="mb-3 font-semibold text-ink">Ajukan izin meninggalkan kantor</p>
+        <p className="mb-3 font-semibold text-ink">Ajukan izin pulang di luar jam kantor</p>
         <div className="grid gap-4 sm:grid-cols-3">
           <Field label="Keperluan" wajib>
             <div className="flex gap-2">
@@ -166,18 +166,20 @@ function Isi() {
           <Field label="Tanggal" wajib>
             <input type="date" className="input-dasar" value={tanggal} onChange={(e) => setTanggal(e.target.value)} />
           </Field>
-          <Field label="Jam keluar (rencana)" wajib>
+          <Field label="Jam pulang (rencana)" wajib>
             <input type="time" className="input-dasar" value={rencana} onChange={(e) => setRencana(e.target.value)} />
           </Field>
         </div>
         <div className="mt-4">
-          <Field label="Alasan meninggalkan kantor" wajib>
+          <Field label="Alasan pulang di luar jam kantor" wajib>
             <textarea
               className="input-dasar"
               rows={2}
               value={alasan}
               onChange={(e) => setAlasan(e.target.value)}
-              placeholder={keperluan === "DINAS" ? "mis. Survey lokasi proyek Dago" : "mis. Mengurus dokumen di bank"}
+              placeholder={
+                keperluan === "DINAS" ? "mis. Langsung ke lokasi proyek Dago, tidak kembali ke kantor" : "mis. Mengantar orang tua ke rumah sakit"
+              }
             />
           </Field>
         </div>
@@ -185,8 +187,8 @@ function Isi() {
           {mengirim ? "Mengirim…" : "Kirim izin"}
         </button>
         <p className="mt-3 text-xs text-muted">
-          Izin diketahui HR dan disetujui Owner di aplikasi. Saat berangkat dan saat kembali, catat dengan swafoto dan
-          lokasi. Izin pribadi lebih dari {BATAS_IZIN_KELUAR_MENIT / 60} jam akan tercatat.
+          Izin diketahui HR dan disetujui Owner di aplikasi. Saat benar-benar pulang, tekan <b>Pulang sekarang</b>:
+          jam, swafoto, dan lokasi tercatat sebagai bukti.
         </p>
       </div>
 
@@ -200,13 +202,15 @@ function Isi() {
         <p className="text-muted">Memuat…</p>
       ) : daftar.length === 0 ? (
         <div className="kartu text-center">
-          <p className="text-sm text-muted">Belum ada izin meninggalkan kantor.</p>
+          <p className="text-sm text-muted">Belum ada izin pulang di luar jam kantor.</p>
         </div>
       ) : (
         <div className="space-y-3">
           {daftar.map((i) => {
             const keadaan = keadaanIzin(i);
             const berlaku = i.status === "MENUNGGU" || i.status === "DISETUJUI";
+            // Catatan lama (sebelum 10 Okt 2026) punya sesi kembali; tetap ditampilkan.
+            const lama = Boolean(i.kembali);
             return (
               <div key={i.id} className="kartu">
                 <div className="flex flex-wrap items-start justify-between gap-2">
@@ -219,19 +223,23 @@ function Isi() {
                   <span className={`label-status ${warnaKeadaan(keadaan)}`}>{keadaan}</span>
                 </div>
 
-                <div className="mt-3 grid grid-cols-3 gap-2 border-t border-line pt-3 text-sm">
+                <div className={`mt-3 grid gap-2 border-t border-line pt-3 text-sm ${lama ? "grid-cols-3" : "grid-cols-2"}`}>
                   <div>
-                    <p className="text-[11px] text-muted">Keluar</p>
-                    <p className="font-semibold text-ink">{i.keluar ? jamWIB(i.keluar.waktu) : `${i.rencanaKeluar} (rencana)`}</p>
+                    <p className="text-[11px] text-muted">Rencana pulang</p>
+                    <p className="font-semibold text-ink">{i.rencanaKeluar}</p>
                   </div>
                   <div>
-                    <p className="text-[11px] text-muted">Kembali</p>
-                    <p className="font-semibold text-ink">{i.kembali ? jamWIB(i.kembali.waktu) : "-"}</p>
+                    <p className="text-[11px] text-muted">{lama ? "Keluar" : "Pulang tercatat"}</p>
+                    <p className="font-semibold text-ink">{i.keluar ? jamWIB(i.keluar.waktu) : "belum"}</p>
                   </div>
-                  <div>
-                    <p className="text-[11px] text-muted">Lama di luar</p>
-                    <p className={`font-semibold ${i.lebihDuaJam ? "text-amber-800" : "text-ink"}`}>{teksDurasi(i.durasiMenit)}</p>
-                  </div>
+                  {lama && (
+                    <div>
+                      <p className="text-[11px] text-muted">Kembali</p>
+                      <p className="font-semibold text-ink">
+                        {jamWIB(i.kembali!.waktu)} · {teksDurasi(i.durasiMenit)}
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 <p className="mt-2 text-[11px] text-muted">
@@ -241,13 +249,8 @@ function Isi() {
 
                 <div className="mt-3 flex flex-wrap gap-2">
                   {berlaku && !i.keluar && (
-                    <button className="btn-utama" disabled={mencari || menyimpan} onClick={() => mulai(i, "keluar")}>
-                      {mencari ? "Mengambil lokasi…" : "Keluar kantor"}
-                    </button>
-                  )}
-                  {berlaku && i.keluar && !i.kembali && (
-                    <button className="btn-utama" disabled={mencari || menyimpan} onClick={() => mulai(i, "kembali")}>
-                      {mencari ? "Mengambil lokasi…" : "Sudah kembali"}
+                    <button className="btn-utama" disabled={mencari || menyimpan} onClick={() => mulaiPulang(i)}>
+                      {mencari ? "Mengambil lokasi…" : "Pulang sekarang"}
                     </button>
                   )}
                   {i.status === "MENUNGGU" && !i.keluar && (
@@ -279,7 +282,7 @@ function Isi() {
       <KameraBelakang
         terbuka={Boolean(antrean)}
         arah="depan"
-        judul={antrean?.jenis === "kembali" ? "Swafoto kembali ke kantor" : "Swafoto keluar kantor"}
+        judul="Swafoto pulang"
         onFoto={simpanFoto}
         onBatal={() => setAntrean(null)}
         memproses={menyimpan}
@@ -291,7 +294,10 @@ function Isi() {
 export default function HalamanIzinKeluar() {
   return (
     <Guard izinkan={["ADMIN", "FINANCE", "HR", "OWNER", "KARYAWAN"]}>
-      <Shell judul="Izin Meninggalkan Kantor" keterangan="Izin keluar kantor saat jam kerja, untuk dinas atau keperluan pribadi.">
+      <Shell
+        judul="Izin Pulang di Luar Jam Kantor"
+        keterangan="Izin pulang lebih awal atau di luar jadwal, untuk dinas atau keperluan pribadi."
+      >
         <Isi />
       </Shell>
     </Guard>

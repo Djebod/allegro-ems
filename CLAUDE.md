@@ -282,6 +282,22 @@ Mesin fingerprint **tidak dipakai lagi**. Staf kantor absen sendiri lewat HP:
 - **Lokasi absen bisa lebih dari satu proyek** (7 Okt 2026). Penugasan utama tetap satu (dipakai payroll dan tim mandor); proyek tambahan dicentang Admin di Detail Karyawan → Penugasan → "Lokasi absen tambahan", tersimpan di `employees.lokasiAbsenProyekIds`. Daftar titik sah dibentuk `titikAbsenKaryawan()` di `lib/kantor.ts`: kantor aktif + proyek penugasan + proyek tambahan, proyek non-ACTIVE dilewati. Tiap sesi mencari titik terdekat sendiri, jadi masuk di proyek A dan pulang di proyek B sah. Karyawan tidak bisa mengubah kolom ini sendiri (tidak ada di daftar kolom yang boleh diubah di rules)
 - Tiap sesi menyimpan `jenisTitik` (`KANTOR` / `PROYEK`) supaya Admin tahu absennya di mana. Kosong pada catatan lama, dibaca sebagai `KANTOR`
 
+### Izin pulang di luar jam kantor (10 Okt 2026)
+
+Menu *Izin keluar kantor* semula dirancang sebagai "keluar lalu kembali". Pada presentasi 10 Okt 2026 client menjelaskan form itu sebenarnya untuk **izin pulang di luar jam kantor** (pulang lebih awal / di luar jadwal, dinas atau pribadi, tidak kembali hari itu). Sekarang hanya ada satu sesi, **Pulang sekarang** (swafoto + GPS), tersimpan di kolom `keluar` koleksi `izinKeluar`. Kolom `kembali`, `durasiMenit`, `lebihDuaJam` dan rules-nya **tidak diubah** supaya catatan lama tetap terbaca; alamat halaman tetap `/izin-keluar`. Izin pulang **tidak** mengubah absensi kantor: `pulangCepatMenit` tetap dihitung dari sesi pulang yang diabsenkan. Belum ditanyakan apakah izin yang disetujui harus menghapus hitungan pulang cepat.
+
+### Mandor adalah pihak ketiga (10 Okt 2026)
+
+Mandor cenderung pihak luar, bukan karyawan tetap. Untuk posisi MANDOR **tidak ada cuti, izin, dan surat peringatan**: menu Cuti dan izin, Izin pulang, Slip gaji, dan Surat peringatan disembunyikan dari peran MANDOR (`BUKAN_MANDOR` di `lib/menu.ts`), daftar karyawan di form SP tidak memuat mandor, dan rules menolak `leaveRequests`, `izinKeluar`, serta `warningLetters` yang `employeeId`-nya berposisi MANDOR (`posisiKaryawan()`). Lembur tetap ada karena mandor mengajukan lembur anak buahnya. Tukang/kenek tidak ikut dibatasi — belum ditanyakan.
+
+### Tim lapangan (10 Okt 2026)
+
+Halaman `/tim-lapangan` (`components/TabelTimLapangan.tsx`): satu baris per pekerja, enam kolom sesi (masuk, istirahat, selesai istirahat, mulai lembur, selesai lembur, pulang), jam kerja, status, dengan pemilih tanggal. Mandor melihat timnya (`pantauTimMandor`); **staf kantor yang ditugaskan ke proyek** (`employees.currentProjectId`) melihat seluruh pekerja lapangan proyek itu (`pantauPekerjaProyek` + `pantauAbsensiProyek`), karena posisi staf di atas mandor; Admin/HR/Owner/Finance tanpa penugasan memilih proyek. Rules: `punyaProyekPenugasan()` + `proyekPenugasanSaya()` mengizinkan baca `employees` dan `attendance` yang proyeknya sama dengan penugasan pembaca. Query `projectId == X && date == Y` cukup index tunggal (dua kesamaan digabung Firestore), jadi tidak masuk `firestore.indexes.json`.
+
+### Pembanding wajah di rincian absen (10 Okt 2026)
+
+Rincian absensi lapangan dan absensi kantor menampilkan **thumbnail foto KTP** di sebelah foto absen (`components/BandingWajah.tsx`), untuk Admin/HR/Owner — rules `employeePrivate` dibuka ke `urusKepegawaian()` (Finance tetap tidak). Tombol **Bandingkan wajah** menjalankan model face-api **di browser** (`@vladmandic/face-api`, berkas model di `public/model-wajah/`, dimuat saat tombol pertama ditekan). Hasilnya jarak dua sidik wajah dan tafsirnya (`lib/wajah.ts`, batas di `lib/constants.ts`: `BATAS_WAJAH_SANGAT_MIRIP` 0,4 · `BATAS_WAJAH_MIRIP` 0,5 · `BATAS_WAJAH_RAGU` 0,6). Ini **panduan, bukan keputusan**; validasi tetap ditandatangani Admin. Foto diambil dari Cloudinary versi `c_limit,w_800` (CORS Cloudinary mengizinkan). Kalau pustakanya dinaikkan versinya, salin ulang berkas modelnya.
+
 ### Kasbon
 
 Satu karyawan satu bon aktif. Bisa dicicil; besarnya dibulatkan ke atas supaya cicilan terakhir yang mengecil. Potongan tidak pernah melebihi upah periode itu.
@@ -311,6 +327,8 @@ Iuran BPJS disimpan sebagai **angka rupiah per bulan** di `employees.iuranBpjs` 
 
 Payroll hanya bisa diakses tiga orang: Ko Freddy, Firda, Pak Christian.
 
+Allegro **belum punya struktur organisasi** (10 Okt 2026): semua persetujuan bermuara ke Ko Freddy. Jangan merancang alur persetujuan bertingkat sebelum client memintanya. Pekerja lapangan di-tag ke proyek dan section, di bawah mandor; staf kantor yang ditugaskan ke proyek berada di atas mandor.
+
 Setiap akun harus disambungkan ke data karyawannya lewat **Pengguna & Peran**. Tanpa sambungan itu, orangnya tidak punya saldo cuti dan tidak bisa mengajukan apa pun.
 
 ---
@@ -335,6 +353,9 @@ lib/          aturan bisnis, akses data, util
   jadwal.ts       jadwal kerja kantor
   absensi.ts      absensi lapangan + keTanggal() + tanggalWIB()
   jam-server.ts   jam server Firestore untuk semua jalur absen
+  izin-keluar.ts  aturan izin pulang di luar jam kantor
+  wajah.ts        tafsir jarak pembanding wajah (murni, diuji)
+  banding-wajah.ts  memuat model face-api di browser, menghitung sidik wajah
   ekspor.ts       Excel berkop Allegro
   impor-karyawan.ts  template & pembaca impor
 types/        model data

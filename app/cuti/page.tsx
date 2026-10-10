@@ -330,8 +330,8 @@ function Isi() {
               </optgroup>
               <optgroup label="Izin">
                 {Object.entries(JENIS_CUTI)
-                  // Izin meninggalkan kantor punya menu sendiri (Izin keluar kantor),
-                  // dengan swafoto dan GPS saat keluar dan kembali.
+                  // Izin pulang di luar jam kantor punya menu sendiri (Izin pulang),
+                  // dengan swafoto dan GPS saat pulang.
                   .filter(([k, a]) => a.kategori === "IZIN" && k !== "MENINGGALKAN_KANTOR")
                   .map(([k, a]) => (
                     <option key={k} value={k}>
@@ -496,7 +496,8 @@ function Isi() {
 
 export default function HalamanCutiSaya() {
   return (
-    <Guard izinkan={["ADMIN", "FINANCE", "MANDOR", "HR", "OWNER", "KARYAWAN"]}>
+    // Mandor (pihak ketiga) tidak punya cuti dan izin — keputusan client 10 Okt 2026.
+    <Guard izinkan={["ADMIN", "FINANCE", "HR", "OWNER", "KARYAWAN"]}>
       <Shell judul="Cuti & Izin Saya" keterangan="Saldo, pengajuan, dan riwayatnya." lebar>
         <Isi />
       </Shell>

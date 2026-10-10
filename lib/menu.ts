@@ -21,27 +21,37 @@ export interface GrupMenu {
 
 const SEMUA: Role[] = ["ADMIN", "FINANCE", "MANDOR", "HR", "OWNER", "KARYAWAN"];
 const KEPEGAWAIAN: Role[] = ["ADMIN", "HR", "OWNER"];
+/**
+ * Mandor adalah pihak ketiga (keputusan client 10 Okt 2026): tidak punya
+ * cuti, izin, slip gaji bulanan, maupun surat peringatan. Menu-menu itu
+ * disembunyikan darinya, dan rules menolak pengajuannya.
+ */
+const BUKAN_MANDOR: Role[] = ["ADMIN", "FINANCE", "HR", "OWNER", "KARYAWAN"];
 
 export const MENU: GrupMenu[] = [
   {
     judul: "Saya",
     item: [
       { label: "Beranda", href: "/beranda", peran: SEMUA },
-      { label: "Absen saya", href: "/absen", peran: ["ADMIN", "FINANCE", "HR", "OWNER", "KARYAWAN"] },
+      { label: "Absen saya", href: "/absen", peran: BUKAN_MANDOR },
       { label: "Absen tim", href: "/mandor", peran: ["MANDOR"] },
-      { label: "Cuti dan izin", href: "/cuti", peran: SEMUA },
+      { label: "Cuti dan izin", href: "/cuti", peran: BUKAN_MANDOR },
       // Pengakuan lembur: diajukan sendiri (mandor juga untuk anak buahnya),
       // disetujui HR/Owner. Lembur tanpa ini tidak dibayar.
       { label: "Lembur", href: "/lembur", peran: SEMUA },
-      { label: "Izin keluar kantor", href: "/izin-keluar", peran: ["ADMIN", "FINANCE", "HR", "OWNER", "KARYAWAN"] },
-      // Slip gaji bulanan hanya untuk staf kantor; mandor dibayar mingguan.
-      { label: "Slip gaji", href: "/slip-gaji", peran: ["ADMIN", "FINANCE", "HR", "OWNER", "KARYAWAN"] },
-      { label: "Surat peringatan", href: "/sp", peran: SEMUA },
+      // Semula "izin keluar kantor"; client menjelaskan (10 Okt 2026) bahwa
+      // form ini untuk izin PULANG di luar jam kantor. Alamatnya tetap.
+      { label: "Izin pulang", href: "/izin-keluar", peran: BUKAN_MANDOR },
+      { label: "Slip gaji", href: "/slip-gaji", peran: BUKAN_MANDOR },
+      { label: "Surat peringatan", href: "/sp", peran: BUKAN_MANDOR },
     ],
   },
   {
     judul: "Kehadiran",
     item: [
+      // Tabel jam pekerja lapangan: mandor melihat timnya, staf yang
+      // ditugaskan ke proyek melihat proyeknya, pengelola bisa memilih proyek.
+      { label: "Tim lapangan", href: "/tim-lapangan", peran: SEMUA },
       { label: "Absensi kantor", href: "/absensi-kantor", peran: ["ADMIN", "HR", "OWNER", "FINANCE"] },
       // Finance ikut karena merangkap mengurus payroll bulanan.
       { label: "Rekap bulanan", href: "/absensi-kantor/rekap", peran: ["ADMIN", "HR", "OWNER", "FINANCE"] },
@@ -57,7 +67,7 @@ export const MENU: GrupMenu[] = [
       { label: "Kelola cuti", href: "/cuti/kelola", peran: KEPEGAWAIAN },
       // Finance ikut membaca karena lembur yang disetujui masuk payroll.
       { label: "Kelola lembur", href: "/lembur/kelola", peran: ["ADMIN", "HR", "OWNER", "FINANCE"] },
-      { label: "Kelola izin keluar", href: "/izin-keluar/kelola", peran: ["ADMIN", "HR", "OWNER", "FINANCE"] },
+      { label: "Kelola izin pulang", href: "/izin-keluar/kelola", peran: ["ADMIN", "HR", "OWNER", "FINANCE"] },
       { label: "Hari libur", href: "/hari-libur", peran: KEPEGAWAIAN },
     ],
   },

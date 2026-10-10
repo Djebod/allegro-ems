@@ -4,10 +4,10 @@ rules_version = '2';
 //  FIRESTORE RULES GABUNGAN — Allegro Global Construction
 //
 //  Satu Firebase project dipakai dua aplikasi:
-//    1. ALLEGRO EMS      — absensi, payroll, HRIS   (Tahap 21: jam absen dari server, sesi tersimpan tak bisa diubah)
+//    1. ALLEGRO EMS      — absensi, payroll, HRIS   (Tahap 22: tim lapangan untuk staf proyek, KTP dibaca HR/Owner, mandor tanpa cuti/izin/SP)
 //    2. ALLEGRO PROJECT  — admin proyek (Fase 1)    (blok ap* di bagian bawah)
 //
-//  Bagian EMS disalin apa adanya dari rules Tahap 21 (firestore.rules di repo allegro-ems).
+//  Bagian EMS disalin apa adanya dari rules Tahap 22 (firestore.rules di repo allegro-ems).
 //  Semua tambahan untuk aplikasi Admin Proyek diberi tanda komentar
 //  "[ADMIN PROYEK]" supaya mudah ditelusuri dan dicabut bila perlu.
 //
@@ -284,6 +284,26 @@ service cloud.firestore {
         && d.status in ['ACTIVE', 'INACTIVE'];
     }
 
+    /** Proyek penugasan berjalan dari karyawan yang sedang login; '' bila tidak ada. */
+    function proyekPenugasanSaya() {
+      return (karyawanSaya() is string
+          && exists(/databases/$(database)/documents/employees/$(karyawanSaya())))
+        ? get(/databases/$(database)/documents/employees/$(karyawanSaya())).data.get('currentProjectId', '')
+        : '';
+    }
+
+    /** Staf yang ditugaskan ke proyek boleh melihat tim lapangan proyek itu (Tahap 22). */
+    function punyaProyekPenugasan() {
+      return sudahLogin()
+        && proyekPenugasanSaya() is string
+        && proyekPenugasanSaya().size() > 0;
+    }
+
+    /** Posisi seorang karyawan menurut dokumennya; dipakai menolak cuti/izin/SP untuk mandor. */
+    function posisiKaryawan(id) {
+      return get(/databases/$(database)/documents/employees/$(id)).data.position;
+    }
+
     match /employees/{employeeId} {
       // Mandor hanya boleh membaca karyawan yang sedang ditugaskan
       // kepadanya. Kolom currentMandorId adalah cerminan penugasan yang
@@ -302,6 +322,12 @@ service cloud.firestore {
         || (isMandor()
             && resource != null
             && resource.data.currentMandorId == profilSaya().employeeId)
+        // Staf kantor yang ditugaskan ke proyek melihat pekerja lapangan di
+        // proyek yang sama (halaman Tim lapangan, 10 Okt 2026). Posisi staf
+        // di atas mandor, jadi ia boleh melihat semua tim di proyeknya.
+        || (punyaProyekPenugasan()
+            && resource != null
+            && resource.data.currentProjectId == proyekPenugasanSaya())
         // [ADMIN PROYEK] nama tukang & mandor dibutuhkan untuk rekap gaji,
         // klaim, dan pengajuan transfer. Hanya membaca, tidak menulis.
         || atasanProyek()
@@ -358,8 +384,11 @@ service cloud.firestore {
     // ---------- employeePrivate (foto KTP) ----------
     // Sengaja dipisah dari employees supaya Finance dan Mandor tidak
     // ikut membacanya. KTP adalah identitas resmi, bukan data operasional.
+    // HR dan Owner boleh membaca sejak Tahap 22: foto KTP ditampilkan di
+    // rincian absen untuk mencocokkan wajah sebelum memvalidasi.
     match /employeePrivate/{employeeId} {
-      allow read, write: if isAdmin();
+      allow read: if urusKepegawaian();
+      allow write: if isAdmin();
     }
 
     // ---------- salaryRates ----------
@@ -587,7 +616,12 @@ service cloud.firestore {
         || (sudahLogin()
             && (resource == null || resource.data.employeeId == karyawanSaya()))
         || (isMandor()
-            && (resource == null || resource.data.mandorId == profilSaya().employeeId));
+            && (resource == null || resource.data.mandorId == profilSaya().employeeId))
+        // Staf yang ditugaskan ke proyek melihat absensi lapangan proyek itu
+        // (halaman Tim lapangan, 10 Okt 2026).
+        || (punyaProyekPenugasan()
+            && resource != null
+            && resource.data.projectId == proyekPenugasanSaya());
 
       // ID dokumen wajib "<employeeId>_<tanggal>". Inilah yang membuat
       // satu orang mustahil punya dua catatan di hari yang sama, termasuk
@@ -1053,6 +1087,8 @@ service cloud.firestore {
       allow create: if sudahLogin()
         && request.resource.data.employeeId is string
         && request.resource.data.employeeId == karyawanSaya()
+        // Mandor adalah pihak ketiga: tidak ada izin (client, 10 Okt 2026).
+        && posisiKaryawan(request.resource.data.employeeId) != 'MANDOR'
         && request.resource.data.status == 'MENUNGGU'
         && request.resource.data.keluar == null
         && request.resource.data.kembali == null
@@ -1111,6 +1147,8 @@ service cloud.firestore {
       allow create: if sudahLogin()
         && pengajuanSah()
         && request.resource.data.employeeId == karyawanSaya()
+        // Mandor adalah pihak ketiga: tidak ada cuti dan izin (client, 10 Okt 2026).
+        && posisiKaryawan(request.resource.data.employeeId) != 'MANDOR'
         && request.resource.data.status == 'DIAJUKAN'
         && request.resource.data.saldoDipotong == false;
 
@@ -1266,6 +1304,8 @@ service cloud.firestore {
 
       allow create: if urusKepegawaian()
         && spSah()
+        // Mandor adalah pihak ketiga: tidak menerima SP (client, 10 Okt 2026).
+        && posisiKaryawan(request.resource.data.employeeId) != 'MANDOR'
         && request.resource.data.dicabut == false;
 
       // Yang boleh berubah hanya pencabutannya. Isi suratnya beku —
