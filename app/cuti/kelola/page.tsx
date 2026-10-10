@@ -228,7 +228,7 @@ function Isi() {
                 {belumPunyaSaldo.length} karyawan aktif belum punya kartu cuti tahun {tahun}.
               </p>
               <p className="mt-1 text-xs text-muted">
-                Jatahnya dihitung dari tanggal masuk — nol bila belum genap setahun bekerja, sesuai
+                Jatahnya dihitung dari tanggal masuk: nol di tahun masuk, prorata 1 hari per bulan di tahun kedua, lalu 12, sesuai
                 aturan perusahaan. Sesudah dibuat, saldo awalnya masih bisa disesuaikan.
               </p>
               <button
@@ -392,7 +392,7 @@ function Isi() {
       >
         {ubahSaldoUntuk && (
           <div className="space-y-4">
-            <Field label="Jatah tahunan" bantuan="Bawaannya 12 hari, nol bila belum genap setahun bekerja.">
+            <Field label="Jatah tahunan" bantuan="Bawaannya 12 hari; nol di tahun masuk, prorata 1 hari per bulan di tahun kedua.">
               <input
                 className="input-dasar max-w-[8rem]"
                 inputMode="numeric"

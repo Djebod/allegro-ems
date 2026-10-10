@@ -27,14 +27,16 @@ cek("lewat tengah malam 22:00-01:00 = 3 jam", hitungJamLembur("22:00", "01:00"),
 cek("jam salah = 0", hitungJamLembur("", "19:00"), 0);
 cek("20 menit = 0,33", hitungJamLembur("17:00", "17:20"), 0.33);
 
-console.log("\n== Batas 7 hari ==");
+// Batas pengajuan sendiri 1 hari setelah tanggal lembur (client, 10 Okt 2026).
+console.log("\n== Batas 1 hari ==");
 cek("selisih hari", selisihHari("2026-10-01", "2026-10-08"), 7);
-cek("hari ke-7 masih boleh", masihBolehDiajukan("2026-10-01", "2026-10-08"), true);
-cek("hari ke-8 sudah lewat", masihBolehDiajukan("2026-10-01", "2026-10-09"), false);
-cek("batas akhir pengajuan", batasAkhirPengajuan("2026-10-01"), "2026-10-08");
-cek("lintas bulan", batasAkhirPengajuan("2026-10-28"), "2026-11-04");
+cek("hari yang sama boleh", masihBolehDiajukan("2026-10-01", "2026-10-01"), true);
+cek("hari ke-1 (besoknya) masih boleh", masihBolehDiajukan("2026-10-01", "2026-10-02"), true);
+cek("hari ke-2 sudah lewat", masihBolehDiajukan("2026-10-01", "2026-10-03"), false);
+cek("batas akhir pengajuan", batasAkhirPengajuan("2026-10-01"), "2026-10-02");
+cek("lintas bulan", batasAkhirPengajuan("2026-10-31"), "2026-11-01");
 
-const dasar = { tanggal: "2026-10-05", hariIni: "2026-10-09", jamMulai: "17:00", jamSelesai: "19:00", alasan: "Pengecoran lantai 2", olehPengelola: false };
+const dasar = { tanggal: "2026-10-05", hariIni: "2026-10-06", jamMulai: "17:00", jamSelesai: "19:00", alasan: "Pengecoran lantai 2", olehPengelola: false };
 console.log("\n== Pemeriksaan pengajuan ==");
 let h = periksaPengajuanLembur(dasar);
 cek("pengajuan wajar diterima", [h.boleh, h.terlambat, h.jamLembur], [true, false, 2]);
@@ -46,11 +48,11 @@ h = periksaPengajuanLembur({ ...dasar, jamSelesai: "17:45" });
 cek("kurang dari 1 jam ditolak", h.boleh, false);
 h = periksaPengajuanLembur({ ...dasar, jamMulai: "06:00", jamSelesai: "20:00" });
 cek("lebih dari 12 jam ditolak", h.boleh, false);
-h = periksaPengajuanLembur({ ...dasar, tanggal: "2026-10-01" });
-cek("lewat 7 hari: karyawan ditolak", [h.boleh, h.terlambat], [false, true]);
-h = periksaPengajuanLembur({ ...dasar, tanggal: "2026-10-01", olehPengelola: true });
-cek("lewat 7 hari: pengelola boleh, ditandai terlambat", [h.boleh, h.terlambat], [true, true]);
-h = periksaPengajuanLembur({ ...dasar, tanggal: "2026-10-09" });
+h = periksaPengajuanLembur({ ...dasar, tanggal: "2026-10-04" });
+cek("lewat 1 hari (dua hari lalu): karyawan ditolak", [h.boleh, h.terlambat], [false, true]);
+h = periksaPengajuanLembur({ ...dasar, tanggal: "2026-10-04", olehPengelola: true });
+cek("lewat 1 hari: pengelola boleh, ditandai terlambat", [h.boleh, h.terlambat], [true, true]);
+h = periksaPengajuanLembur({ ...dasar, tanggal: "2026-10-06" });
 cek("lembur hari ini sendiri boleh diajukan", h.boleh, true);
 h = periksaPengajuanLembur({ ...dasar, tanpaLembur: true });
 cek("tidak dihitung lembur: pengakuan lembur ditolak", h.boleh, false);
@@ -66,10 +68,10 @@ h = periksaPengajuanLembur({ ...libur, tanggal: "2026-10-18", tanggalLibur: true
 cek("masuk libur tanggal depan diterima, tidak terlambat", [h.boleh, h.terlambat, h.jamLembur], [true, false, 8]);
 h = periksaPengajuanLembur({ ...libur, tanggal: "2026-10-12", tanggalLibur: false });
 cek("bukan hari libur ditolak", h.boleh, false);
+h = periksaPengajuanLembur({ ...libur, tanggal: "2026-10-05", tanggalLibur: true });
+cek("masuk libur kemarin masih boleh", [h.boleh, h.terlambat], [true, false]);
 h = periksaPengajuanLembur({ ...libur, tanggal: "2026-10-04", tanggalLibur: true });
-cek("masuk libur 5 hari lalu masih boleh", [h.boleh, h.terlambat], [true, false]);
-h = periksaPengajuanLembur({ ...libur, tanggal: "2026-09-27", tanggalLibur: true });
-cek("masuk libur lewat 7 hari: karyawan ditolak", [h.boleh, h.terlambat], [false, true]);
+cek("masuk libur lewat 1 hari: karyawan ditolak", [h.boleh, h.terlambat], [false, true]);
 h = periksaPengajuanLembur({ ...libur, tanggal: "2026-10-18", tanggalLibur: true, tanpaLembur: true });
 cek("tidak dihitung lembur tetap boleh masuk libur", h.boleh, true);
 cek("jenis kosong dibaca LEMBUR", jenisPengajuan({}), "LEMBUR");

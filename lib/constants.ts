@@ -38,9 +38,11 @@ export const MIN_OVERTIME_HOURS = 1;
  * Pengakuan lembur harus diajukan paling lambat sekian hari SETELAH tanggal
  * lemburnya, lengkap dengan alasannya. Lewat batas ini karyawan tidak bisa
  * mengajukan sendiri; jalurnya lewat Admin/HR yang mengajukan atas namanya.
- * (Keputusan Bang Syam, 9 Okt 2026)
+ * Semula 7 hari (9 Okt 2026); client meminta 1 hari (jawaban B6, 10 Okt 2026).
+ * Angka yang sama ditanam di firestore.rules (tanggalLemburMasihBoleh);
+ * kalau diubah di sini, ubah juga di sana.
  */
-export const BATAS_AJUKAN_LEMBUR_HARI = 7;
+export const BATAS_AJUKAN_LEMBUR_HARI = 1;
 
 /** Lembur yang diajukan tidak boleh lebih panjang dari ini dalam sehari (jam). */
 export const MAKS_JAM_LEMBUR_SEHARI = 12;
@@ -117,8 +119,12 @@ export const STATUS_KEPEGAWAIAN = [
   { nilai: "MAGANG", label: "Magang" },
 ];
 
-/** Kontrak yang berakhir dalam sekian hari ditandai di layar. */
-export const BATAS_INGAT_KONTRAK_HARI = 30;
+/**
+ * Kontrak yang berakhir dalam sekian hari ditandai di layar, untuk Owner dan HR.
+ * Client meminta 90 hari supaya ada waktu memutuskan perpanjangan
+ * (jawaban G4, 10 Okt 2026; semula 30).
+ */
+export const BATAS_INGAT_KONTRAK_HARI = 90;
 
 /** Bawaan lama cicilan kasbon bila tidak diisi. */
 export const TENOR_KASBON_BAWAAN = 1;

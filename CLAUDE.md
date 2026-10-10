@@ -224,7 +224,7 @@ Dihitung per hari karena batas 8 jam berlaku per hari, dan tarif bisa berubah di
 
 | | |
 |---|---|
-| Cuti tahunan | 12 hari, terbit setelah **1 tahun** bekerja |
+| Cuti tahunan | 12 hari. Tahun masuk 0 (belum genap setahun); tahun kedua **prorata 1 hari per bulan penuh di tahun masuk**, bulan masuk tidak dihitung (masuk Agustus → tahun depan 4); tahun ketiga penuh. Rumusnya `jatahTahunanUntuk()` di `lib/cuti.ts`, uji di `uji/cuti.ts` (client G3, 10 Okt 2026) |
 | Periode | tahun kalender |
 | Saldo kurang | **ditolak sistem** |
 | Pengajuan | minimal 7 hari sebelumnya, kecuali dicentang mendesak |
@@ -247,7 +247,7 @@ Jam lembur di absensi **bukan dasar pembayaran**. Lembur harus diajukan lewat `o
 
 | | |
 |---|---|
-| Batas pengajuan sendiri | `BATAS_AJUKAN_LEMBUR_HARI` = 7 hari setelah tanggal lembur |
+| Batas pengajuan sendiri | `BATAS_AJUKAN_LEMBUR_HARI` = **1 hari** setelah tanggal lembur (client B6, 10 Okt 2026; semula 7) |
 | Lewat batas | hanya Admin/HR/Owner yang bisa memasukkan, atas nama karyawan, ditandai `terlambat` |
 | Siapa boleh mengajukan | diri sendiri; mandor untuk anak buahnya (`sumber: MANDOR`); pengelola (`sumber: PENGELOLA`) |
 | Tanggal | tidak boleh di masa depan; minimal 1 jam, maksimal `MAKS_JAM_LEMBUR_SEHARI` = 12 jam |
@@ -257,7 +257,7 @@ Jam lembur di absensi **bukan dasar pembayaran**. Lembur harus diajukan lewat `o
 | Tidak dihitung lembur | `employees.tanpaLembur` (Data Karyawan → "Tidak dihitung lembur"; contoh Reinaldo, 10 Okt 2026): pengakuan lembur ditolak di form dan rules (`bolehDihitungLembur`), kolom lembur payroll bulanan dikunci nol |
 | Masuk hari libur | `overtimeRequests.jenis = 'MASUK_LIBUR'` (kosong = `LEMBUR`), diajukan dari menu Lembur → "Ajukan masuk hari libur", **boleh untuk tanggal yang akan datang**, tanggal harus Minggu atau terdaftar di `holidays` (`hariLibur()`, dicek di form, bukan rules), disetujui HR/Owner seperti lembur. **Bukan lembur: dianggap hari kerja biasa** (client, 10 Okt 2026). Di rekap kantor (`hitungRekap`, opsi `masukLibur` dari `ambilBahanRekap`), absen di hari libur yang pengajuannya DISETUJUI dihitung hadir + hari kerja (telat, tunjangan harian ikut), dicatat `masukLiburDisetujui`; tanpa persetujuan tetap `L` (`masukHariLibur`); disetujui tapi tidak datang tetap `L`, bukan alpa. `petaLemburDisetujui` melewatinya, jadi tidak pernah dibayar sebagai lembur. Pekerja lapangan tidak perlu apa-apa: payroll mingguan sudah membayar per hari absen. **Sabtu hari kerja biasa** |
 
-Batas 7 hari juga ditegakkan di `firestore.rules` (`tanggalLemburMasihBoleh`) memakai `int()` dan `timestamp.date()`. **Belum pernah diuji di Firestore sungguhan** — kalau pengajuan sendiri selalu ditolak "insufficient permissions", curigai fungsi itu lebih dulu.
+Batas 1 hari juga ditegakkan di `firestore.rules` (`tanggalLemburMasihBoleh`) memakai `int()` dan `timestamp.date()`. **Belum pernah diuji di Firestore sungguhan** — kalau pengajuan sendiri selalu ditolak "insufficient permissions", curigai fungsi itu lebih dulu.
 
 ### Absensi lapangan
 
@@ -381,14 +381,64 @@ npm run uji
 
 ---
 
-## 11. Yang masih menunggu jawaban client
+## 11. Jawaban client 10 Okt 2026 (berkas `ems.xlsx`, sheet "Ems")
 
-- **Rumus potongan telat** — menit keterlambatan sudah tercatat, nominalnya masih manual
-- Definisi **uang rajin**: apa yang membatalkannya
-- **Tunjangan luar kota**: per jam atau per hari
-- **Tarif lembur** hari kerja (hari libur sudah dijawab 10 Okt 2026: masuk hari libur = hari kerja biasa, bukan lembur)
-- Apakah **SP mempengaruhi gaji** atau hanya dicatat
-- Apakah **rekening pembayar** tetap per orang atau berpindah tiap periode
+Daftar pertanyaan dijawab client pada presentasi 10 Okt 2026. Jawaban aslinya ada di `ems.xlsx` di folder proyek. Status tiap jawaban:
+
+### 11.1 Sudah dijawab, belum dipasang di kode
+
+| Kode | Jawaban client | Yang harus berubah |
+|---|---|---|
+| A1, B1 | **Lembur 6 jam = 1 hari upah.** Hari kerja: jam lembur dibayar `tarifHarian / 6` per jam. Hari libur: 8 jam pertama = hari kerja biasa, lembur baru berlaku setelah jam 17.00 dengan rumus sama. Lapangan: tarif per mandor (tiap mandor tarif harian berbeda), hari libur sama dengan hari biasa | `lib/lembur.ts`, `lib/payroll.ts`, `lib/payroll-bulanan.ts`: kolom lembur bulanan tidak lagi manual |
+| A2 | **Potongan alpa = gaji pokok / jumlah hari kerja bulan itu** (hari kalender dikurangi Minggu dan tanggal merah `holidays`; Sabtu hari kerja) | `lib/payroll-bulanan.ts`: `potonganAlpa` dihitung otomatis, tetap bisa dikoreksi |
+| A3 | **Uang rajin tetap manual**, sistem menandai layak/tidak: gugur bila ada telat, alpa, izin, sakit, atau cuti dalam bulan itu | Penanda di rekap/payroll bulanan |
+| A4 | Telat tepat 15 menit = golongan pertama (sudah). Skor 16-30 menit = 10, **sama dengan golongan pertama** (dibiarkan); jam 9 ketat, tanpa toleransi (E2) | Tidak ada perubahan |
+| A5 | Skor telat 100 → **SP 1 dibuat sistem, berstatus menunggu persetujuan Ko Freddy**; baru berlaku ke karyawan setelah disetujui | `lib/sp.ts`, `lib/data-sp.ts`: status DRAFT/DISETUJUI pada SP otomatis |
+| A6 | BPJS dipotong **penuh**; **Kesehatan dan Ketenagakerjaan dipisah** di data karyawan dan slip | `employees.iuranBpjs` dipecah dua kolom |
+| A7 | PPh 21 **boleh dicatat**; client punya rumus yang sudah pernah dibuat, **minta berkasnya** sebelum dipasang | Menunggu berkas |
+| A8 | THR dibayar setahun sekali sebelum Lebaran; rumus belum dijawab | Menunggu rumus |
+| A9 | **Rekening pembayar bisa berubah tiap periode**: diisi/diubah saat payroll disusun, bawaan dari data karyawan | Kolom rekening pada baris payroll, bukan hanya di `employees` |
+| A10 | Cut-off absensi akhir bulan; **gajian hari Sabtu** terdekat tanggal 1, paling lambat tanggal 3 | Tanggal bayar pada payroll bulanan |
+| A11 | Gaji **tidak dibulatkan** | Tidak ada perubahan |
+| B6 | Batas ajukan lembur sendiri **1 hari** setelah tanggal lembur (bukan 7). Lembur < 1 jam gugur, tapi bisa dianulir Admin | **Sudah dipasang** (10 Okt 2026). Anulir lembur < 1 jam belum ada |
+| B4 | Upah mingguan diproses Jumat, dibayar Sabtu | Tanggal bayar pada payroll mingguan |
+| B5 | **Borongan ikut sistem**: volume dari RAB diinput awal proyek, PIC lapangan mengisi progres volume harian, sistem hanya mengecek | Modul baru, terkait RAB di Allegro Project. Belum dirancang |
+| C2 | Cuti bersama: yang belum punya saldo cuti **ganti hari** (bukan potong cuti) | `lib/cuti.ts` |
+| C3, C8 | Persetujuan cuti **dua tahap**: Diketahui atasan langsung (`atasanId`), lalu Disetujui Ko Freddy. Semua atasan berhak di tahap pertama | `leaveRequests` status baru + rules; pola sama dengan izin pulang |
+| C5, C1 | Sisa cuti **diuangkan** tiap Desember, semua posisi berhak; **nominal per hari belum dijawab** | Menunggu nominal |
+| C6 | Sakit > 6 hari setahun = izin tanpa gaji | `lib/cuti.ts` |
+| C7 | Cuti melahirkan dibayar penuh (sudah). Cuti suami belum dijawab | Tidak ada perubahan |
+| D1 | **SP bisa menghilangkan tunjangan**; tunjangan mana dan berapa lama belum dijawab | Menunggu rincian |
+| D2 | SP ditandatangani Ko Freddy | `PENANDATANGAN_SLIP` sejenis untuk SP |
+| E1 | Jam kerja **berbeda per orang** (sudah ada `jamMasuk`/`jamPulang` per karyawan) | Tidak ada perubahan |
+| E3 | Istirahat > 1 jam **tidak didenda** (sudah) | Tidak ada perubahan |
+| E4 | Lupa absen pulang: koreksi Admin seperti sekarang, **batas 1 hari** setelah kejadian | Batas waktu koreksi di form + rules |
+| E6 | Tidak wajib absen: **Freddy, David, Yoda, Christian, Nicho** | Centang `tidakWajibAbsen` di Data Karyawan |
+| E7 | Dinas luar / WFH: **tetap absen, lokasi bebas**, dengan surat izin sudah ada | Jenis izin "Dinas luar" yang membebaskan radius pada tanggal itu |
+| E8 | Radius kantor **200 m** semua kantor | Isi `offices.radiusMeter` = 200 (data, bukan kode) |
+| E9 | Absen luar jangkauan diputuskan **Firda** (sekarang Admin); akibat ke gaji belum dijawab | Hak keputusan ke peran HR |
+| F1-F3 | Kasbon tanpa batas nominal; tenor ditentukan Ko Freddy; disetujui **Finance dan Owner** (dua tahap) | Alur persetujuan kasbon |
+| F4 | Harian dipotong dari upah mingguan (sudah); **borongan dicatat ke progres** dengan pengecekan nilai | Ikut modul borongan |
+| G1 | Admin utama: Syam dan Reinaldo; HR: Firda; Owner: Ko Freddy | Isi di Pengguna & Peran |
+| G3 | Saldo cuti awal per akhir Desember. **Cuti tahun kedua prorata: 1 hari per bulan** (masuk Agustus → tahun berikut dapat 4) | **Sudah dipasang** (10 Okt 2026): `jatahTahunanUntuk()` di `lib/cuti.ts`, uji `uji/cuti.ts` |
+| G4 | Pengingat kontrak **90 hari** untuk karyawan baru, ke Owner dan HR | **Sudah dipasang** (10 Okt 2026): `BATAS_INGAT_KONTRAK_HARI` = 90 |
+| H1 | Laporan tambahan: **rekap per proyek** | Laporan baru |
+| H3 | Foto absen disimpan **2 bulan**, boleh dihapus setelah itu | Tanpa server, hapus manual di Cloudinary; perlu daftar foto per bulan |
+
+### 11.2 Sudah dijawab dan sudah sesuai kode
+
+B3 masuk hari libur = hari biasa · B6 belum absen pulang tidak dibayar, istirahat tak ditutup = setengah hari · B7 pindah proyek dibayar proyek tempat bekerja tanggal itu · C4 belum 1 tahun hanya izin tanpa gaji · G5 rekening diisi sendiri lalu dicocokkan HR · G6 foto dan NIK diisi staf terkait · B2 tunjangan luar kota **hanya staf** (per jam/hari tidak lagi relevan untuk lapangan).
+
+### 11.3 Masih menunggu client
+
+- Nominal **uang cuti** per hari (C1)
+- Rumus **THR** dan prorata (A8); berkas rumus **PPh 21** (A7)
+- Daftar jenis **tunjangan tetap** dan penerimanya (A12); tunjangan mana yang gugur karena SP dan berapa lama (D1)
+- Format kertas **SP** (D2), masa penilaian dan kenaikan per kategori (D3), daftar **kategori SP** baku (D4), tindakan setelah SP 3 (D5)
+- **Hari hujan** / dihentikan perusahaan (B8): "idealnya tidak dibayar, dibahas lagi"
+- Pulang cepat tanpa izin, ada denda? (E5, kosong); akibat absen luar jangkauan yang ditolak ke gaji (E9)
+- Cuti suami (C7); tunjangan luar kota staf per jam atau per hari (B2)
+- Format slip resmi (H2); laporan lain selain rekap per proyek (H1)
 
 Kalau salah satunya terjawab, perbarui berkas ini.
 

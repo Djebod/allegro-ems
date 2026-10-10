@@ -221,15 +221,25 @@ export function hitungHariKerja(
   return jumlah;
 }
 
-/** Hak cuti tahunan baru terbit setelah genap satu tahun bekerja. */
+/**
+ * Jatah cuti tahunan menurut lama bekerja (jawaban client G3, 10 Okt 2026):
+ *  - tahun masuk: 0, hak belum terbit (belum genap setahun)
+ *  - tahun kedua: prorata 1 hari per bulan penuh bekerja di tahun masuk.
+ *    Bulan masuknya sendiri tidak dihitung, mengikuti contoh client:
+ *    masuk Agustus → tahun berikutnya dapat 4 (Sep, Okt, Nov, Des)
+ *  - tahun ketiga dan seterusnya: jatah penuh
+ * Tanggal masuk dibaca dari teksnya langsung, bukan lewat Date, supaya
+ * tidak bergeser oleh zona waktu.
+ */
 export function jatahTahunanUntuk(joinDate: string | undefined, tahun: number): number {
   if (!joinDate) return 0;
-  const masuk = new Date(`${joinDate}T00:00:00`);
-  const setahun = new Date(masuk);
-  setahun.setFullYear(setahun.getFullYear() + 1);
-  // Kalau sepanjang tahun itu ia belum genap setahun bekerja, jatahnya nol.
-  const akhirTahun = new Date(`${tahun}-12-31T00:00:00`);
-  return setahun <= akhirTahun ? JATAH_TAHUNAN : 0;
+  const cocok = /^(\d{4})-(\d{2})-\d{2}$/.exec(joinDate);
+  if (!cocok) return 0;
+  const tahunMasuk = Number(cocok[1]);
+  const bulanMasuk = Number(cocok[2]);
+  if (tahun <= tahunMasuk) return 0;
+  if (tahun === tahunMasuk + 1) return Math.max(0, Math.min(JATAH_TAHUNAN, 12 - bulanMasuk));
+  return JATAH_TAHUNAN;
 }
 
 export function sisaTahunan(saldo: SaldoCuti | null): number {

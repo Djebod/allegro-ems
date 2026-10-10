@@ -110,8 +110,8 @@ export async function ambilSaldo(employeeId: string, tahun: number): Promise<Sal
 
 /**
  * Membuat kartu saldo tahun berjalan untuk karyawan yang belum punya.
- * Jatah tahunannya dihitung dari tanggal masuk: nol bila belum genap
- * setahun bekerja, sesuai aturan perusahaan.
+ * Jatah tahunannya dihitung dari tanggal masuk (jatahTahunanUntuk): nol di
+ * tahun masuk, prorata di tahun kedua, penuh sesudahnya.
  */
 export async function siapkanSaldo(karyawan: Employee, tahun: number, oleh: string) {
   const ref = doc(dbClient(), "leaveBalances", idSaldo(karyawan.id, tahun));

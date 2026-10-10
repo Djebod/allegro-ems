@@ -1204,7 +1204,8 @@ service cloud.firestore {
     // ---------- pengakuan lembur ----------
     // Lembur hanya dibayar bila ada pengajuan beralasan yang disetujui
     // (9 Okt 2026). Diajukan sendiri (atau oleh mandor untuk anak buahnya)
-    // paling lambat 7 hari setelah tanggalnya; lewat itu hanya pengelola.
+    // paling lambat 1 hari setelah tanggalnya (client, 10 Okt 2026; semula 7);
+    // lewat itu hanya pengelola.
     function lemburSah() {
       let d = request.resource.data;
       return d.employeeId is string && d.employeeId.size() > 0
@@ -1218,7 +1219,7 @@ service cloud.firestore {
         && d.status in ['DIAJUKAN', 'DISETUJUI', 'DITOLAK', 'DIBATALKAN'];
     }
 
-    /** Pengajuan masuk hari libur boleh untuk tanggal yang akan datang; batas 7 hari hanya untuk lembur. */
+    /** Pengajuan masuk hari libur boleh untuk tanggal yang akan datang; batas 1 hari hanya untuk lembur. */
     function masukLibur() {
       return request.resource.data.get('jenis', 'LEMBUR') == 'MASUK_LIBUR';
     }
@@ -1234,17 +1235,18 @@ service cloud.firestore {
     }
 
     /**
-     * Batas 7 hari ditegakkan di server, bukan hanya di formulir.
+     * Batas 1 hari (BATAS_AJUKAN_LEMBUR_HARI di lib/constants.ts) ditegakkan
+     * di server, bukan hanya di formulir.
      * Tanggal lembur "YYYY-MM-DD" adalah tanggal WIB (UTC+7):
      *  - awal harinya   = tengah malam UTC tanggal itu dikurangi 7 jam
-     *  - akhir hari ke-7 = tanggal + 7 hari pukul 24.00 WIB
-     *                    = tengah malam UTC + 7 hari + 17 jam
+     *  - akhir hari ke-1 = tanggal + 1 hari pukul 24.00 WIB
+     *                    = tengah malam UTC + 1 hari + 17 jam
      * Tanggal di masa depan ditolak lewat syarat pertama.
      */
     function tanggalLemburMasihBoleh(tanggal) {
       let awal = timestamp.date(int(tanggal.split('-')[0]), int(tanggal.split('-')[1]), int(tanggal.split('-')[2]));
       return awal - duration.value(7, 'h') <= request.time
-        && request.time <= awal + duration.value(7, 'd') + duration.value(17, 'h');
+        && request.time <= awal + duration.value(1, 'd') + duration.value(17, 'h');
     }
 
     match /overtimeRequests/{lemburId} {
