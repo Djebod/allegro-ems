@@ -21,12 +21,15 @@ import { barisTanpaAbsen, hitungRekap } from "@/lib/rekap-kantor";
 import {
   KOLOM_MANUAL,
   gajiUntukBulan,
+  hariKerjaBulan,
   hitungAngka,
   jumlahkanBulanan,
   susunItemBulanan,
+  type IsianLama,
   type IsianManual,
   type ItemBaru,
 } from "@/lib/payroll-bulanan";
+import { totalJamLemburDisetujui } from "@/lib/lembur";
 import { keSlip } from "@/lib/slip-gaji";
 import { susunLampiranSlip } from "@/lib/slip-harian";
 import type {
@@ -226,7 +229,7 @@ export function pantauItemBulanan(
  * gaji pokok, dan bon berjalan. Dipakai bersama oleh "hitung baru" dan
  * "hitung ulang", supaya keduanya mustahil memakai aturan berbeda.
  */
-async function susunSemua(bulan: string, lama: Map<string, Partial<IsianManual>> = new Map()) {
+async function susunSemua(bulan: string, lama: Map<string, IsianLama> = new Map()) {
   const [bahan, gajiSnap, bon, jenisSnap] = await Promise.all([
     ambilBahanRekap(bulan),
     getDocs(collection(dbClient(), "gajiBulanan")),
@@ -242,17 +245,26 @@ async function susunSemua(bulan: string, lama: Map<string, Partial<IsianManual>>
     .filter((e) => e.tidakWajibAbsen && e.status === "ACTIVE" && gajiUntukBulan(gaji, e.id, bulan))
     .map(barisTanpaAbsen);
 
-  const items = [...rekap.baris, ...tanpaAbsen].map((r) =>
-    susunItemBulanan({
+  // Pembagi upah sehari: hari kerja sebulan penuh, sama untuk semua orang.
+  const hariKerjaSebulan = hariKerjaBulan(bulan, bahan.libur);
+
+  const items = [...rekap.baris, ...tanpaAbsen].map((r) => {
+    const karyawan = bahan.karyawan.find((e) => e.id === r.employeeId);
+    return susunItemBulanan({
       bulan,
       rekap: r,
       gaji: gajiUntukBulan(gaji, r.employeeId, bulan),
       bon: bon.find((b) => b.employeeId === r.employeeId),
       jenisTunjangan,
-      iuranBpjs: bahan.karyawan.find((e) => e.id === r.employeeId)?.iuranBpjs,
+      iuranBpjs: karyawan?.iuranBpjs,
+      hariKerjaBulan: hariKerjaSebulan,
+      // `masukLibur` berisi semua overtimeRequests bulan itu; yang jenis
+      // LEMBUR dan DISETUJUI disaring di totalJamLemburDisetujui.
+      jamLembur: totalJamLemburDisetujui(bahan.masukLibur, r.employeeId),
+      tanpaLembur: !!karyawan?.tanpaLembur,
       lama: lama.get(r.employeeId),
-    })
-  );
+    });
+  });
   return items;
 }
 
@@ -301,10 +313,14 @@ export async function buatPayrollBulanan(bulan: string, oleh: string) {
 export async function hitungUlangBulanan(p: PayrollBulanan, sekarang: ItemPayrollBulanan[]) {
   if (p.status !== "DRAFT") throw new Error("Hanya payroll berstatus DRAFT yang bisa dihitung ulang.");
 
-  const lama = new Map<string, Partial<IsianManual>>();
+  const lama = new Map<string, IsianLama>();
   sekarang.forEach((i) => {
-    const isian: Partial<IsianManual> = {};
+    const isian: IsianLama = {};
     KOLOM_MANUAL.forEach((k) => ((isian as Record<string, unknown>)[k] = i[k]));
+    // Penanda angka otomatis ikut dibawa supaya hitung ulang tahu mana
+    // isian yang sudah dikoreksi HR dan mana yang boleh diperbarui.
+    isian.lemburOtomatis = i.lemburOtomatis;
+    isian.potonganAlpaOtomatis = i.potonganAlpaOtomatis;
     lama.set(i.employeeId, isian);
   });
 

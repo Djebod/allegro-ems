@@ -48,6 +48,16 @@ export const BATAS_AJUKAN_LEMBUR_HARI = 1;
 export const MAKS_JAM_LEMBUR_SEHARI = 12;
 
 /**
+ * Tarif lembur: sekian jam lembur setara satu hari upah (client, 10 Okt 2026,
+ * jawaban A1 dan B1). Satu jam lembur = upah sehari / 6, untuk pekerja
+ * lapangan (upah sehari = tarif harian mandor masing-masing) maupun staf
+ * kantor (upah sehari = gaji pokok / hari kerja bulan itu). Hari libur sama:
+ * masuk hari libur yang disetujui dihitung hari kerja biasa, lembur baru
+ * berlaku sesudah jam kerja lewat pengakuan lembur seperti hari biasa.
+ */
+export const JAM_LEMBUR_SETARA_SEHARI = 6;
+
+/**
  * Posisi yang bekerja di lapangan (dibayar mingguan dari absensi proyek).
  * Selain ini dianggap staf kantor (dibayar bulanan). Dipakai memisahkan
  * daftar karyawan dan memilih cara absen yang benar.

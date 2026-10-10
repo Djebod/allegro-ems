@@ -1,4 +1,4 @@
-import { gajiUntukBulan, hitungAngka, hitungTunjangan, peringatanItem, susunItemBulanan, usulanPotonganBon } from "@/lib/payroll-bulanan";
+import { gajiUntukBulan, hariKerjaBulan, hitungAngka, hitungTunjangan, peringatanItem, susunItemBulanan, upahSehariStaf, usulanPotonganBon } from "@/lib/payroll-bulanan";
 import type { BarisRekap } from "@/lib/rekap-kantor";
 import type { EmployeeLoan, GajiBulanan } from "@/types";
 
@@ -41,7 +41,9 @@ cek("gaji pokok", item.gajiPokok, 4_500_000);
 cek("denda telat dari rekap", item.dendaTelat, 105_000);
 cek("potongan bon diusulkan", item.potonganBon, 1_000_000);
 cek("kotor", item.kotor, 4_500_000);
-cek("diterima", item.bersih, 4_500_000 - 105_000 - 1_000_000);
+// Potongan alpa otomatis: 2 hari x (4.500.000 / 25 hari kerja) = 360.000.
+cek("potongan alpa terisi otomatis", item.potonganAlpa, 360_000);
+cek("diterima", item.bersih, 4_500_000 - 105_000 - 360_000 - 1_000_000);
 
 const isi = hitungAngka({ ...item, lembur: 300_000, uangKerajinan: 200_000, potonganAlpa: 346_154, tambahanLain: 0, potonganLain: 50_000 });
 cek("kotor dengan lembur dan kerajinan", isi.kotor, 5_000_000);
@@ -68,16 +70,45 @@ cek("isian manual tetap", [ulang.lembur, ulang.uangKerajinan, ulang.potonganBon,
 console.log("\n== Potongan BPJS ==");
 const bpjs = susunItemBulanan({ bulan: "2026-09", rekap, gaji: riwayat[1], bon: undefined, iuranBpjs: 150_000 });
 cek("terisi otomatis dari iuran karyawan", bpjs.potonganBpjs, 150_000);
-cek("masuk total potongan", bpjs.totalPotongan, 105_000 + 150_000);
-cek("mengurangi gaji diterima", bpjs.bersih, 4_500_000 - 105_000 - 150_000);
+cek("masuk total potongan", bpjs.totalPotongan, 105_000 + 360_000 + 150_000);
+cek("mengurangi gaji diterima", bpjs.bersih, 4_500_000 - 105_000 - 360_000 - 150_000);
 cek("tanpa iuran berarti nol", susunItemBulanan({ bulan: "2026-09", rekap, gaji: riwayat[1], bon: undefined }).potonganBpjs, 0);
 cek("hitung ulang mempertahankan koreksi", susunItemBulanan({ bulan: "2026-09", rekap, gaji: riwayat[1], bon: undefined, iuranBpjs: 150_000, lama: { potonganBpjs: 100_000 } }).potonganBpjs, 100_000);
 cek("hitung ulang nol tetap nol, bukan diisi ulang", susunItemBulanan({ bulan: "2026-09", rekap, gaji: riwayat[1], bon: undefined, iuranBpjs: 150_000, lama: { potonganBpjs: 0 } }).potonganBpjs, 0);
 cek("minus jadi nol", hitungAngka({ ...bpjs, potonganBpjs: -1 }).potonganBpjs, 0);
-cek("bon mengalah pada BPJS saat gaji tipis", hitungAngka({ ...bpjs, gajiPokok: 300_000, sisaBon: 1_000_000, potonganBon: 1_000_000 }).potonganBon, 300_000 - 105_000 - 150_000);
+cek("bon mengalah pada BPJS saat gaji tipis", hitungAngka({ ...bpjs, gajiPokok: 300_000, potonganAlpa: 0, sisaBon: 1_000_000, potonganBon: 1_000_000 }).potonganBon, 300_000 - 105_000 - 150_000);
+
+console.log("\n== Potongan alpa dan lembur otomatis (client, 10 Okt 2026) ==");
+// September 2026: 30 hari, 4 Minggu (6, 13, 20, 27), 1 libur = 25 hari kerja. Sabtu hari kerja.
+const liburSept = [{ tanggal: "2026-09-17" }];
+cek("hari kerja bulan = hari kalender - Minggu - libur", hariKerjaBulan("2026-09", liburSept), 25);
+cek("Sabtu ikut dihitung hari kerja", hariKerjaBulan("2026-09", []), 26);
+cek("upah sehari = gaji pokok / hari kerja bulan", upahSehariStaf(4_500_000, 25), 180_000);
+cek("tanpa hari kerja -> nol, bukan tak hingga", upahSehariStaf(4_500_000, 0), 0);
+
+const dasarOto = { bulan: "2026-09", rekap, gaji: riwayat[1], bon: undefined, hariKerjaBulan: 25, jamLembur: 5 };
+const oto = susunItemBulanan(dasarOto);
+cek("upah sehari tersimpan di baris", [oto.hariKerjaBulan, oto.upahSehari], [25, 180_000]);
+cek("potongan alpa = 2 hari x 180.000", oto.potonganAlpa, 360_000);
+cek("  dicatat sebagai angka otomatis", oto.potonganAlpaOtomatis, 360_000);
+cek("tarif lembur staf = 180.000 / 6", oto.tarifLembur, 30_000);
+cek("lembur = 5 jam x 30.000", [oto.lemburJam, oto.lembur, oto.lemburOtomatis], [5, 150_000, 150_000]);
+cek("keterangan lembur terisi jamnya", oto.lemburKet, "5 jam");
+cek("tanpa jam disetujui -> lembur nol", susunItemBulanan({ ...dasarOto, jamLembur: 0 }).lembur, 0);
+cek("tidak dihitung lembur -> nol walau ada jam disetujui", susunItemBulanan({ ...dasarOto, tanpaLembur: true }).lembur, 0);
+cek("tanpa hari kerja bulan: pakai hari kerja rekap", susunItemBulanan({ bulan: "2026-09", rekap, gaji: riwayat[1], bon: undefined }).upahSehari, 180_000);
+cek("gaji pokok kosong -> potongan alpa nol", susunItemBulanan({ ...dasarOto, gaji: null }).potonganAlpa, 0);
+
+const ulangOto = susunItemBulanan({ ...dasarOto, jamLembur: 8, lama: { lembur: 150_000, lemburOtomatis: 150_000, potonganAlpa: 360_000, potonganAlpaOtomatis: 360_000 } });
+cek("hitung ulang: belum dikoreksi -> ikut angka baru", [ulangOto.lembur, ulangOto.lemburJam], [240_000, 8]);
+const koreksi = susunItemBulanan({ ...dasarOto, jamLembur: 8, lama: { lembur: 100_000, lemburOtomatis: 150_000, potonganAlpa: 0, potonganAlpaOtomatis: 360_000 } });
+cek("hitung ulang: sudah dikoreksi -> koreksi dipertahankan", [koreksi.lembur, koreksi.potonganAlpa], [100_000, 0]);
+cek("  angka otomatis terbaru tetap dicatat", [koreksi.lemburOtomatis, koreksi.potonganAlpaOtomatis], [240_000, 360_000]);
+cek("payroll lama tanpa penanda otomatis: isian dianggap manual", susunItemBulanan({ ...dasarOto, jamLembur: 8, lama: { lembur: 300_000 } }).lembur, 300_000);
 
 console.log("\n== Peringatan ==");
-cek("alpa tanpa potongan", peringatanItem(item).includes("2 hari alpa, potongan alpa belum diisi"), true);
+cek("alpa tetapi potongan nol", peringatanItem({ ...item, potonganAlpa: 0 }).includes("2 hari alpa, tetapi potongan alpa nol"), true);
+cek("alpa dengan potongan otomatis tidak diperingatkan", peringatanItem(item).some((p) => p.includes("alpa")), false);
 cek("gaji kosong", peringatanItem({ ...item, gajiPokok: 0 }).includes("Gaji pokok belum diisi"), true);
 
 console.log("\n== Tunjangan diatur di aplikasi ==");

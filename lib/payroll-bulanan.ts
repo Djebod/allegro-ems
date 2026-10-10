@@ -1,5 +1,6 @@
-import type { BarisRekap } from "@/lib/rekap-kantor";
-import type { BarisTunjangan, EmployeeLoan, GajiBulanan, ItemPayrollBulanan, JenisTunjangan, StatusPayroll } from "@/types";
+import { tanggalDalamBulan, type BarisRekap } from "@/lib/rekap-kantor";
+import { hariLibur, tarifLemburPerJam } from "@/lib/lembur";
+import type { BarisTunjangan, EmployeeLoan, GajiBulanan, HariLibur, ItemPayrollBulanan, JenisTunjangan, StatusPayroll } from "@/types";
 
 /**
  * PAYROLL BULANAN STAF KANTOR - perhitungan murni.
@@ -15,15 +16,49 @@ import type { BarisTunjangan, EmployeeLoan, GajiBulanan, ItemPayrollBulanan, Jen
  *
  * Otomatis  : gaji pokok (dari Gaji Pokok), angka kehadiran dan denda
  *             telat (dari rekap bulanan), usulan potongan bon (cicilan),
- *             potongan BPJS (dari iuran di data karyawan).
- * Manual    : lembur, potongan alpa, uang kerajinan (khusus Owner),
- *             tambahan lain, potongan lain. Lembur dan potongan alpa
- *             manual karena rumusnya belum diputuskan client; begitu
- *             diputuskan, cukup isi otomatis di `susunItemBulanan`.
+ *             potongan BPJS (dari iuran di data karyawan), dan sejak
+ *             10 Okt 2026 (jawaban client A1, A2) lembur serta potongan alpa:
+ *               upah sehari    = gaji pokok / hari kerja bulan itu
+ *               potongan alpa  = hari alpa x upah sehari
+ *               lembur         = jam disetujui x (upah sehari / 6)
+ *             Keduanya masih bisa dikoreksi HR; hitung ulang hanya menimpa
+ *             yang belum dikoreksi (lihat `pakaiKoreksi`).
+ * Manual    : bonus, uang kerajinan (khusus Owner), tambahan lain,
+ *             potongan lain.
  *
  * Potongan bon tidak pernah membuat gaji minus: dibatasi sisa bon dan
  * sisa gaji setelah potongan lain. Aturan yang sama dengan payroll mingguan.
  */
+
+/**
+ * Hari kerja dalam sebulan penuh: hari kalender dikurangi Minggu dan hari
+ * libur terdaftar. Sabtu hari kerja biasa (client, 10 Okt 2026). Dipakai
+ * sebagai pembagi upah sehari, jadi dihitung sebulan penuh - bukan hanya
+ * hari yang sudah lewat seperti `BarisRekap.hariKerja`.
+ */
+export function hariKerjaBulan(bulan: string, libur: Pick<HariLibur, "tanggal">[]): number {
+  return tanggalDalamBulan(bulan).filter((t) => !hariLibur(t, libur)).length;
+}
+
+/** Upah sehari staf kantor, dibulatkan ke rupiah supaya angka di slip sama dengan yang dikalikan. */
+export function upahSehariStaf(gajiPokok: number, hariKerja: number): number {
+  if (!(gajiPokok > 0) || !(hariKerja > 0)) return 0;
+  return Math.round(gajiPokok / hariKerja);
+}
+
+/**
+ * Memilih antara angka otomatis baru dan isian lama saat hitung ulang:
+ *  - belum pernah ada isian           -> otomatis baru
+ *  - isian masih sama dengan otomatis
+ *    yang dulu (belum dikoreksi)      -> otomatis baru
+ *  - selain itu (dikoreksi HR, atau payroll lama tanpa penanda otomatis)
+ *                                     -> isian lama dipertahankan
+ */
+function pakaiKoreksi(lama: number | undefined, otomatisLama: number | undefined, otomatisBaru: number): number {
+  if (lama === undefined) return otomatisBaru;
+  if (otomatisLama !== undefined && lama === otomatisLama) return otomatisBaru;
+  return lama;
+}
 
 export const KOLOM_MANUAL = [
   "bonus",
@@ -41,6 +76,9 @@ export const KOLOM_MANUAL = [
 ] as const;
 
 export type IsianManual = Pick<ItemPayrollBulanan, (typeof KOLOM_MANUAL)[number]>;
+
+/** Isian dari hitungan sebelumnya yang dibawa ke hitung ulang, berikut penanda angka otomatisnya. */
+export type IsianLama = Partial<IsianManual> & Pick<ItemPayrollBulanan, "lemburOtomatis" | "potonganAlpaOtomatis">;
 
 export type ItemBaru = Omit<ItemPayrollBulanan, "id" | "payrollId" | "createdAt" | "updatedAt">;
 
@@ -136,12 +174,30 @@ export function susunItemBulanan(opsi: {
   jenisTunjangan?: JenisTunjangan[];
   /** Iuran BPJS bulanan dari data karyawan. Kosong = tidak dipotong. */
   iuranBpjs?: number;
-  /** Isian manual dari hitungan sebelumnya, supaya hitung ulang tidak menghapusnya. */
-  lama?: Partial<IsianManual>;
+  /**
+   * Hari kerja sebulan penuh (`hariKerjaBulan`), pembagi upah sehari.
+   * Kosong = pakai hari kerja rekap (sama untuk bulan yang sudah lewat).
+   */
+  hariKerjaBulan?: number;
+  /** Jam lembur (jenis LEMBUR) yang disetujui bulan itu. Kosong = 0. */
+  jamLembur?: number;
+  /** Karyawan yang tidak dihitung lembur (employees.tanpaLembur): lembur dikunci nol. */
+  tanpaLembur?: boolean;
+  /** Isian dari hitungan sebelumnya, supaya hitung ulang tidak menghapus koreksi. */
+  lama?: IsianLama;
 }): ItemBaru {
   const r = opsi.rekap;
   const lama = opsi.lama || {};
   const tunjangan = hitungTunjangan(opsi.jenisTunjangan || [], opsi.gaji, r.hadir + r.dinas);
+
+  const hariKerjaSebulan = opsi.hariKerjaBulan ?? r.hariKerja;
+  const upahSehari = upahSehariStaf(opsi.gaji?.gajiPokok || 0, hariKerjaSebulan);
+  const tarifLembur = tarifLemburPerJam(upahSehari);
+  const lemburJam = opsi.tanpaLembur ? 0 : Math.max(0, opsi.jamLembur || 0);
+  const lemburOtomatis = Math.round(lemburJam * tarifLembur);
+  const potonganAlpaOtomatis = Math.round(r.alpa * upahSehari);
+  const lembur = opsi.tanpaLembur ? 0 : pakaiKoreksi(lama.lembur, lama.lemburOtomatis, lemburOtomatis);
+
   return hitungAngka({
     employeeId: r.employeeId,
     employeeName: r.nama,
@@ -164,11 +220,18 @@ export function susunItemBulanan(opsi: {
     sisaBon: opsi.bon?.remainingAmount || 0,
     tunjangan,
     totalTunjangan: tunjangan.reduce((t, x) => t + x.total, 0),
+    hariKerjaBulan: hariKerjaSebulan,
+    upahSehari,
+    tarifLembur,
+    lemburJam,
+    lemburOtomatis,
+    potonganAlpaOtomatis,
 
     bonus: lama.bonus ?? 0,
-    lembur: lama.lembur ?? 0,
-    lemburKet: lama.lemburKet ?? "",
-    potonganAlpa: lama.potonganAlpa ?? 0,
+    lembur,
+    // Keterangan ikut otomatis selama belum ditulis sendiri.
+    lemburKet: lama.lemburKet || (lemburJam > 0 ? `${lemburJam} jam` : ""),
+    potonganAlpa: pakaiKoreksi(lama.potonganAlpa, lama.potonganAlpaOtomatis, potonganAlpaOtomatis),
     uangKerajinan: lama.uangKerajinan ?? 0,
     tambahanLain: lama.tambahanLain ?? 0,
     tambahanLainKet: lama.tambahanLainKet ?? "",
@@ -190,7 +253,7 @@ export function susunItemBulanan(opsi: {
 export function peringatanItem(i: ItemBaru): string[] {
   const p: string[] = [];
   if (i.gajiPokok <= 0) p.push("Gaji pokok belum diisi");
-  if (i.alpa > 0 && i.potonganAlpa === 0) p.push(`${i.alpa} hari alpa, potongan alpa belum diisi`);
+  if (i.alpa > 0 && i.potonganAlpa === 0) p.push(`${i.alpa} hari alpa, tetapi potongan alpa nol`);
   if (i.bersih < 0) p.push("Potongan melebihi gaji");
   if (i.capaiSp) p.push("Skor telat mencapai SP 1");
   if (i.tidakAbsenPulang > 0) p.push(`${i.tidakAbsenPulang} hari tidak absen pulang`);

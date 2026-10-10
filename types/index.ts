@@ -828,8 +828,25 @@ export interface ItemPayrollBulanan {
   /** Tunjangan tetap, dihitung dari data gaji karyawan. Salinan. */
   tunjangan?: BarisTunjangan[];
   totalTunjangan?: number;
+  /**
+   * Dasar hitung lembur dan potongan alpa (client, 10 Okt 2026). Salinan.
+   * Kosong pada payroll lama. upahSehari = gajiPokok / hariKerjaBulan,
+   * tarifLembur = upahSehari / JAM_LEMBUR_SETARA_SEHARI.
+   */
+  hariKerjaBulan?: number;
+  upahSehari?: number;
+  tarifLembur?: number;
+  /** Jam lembur (jenis LEMBUR) yang disetujui bulan itu. */
+  lemburJam?: number;
+  /**
+   * Angka yang dihitung sistem. Isian `lembur`/`potonganAlpa` yang masih
+   * sama dengan ini berarti belum dikoreksi, jadi hitung ulang boleh
+   * memperbaruinya; yang berbeda adalah koreksi HR dan dipertahankan.
+   */
+  lemburOtomatis?: number;
+  potonganAlpaOtomatis?: number;
 
-  /* --- diisi manual --- */
+  /* --- terisi otomatis, masih bisa dikoreksi --- */
   /** Bonus bulanan: berbeda tiap bulan, jadi diisi manual. */
   bonus?: number;
   lembur: number;

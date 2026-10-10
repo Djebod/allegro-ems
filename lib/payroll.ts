@@ -6,7 +6,7 @@ import {
   MIN_OVERTIME_HOURS,
 } from "@/lib/constants";
 import { hitungJam, keTanggal } from "@/lib/absensi";
-import { jamLemburDibayar, petaLemburDisetujui } from "@/lib/lembur";
+import { jamLemburDibayar, petaLemburDisetujui, tarifLemburPerJam, upahSehariDariTarif } from "@/lib/lembur";
 import type { Attendance, Employee, PayrollItem, PengajuanLembur, SalaryRate } from "@/types";
 
 /** Senin pada minggu tanggal tertentu. */
@@ -154,7 +154,9 @@ export function hitungUpahKaryawan(opsi: {
         );
       } else {
         totalOvertimeHours += jamLembur;
-        overtimePay += jamLembur * t.overtimeHourlyRate;
+        // Tarif lembur bukan dari kolom tersimpan: 6 jam lembur = 1 hari upah
+        // dari tarif yang berlaku hari itu (client, 10 Okt 2026).
+        overtimePay += jamLembur * tarifLemburPerJam(upahSehariDariTarif(t));
         if (h.overtimeHours === 0) {
           masalah.push(
             `${hari.date}: lembur ${jamLembur} jam dibayar dari pengajuan yang disetujui; mandor tidak mencatat sesi lembur di absensi.`
@@ -209,7 +211,7 @@ export function hitungUpahKaryawan(opsi: {
 
       dailyRate: tarifTerakhir?.dailyRate || 0,
       hourlyRate: tarifTerakhir?.hourlyRate || 0,
-      overtimeHourlyRate: tarifTerakhir?.overtimeHourlyRate || 0,
+      overtimeHourlyRate: tarifTerakhir ? tarifLemburPerJam(upahSehariDariTarif(tarifTerakhir)) : 0,
       tarifBerubahDiPeriode: tarifTerpakai.size > 1,
 
       regularPay: Math.round(regularPay),

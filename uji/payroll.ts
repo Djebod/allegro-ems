@@ -23,9 +23,12 @@ function hari(tanggal: string, masuk: string, pulang: string, opsi: Partial<{
   } as Attendance;
 }
 
+// overtimeHourlyRate sengaja diisi angka ngawur: sejak 10 Okt 2026 tarif
+// lembur diturunkan dari upah sehari (150.000 / 6 = 25.000), bukan dibaca
+// dari kolom ini.
 const tarifHarian: SalaryRate[] = [{
   id: "R1", employeeId: orang.id, paymentMode: "DAILY",
-  dailyRate: 150000, hourlyRate: 0, overtimeHourlyRate: 25000,
+  dailyRate: 150000, hourlyRate: 0, overtimeHourlyRate: 99999,
   effectiveFrom: "2026-01-01", effectiveUntil: null, createdBy: "x",
 }];
 
@@ -60,8 +63,14 @@ const absenLembur = hari("2026-09-14","00:00","08:00",{mulaiIstirahat:"04:00",se
 h = hitungUpahKaryawan({ karyawan: orang, tarif: tarifHarian, sisaBon: 0, absensi: [absenLembur],
   lemburDisetujui: [lemburOk("2026-09-14", 2.5)] });
 cek("lembur 2,5 jam dengan pengajuan disetujui dibayar", h.item.totalOvertimeHours, 2.5);
-cek("  upah lemburnya", h.item.overtimePay, 62500);
+cek("  upah lemburnya 2,5 x (150.000 / 6)", h.item.overtimePay, 62500);
+cek("  tarif lembur di baris payroll dari upah sehari, bukan kolom tersimpan", h.item.overtimeHourlyRate, 25000);
 cek("  tidak ada lembur tanpa pengajuan", h.item.lemburTanpaPengajuanJam, 0);
+
+h = hitungUpahKaryawan({ karyawan: orang, tarif: tarifJam, sisaBon: 0, absensi: [absenLembur],
+  lemburDisetujui: [lemburOk("2026-09-14", 2.5)] });
+cek("mode HOURLY: lembur per jam = (20.000 x 8) / 6", h.item.overtimeHourlyRate, 26667);
+cek("  upah lemburnya 2,5 x 26.667", h.item.overtimePay, 66668);
 
 h = hitungUpahKaryawan({ karyawan: orang, tarif: tarifHarian, sisaBon: 0, absensi: [absenLembur] });
 cek("lembur di absensi TANPA pengajuan tidak dibayar", h.item.totalOvertimeHours, 0);

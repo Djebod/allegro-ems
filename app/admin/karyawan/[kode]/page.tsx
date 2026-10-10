@@ -28,7 +28,9 @@ import {
 import { useAuth } from "@/lib/auth";
 import { FOLDER_KTP, FOLDER_PROFIL } from "@/lib/cloudinary";
 import { bacaAngka, keRupiah, rupiahPenuh } from "@/lib/rupiah";
+import { tarifLemburPerJam, upahSehariDariTarif } from "@/lib/lembur";
 import {
+  JAM_LEMBUR_SETARA_SEHARI,
   REKENING_PEMBAYAR,
   STATUS_KEPEGAWAIAN,
   STATUS_PTKP,
@@ -74,7 +76,10 @@ function Isi({ kode }: { kode: string }) {
   const [mode, setMode] = useState<PaymentMode>("DAILY");
   const [harian, setHarian] = useState("");
   const [perJam, setPerJam] = useState("");
-  const [lembur, setLembur] = useState("");
+  // Tarif lembur tidak diketik: 6 jam lembur = 1 hari upah (client, 10 Okt 2026).
+  const lemburOtomatis = tarifLemburPerJam(
+    upahSehariDariTarif({ paymentMode: mode, dailyRate: bacaAngka(harian), hourlyRate: bacaAngka(perJam) })
+  );
   const [mulaiTarif, setMulaiTarif] = useState(hariIni());
 
   const [pProyek, setPProyek] = useState("");
@@ -123,11 +128,12 @@ function Isi({ kode }: { kode: string }) {
     setSalah(null);
     const d = bacaAngka(harian);
     const j = bacaAngka(perJam);
-    const l = bacaAngka(lembur);
+    // Disimpan sebagai salinan supaya rules dan payroll lama tetap terbaca;
+    // mesin payroll menghitung ulang dari upah sehari, bukan membaca kolom ini.
+    const l = lemburOtomatis;
 
     if (mode === "DAILY" && d <= 0) return setSalah("Gaji harian wajib diisi untuk mode DAILY.");
     if (mode === "HOURLY" && j <= 0) return setSalah("Gaji per jam wajib diisi untuk mode HOURLY.");
-    if (l <= 0) return setSalah("Tarif lembur per jam wajib diisi.");
     if (!mulaiTarif) return setSalah("Tanggal mulai berlaku wajib diisi.");
 
     setMenyimpan(true);
@@ -144,7 +150,6 @@ function Isi({ kode }: { kode: string }) {
       setBukaTarif(false);
       setHarian("");
       setPerJam("");
-      setLembur("");
       setPesan("Tarif baru tersimpan. Tarif lama ditutup, bukan dihapus.");
     } catch (e) {
       setSalah(e instanceof Error ? e.message : "Tarif gagal disimpan.");
@@ -965,14 +970,11 @@ function Isi({ kode }: { kode: string }) {
             </Field>
           </div>
 
-          <Field label="Tarif lembur per jam" wajib>
-            <input
-              className="input-dasar"
-              inputMode="numeric"
-              value={lembur}
-              onChange={(e) => setLembur(keRupiah(bacaAngka(e.target.value)))}
-              placeholder="25.000"
-            />
+          <Field
+            label="Tarif lembur per jam (otomatis)"
+            bantuan={`${JAM_LEMBUR_SETARA_SEHARI} jam lembur = 1 hari upah, jadi upah sehari dibagi ${JAM_LEMBUR_SETARA_SEHARI}. Mode HOURLY: upah sehari = per jam × 8.`}
+          >
+            <input className="input-dasar" disabled value={lemburOtomatis ? keRupiah(lemburOtomatis) : "-"} />
           </Field>
 
           <Field

@@ -8,8 +8,10 @@ import {
   periksaPengajuanLembur,
   petaLemburDisetujui,
   selisihHari,
+  tarifLemburPerJam,
   totalJamLemburDisetujui,
   totalJamMasukLiburDisetujui,
+  upahSehariDariTarif,
 } from "@/lib/lembur";
 import { jenisPekerja } from "@/lib/karyawan";
 import type { PengajuanLembur } from "@/types";
@@ -26,6 +28,14 @@ cek("17:00-19:30 = 2,5 jam", hitungJamLembur("17:00", "19:30"), 2.5);
 cek("lewat tengah malam 22:00-01:00 = 3 jam", hitungJamLembur("22:00", "01:00"), 3);
 cek("jam salah = 0", hitungJamLembur("", "19:00"), 0);
 cek("20 menit = 0,33", hitungJamLembur("17:00", "17:20"), 0.33);
+
+// 6 jam lembur = 1 hari upah (client, 10 Okt 2026).
+console.log("\n== Tarif lembur per jam ==");
+cek("upah sehari 150.000 -> 25.000 per jam", tarifLemburPerJam(150_000), 25_000);
+cek("dibulatkan ke rupiah", tarifLemburPerJam(100_000), 16_667);
+cek("upah nol -> nol", tarifLemburPerJam(0), 0);
+cek("mode DAILY: upah sehari = tarif harian", upahSehariDariTarif({ paymentMode: "DAILY", dailyRate: 150_000, hourlyRate: 0 }), 150_000);
+cek("mode HOURLY: upah sehari = per jam x 8", upahSehariDariTarif({ paymentMode: "HOURLY", dailyRate: 0, hourlyRate: 20_000 }), 160_000);
 
 // Batas pengajuan sendiri 1 hari setelah tanggal lembur (client, 10 Okt 2026).
 console.log("\n== Batas 1 hari ==");

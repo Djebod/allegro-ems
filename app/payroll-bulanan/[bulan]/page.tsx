@@ -120,9 +120,11 @@ function Isi({ bulan }: { bulan: string }) {
   }, [bulan]);
 
   /**
-   * Lembur staf kantor diisi manual dalam rupiah. Jam yang sudah disetujui
-   * lewat pengakuan lembur ditampilkan sebagai acuan supaya HR tidak
-   * menghitung dari ingatan. Dibaca sekali per bulan, bukan dipantau.
+   * Lembur staf kantor dihitung otomatis saat payroll disusun (jam disetujui
+   * x upah sehari / 6). Daftar pengajuan dibaca lagi di sini untuk
+   * menampilkan jam terbaru sebagai pembanding: kalau ada persetujuan baru
+   * sesudah payroll disusun, HR tahu harus hitung ulang. Dibaca sekali per
+   * bulan, bukan dipantau.
    */
   const [lemburDisetujui, setLemburDisetujui] = useState<PengajuanLembur[]>([]);
   useEffect(() => {
@@ -578,9 +580,12 @@ function Isi({ bulan }: { bulan: string }) {
                   tanpaLembur.has(ubah.employeeId)
                     ? "Tidak dihitung lembur (ditetapkan di Data Karyawan)"
                     : [
-                        totalJamLemburDisetujui(lemburDisetujui, ubah.employeeId) > 0
-                          ? `Pengakuan lembur disetujui bulan ini: ${totalJamLemburDisetujui(lemburDisetujui, ubah.employeeId)} jam`
-                          : "Tidak ada pengakuan lembur yang disetujui bulan ini",
+                        ubah.tarifLembur
+                          ? `Otomatis: ${ubah.lemburJam || 0} jam × ${r(ubah.tarifLembur)} (upah sehari / 6) = ${r(ubah.lemburOtomatis || 0)}`
+                          : "Payroll ini disusun sebelum rumus lembur otomatis; isi manual atau hitung ulang",
+                        totalJamLemburDisetujui(lemburDisetujui, ubah.employeeId) !== (ubah.lemburJam || 0)
+                          ? `jam disetujui sekarang ${totalJamLemburDisetujui(lemburDisetujui, ubah.employeeId)} jam, hitung ulang untuk memperbarui`
+                          : "",
                         totalJamMasukLiburDisetujui(lemburDisetujui, ubah.employeeId) > 0
                           ? `masuk hari libur disetujui: ${totalJamMasukLiburDisetujui(lemburDisetujui, ubah.employeeId)} jam (dihitung hari kerja biasa, bukan lembur)`
                           : "",
@@ -613,7 +618,16 @@ function Isi({ bulan }: { bulan: string }) {
               <Field label="Denda telat (otomatis)">
                 <input className="input-dasar" disabled value={r(ubah.dendaTelat)} />
               </Field>
-              <Field label="Potongan alpa" bantuan={ubah.alpa ? `${ubah.alpa} hari alpa bulan ini` : undefined}>
+              <Field
+                label="Potongan alpa"
+                bantuan={
+                  ubah.upahSehari
+                    ? `Otomatis: ${ubah.alpa} hari alpa × ${r(ubah.upahSehari)} (gaji pokok / ${ubah.hariKerjaBulan} hari kerja) = ${r(ubah.potonganAlpaOtomatis || 0)}`
+                    : ubah.alpa
+                      ? `${ubah.alpa} hari alpa bulan ini`
+                      : undefined
+                }
+              >
                 <IsianRupiah nilai={isian.potonganAlpa} ubah={set("potonganAlpa")} mati={!bisaUbah} />
               </Field>
               <Field label="Potongan bon" bantuan={`Sisa bon ${r(ubah.sisaBon)}`}>

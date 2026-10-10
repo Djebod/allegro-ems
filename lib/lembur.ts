@@ -1,9 +1,29 @@
 import {
   BATAS_AJUKAN_LEMBUR_HARI,
+  JAM_LEMBUR_SETARA_SEHARI,
   MAKS_JAM_LEMBUR_SEHARI,
   MIN_OVERTIME_HOURS,
+  STANDARD_WORK_HOURS,
 } from "@/lib/constants";
-import type { HariLibur, PengajuanLembur } from "@/types";
+import type { HariLibur, PengajuanLembur, SalaryRate } from "@/types";
+
+/**
+ * Tarif satu jam lembur dari upah sehari: 6 jam lembur = 1 hari upah
+ * (client, 10 Okt 2026). Dibulatkan ke rupiah supaya angka yang tampil di
+ * slip sama persis dengan yang dikalikan.
+ */
+export function tarifLemburPerJam(upahSehari: number): number {
+  if (!(upahSehari > 0)) return 0;
+  return Math.round(upahSehari / JAM_LEMBUR_SETARA_SEHARI);
+}
+
+/**
+ * Upah sehari pekerja lapangan dari tarifnya. Mode HOURLY tidak punya tarif
+ * harian, jadi seharinya = tarif per jam x jam kerja normal.
+ */
+export function upahSehariDariTarif(t: Pick<SalaryRate, "paymentMode" | "dailyRate" | "hourlyRate">): number {
+  return t.paymentMode === "DAILY" ? t.dailyRate : t.hourlyRate * STANDARD_WORK_HOURS;
+}
 
 /**
  * Aturan pengakuan lembur (keputusan Bang Syam, 9 Okt 2026):
