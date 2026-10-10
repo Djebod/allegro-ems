@@ -1608,6 +1608,102 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // ---------- [ADMIN PROYEK] Pra-kontrak Tahap 1: prospek + draft RAB dua harga ----------
+    // Prospek hidup di luar `projects` supaya calon proyek yang belum tentu menang tidak
+    // menjadi titik absen EMS. Tahap 2 menambah apPenawaran (OL), Tahap 3 apKontrak (SPK).
+    function bolehLihatProspek() {
+      return atasanProyek() || berperanProyek(['QS', 'PLANNER', 'ADMIN_DATA']);
+    }
+    function bolehTulisProspek() {
+      return atasanProyek() || berperanProyek(['QS']);
+    }
+    function prospekSah() {
+      return request.resource.data.namaKlien is string
+        && request.resource.data.namaKlien.size() > 0
+        && request.resource.data.namaProyek is string
+        && request.resource.data.namaProyek.size() > 0
+        && request.resource.data.skala in ['KECIL', 'BESAR']
+        && request.resource.data.status in ['PROSPEK', 'DRAFT_RAB', 'PENAWARAN_TERKIRIM', 'ORDER_CONFIRM', 'KONTRAK', 'PROYEK_BERJALAN', 'BATAL']
+        && request.resource.data.projectCode is string
+        && request.resource.data.nilaiBiaya is number
+        && request.resource.data.nilaiPenawaran is number;
+    }
+
+    match /apProspek/{prospekId} {
+      allow read: if bolehLihatProspek();
+
+      allow create: if bolehTulisProspek() && prospekSah()
+        && request.resource.data.status == 'PROSPEK'
+        && request.resource.data.projectCode == ''
+        && request.resource.data.createdBy == emailUser();
+
+      // Tahap 1: ubah data selagi belum final; PROSPEK → DRAFT_RAB saat draft pertama
+      // tersimpan; BATAL hanya oleh atasan dan wajib beralasan. Skala beku sejak Order Confirm.
+      // Transisi OL / SPK / jadi proyek ditambahkan di Tahap 2–3.
+      allow update: if bolehTulisProspek() && prospekSah()
+        && resource.data.status != 'PROYEK_BERJALAN'
+        && resource.data.status != 'BATAL'
+        && request.resource.data.projectCode == resource.data.projectCode
+        && request.resource.data.createdBy == resource.data.createdBy
+        && (request.resource.data.skala == resource.data.skala
+            || resource.data.status in ['PROSPEK', 'DRAFT_RAB', 'PENAWARAN_TERKIRIM'])
+        && (
+          request.resource.data.status == resource.data.status
+          || (resource.data.status == 'PROSPEK' && request.resource.data.status == 'DRAFT_RAB')
+          || (request.resource.data.status == 'BATAL' && atasanProyek()
+              && request.resource.data.alasanBatal is string
+              && request.resource.data.alasanBatal.size() > 0)
+        );
+
+      allow delete: if false;
+    }
+
+    // Header draft RAB berversi. Angka beku seperti apRabHeaders; yang boleh berubah hanya
+    // `aktif` (versi baru menonaktifkan yang lama) dan `terkunci` (false → true saat OL
+    // disetujui, tidak pernah dibuka lagi; versi terkunci tidak boleh dinonaktifkan).
+    match /apProspekRab/{rabId} {
+      allow read: if bolehLihatProspek();
+
+      allow create: if bolehTulisProspek()
+        && request.resource.data.prospekId is string
+        && request.resource.data.prospekId.size() > 0
+        && request.resource.data.versi is number
+        && request.resource.data.totalBiaya is number
+        && request.resource.data.totalJual is number
+        && request.resource.data.jumlahItem is number
+        && request.resource.data.aktif is bool
+        && request.resource.data.terkunci == false
+        && get(/databases/$(database)/documents/apProspek/$(request.resource.data.prospekId)).data.status in ['PROSPEK', 'DRAFT_RAB'];
+
+      allow update: if bolehTulisProspek()
+        && request.resource.data.prospekId == resource.data.prospekId
+        && request.resource.data.versi == resource.data.versi
+        && request.resource.data.totalBiaya == resource.data.totalBiaya
+        && request.resource.data.totalJual == resource.data.totalJual
+        && request.resource.data.jumlahItem == resource.data.jumlahItem
+        && (request.resource.data.terkunci == resource.data.terkunci
+            || (resource.data.terkunci == false && request.resource.data.terkunci == true))
+        && !(resource.data.terkunci == true && request.resource.data.aktif != resource.data.aktif);
+
+      allow delete: if false;
+    }
+
+    // Baris draft RAB: tambah-saja. Header menyimpan jumlahItem, jadi penambahan baris liar
+    // di luar import ketahuan saat konversi ke RAB proyek (jumlah tidak cocok → ditolak).
+    match /apProspekRabItems/{itemId} {
+      allow read: if bolehLihatProspek();
+
+      allow create: if bolehTulisProspek()
+        && request.resource.data.rabId is string
+        && request.resource.data.rabId.size() > 0
+        && request.resource.data.prospekId is string
+        && request.resource.data.prospekId.size() > 0
+        && request.resource.data.totalBiaya is number
+        && request.resource.data.totalJual is number;
+
+      allow update, delete: if false;
+    }
+
 
     // ---------- [ADMIN PROYEK] Fase 2: PB, PO, hutang, klaim, transfer ----------
 
