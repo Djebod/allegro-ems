@@ -3,7 +3,7 @@ import {
   MAKS_JAM_LEMBUR_SEHARI,
   MIN_OVERTIME_HOURS,
 } from "@/lib/constants";
-import type { PengajuanLembur } from "@/types";
+import type { HariLibur, PengajuanLembur } from "@/types";
 
 /**
  * Aturan pengakuan lembur (keputusan Bang Syam, 9 Okt 2026):
@@ -65,6 +65,32 @@ export interface HasilPeriksaLembur {
   jamLembur: number;
 }
 
+/**
+ * Dua jenis pengajuan di koleksi yang sama (10 Okt 2026):
+ *  - LEMBUR: pengakuan lembur sesudah dikerjakan, dibayar bila disetujui.
+ *  - MASUK_LIBUR: pengajuan masuk pada hari Minggu / hari libur, boleh
+ *    diajukan sebelum harinya. Disetujui HR/Owner seperti lembur, tetapi
+ *    jamnya TIDAK dibayar sebagai lembur sampai tarif hari libur ditetapkan.
+ */
+export type JenisPengajuanLembur = NonNullable<PengajuanLembur["jenis"]>;
+
+export const NAMA_JENIS_LEMBUR: Record<JenisPengajuanLembur, string> = {
+  LEMBUR: "Lembur",
+  MASUK_LIBUR: "Masuk hari libur",
+};
+
+/** Data lama tidak punya kolom jenis; dibaca sebagai LEMBUR. */
+export function jenisPengajuan(p: Pick<PengajuanLembur, "jenis">): JenisPengajuanLembur {
+  return p.jenis || "LEMBUR";
+}
+
+/** Hari libur = Minggu atau tanggal yang terdaftar di hari libur (nasional, cuti bersama, perusahaan). */
+export function hariLibur(tanggal: string, daftarLibur: Pick<HariLibur, "tanggal">[]): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(tanggal)) return false;
+  if (new Date(`${tanggal}T00:00:00`).getDay() === 0) return true;
+  return daftarLibur.some((l) => l.tanggal === tanggal);
+}
+
 export function periksaPengajuanLembur(opsi: {
   tanggal: string;
   hariIni: string;
@@ -73,26 +99,54 @@ export function periksaPengajuanLembur(opsi: {
   alasan: string;
   /** Admin/HR mengajukan atas nama karyawan: batas waktu tidak berlaku. */
   olehPengelola: boolean;
+  /** Bawaan LEMBUR. */
+  jenis?: JenisPengajuanLembur;
+  /** Untuk MASUK_LIBUR: apakah tanggalnya memang hari libur (dihitung pemanggil dari daftar hari libur). */
+  tanggalLibur?: boolean;
+  /** Karyawan yang tidak dihitung lembur (employees.tanpaLembur). */
+  tanpaLembur?: boolean;
 }): HasilPeriksaLembur {
+  const jenis = opsi.jenis || "LEMBUR";
+  const masukLibur = jenis === "MASUK_LIBUR";
   const jamLembur = hitungJamLembur(opsi.jamMulai, opsi.jamSelesai);
-  const terlambat = !masihBolehDiajukan(opsi.tanggal, opsi.hariIni);
+  // Pengajuan masuk libur untuk tanggal yang akan datang tidak mungkin terlambat.
+  const terlambat =
+    /^\d{4}-\d{2}-\d{2}$/.test(opsi.tanggal) && selisihHari(opsi.hariIni, opsi.tanggal) > 0
+      ? false
+      : !masihBolehDiajukan(opsi.tanggal, opsi.hariIni);
   const tolak = (alasan: string): HasilPeriksaLembur => ({ boleh: false, alasan, terlambat, jamLembur });
 
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(opsi.tanggal)) return tolak("Tanggal lembur belum diisi.");
-  if (selisihHari(opsi.hariIni, opsi.tanggal) > 0) {
+  if (!masukLibur && opsi.tanpaLembur) {
+    return tolak("Karyawan ini tidak dihitung lembur (ditetapkan di Data Karyawan), jadi pengakuan lembur tidak bisa diajukan.");
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(opsi.tanggal)) return tolak(masukLibur ? "Tanggal masuk belum diisi." : "Tanggal lembur belum diisi.");
+  if (!masukLibur && selisihHari(opsi.hariIni, opsi.tanggal) > 0) {
     return tolak("Tanggal lembur tidak boleh di masa depan. Pengakuan lembur dibuat setelah lemburnya dikerjakan.");
   }
-  if (jamLembur <= 0) return tolak("Jam mulai dan jam selesai lembur belum benar.");
+  if (masukLibur && opsi.tanggalLibur === false) {
+    return tolak("Tanggal ini bukan hari Minggu atau hari libur yang terdaftar. Untuk hari kerja biasa, pakai pengakuan lembur.");
+  }
+  if (jamLembur <= 0) return tolak(masukLibur ? "Jam masuk dan jam pulang belum benar." : "Jam mulai dan jam selesai lembur belum benar.");
   if (jamLembur < MIN_OVERTIME_HOURS) {
-    return tolak(`Lembur kurang dari ${MIN_OVERTIME_HOURS} jam tidak dihitung, jadi tidak perlu diajukan.`);
+    return tolak(
+      masukLibur
+        ? `Masuk hari libur kurang dari ${MIN_OVERTIME_HOURS} jam tidak perlu diajukan.`
+        : `Lembur kurang dari ${MIN_OVERTIME_HOURS} jam tidak dihitung, jadi tidak perlu diajukan.`
+    );
   }
   if (jamLembur > MAKS_JAM_LEMBUR_SEHARI) {
-    return tolak(`Lembur lebih dari ${MAKS_JAM_LEMBUR_SEHARI} jam sehari tidak wajar. Periksa kembali jamnya.`);
+    return tolak(`Lebih dari ${MAKS_JAM_LEMBUR_SEHARI} jam sehari tidak wajar. Periksa kembali jamnya.`);
   }
-  if (!opsi.alasan.trim()) return tolak("Alasan lembur wajib diisi. Lembur tanpa alasan tidak bisa diakui.");
+  if (!opsi.alasan.trim()) {
+    return tolak(
+      masukLibur
+        ? "Alasan masuk hari libur wajib diisi: pekerjaan apa dan siapa yang memerintahkan."
+        : "Alasan lembur wajib diisi. Lembur tanpa alasan tidak bisa diakui."
+    );
+  }
   if (terlambat && !opsi.olehPengelola) {
     return tolak(
-      `Batas pengajuan sendiri sudah lewat (paling lambat ${BATAS_AJUKAN_LEMBUR_HARI} hari setelah tanggal lembur, yaitu ${batasAkhirPengajuan(opsi.tanggal)}). Minta Admin atau HR mengajukannya atas nama Anda.`
+      `Batas pengajuan sendiri sudah lewat (paling lambat ${BATAS_AJUKAN_LEMBUR_HARI} hari setelah tanggalnya, yaitu ${batasAkhirPengajuan(opsi.tanggal)}). Minta Admin atau HR mengajukannya atas nama Anda.`
     );
   }
 
@@ -103,11 +157,13 @@ export function periksaPengajuanLembur(opsi: {
  * Jam lembur yang disetujui per tanggal untuk satu karyawan. Dipakai mesin
  * payroll: lembur di absensi hanya dibayar bila ada angkanya di sini.
  * Kalau satu tanggal punya dua pengajuan yang disetujui, jamnya dijumlah.
+ * Pengajuan MASUK_LIBUR sengaja tidak ikut: tarif hari libur belum ada.
  */
 export function petaLemburDisetujui(daftar: PengajuanLembur[], employeeId: string): Map<string, number> {
   const peta = new Map<string, number>();
   for (const p of daftar) {
     if (p.employeeId !== employeeId || p.status !== "DISETUJUI") continue;
+    if (jenisPengajuan(p) !== "LEMBUR") continue;
     const jam = p.jamDisetujui ?? p.jamLembur;
     if (!(jam > 0)) continue;
     peta.set(p.tanggal, Math.round(((peta.get(p.tanggal) || 0) + jam) * 100) / 100);
@@ -136,6 +192,16 @@ export function jamLemburDibayar(jamAbsen: number, jamDisetujui: number | undefi
 export function totalJamLemburDisetujui(daftar: PengajuanLembur[], employeeId: string): number {
   let total = 0;
   petaLemburDisetujui(daftar, employeeId).forEach((jam) => (total += jam));
+  return Math.round(total * 100) / 100;
+}
+
+/** Total jam masuk hari libur yang disetujui, untuk petunjuk HR (tidak otomatis dibayar). */
+export function totalJamMasukLiburDisetujui(daftar: PengajuanLembur[], employeeId: string): number {
+  let total = 0;
+  for (const p of daftar) {
+    if (p.employeeId !== employeeId || p.status !== "DISETUJUI" || jenisPengajuan(p) !== "MASUK_LIBUR") continue;
+    total += p.jamDisetujui ?? p.jamLembur;
+  }
   return Math.round(total * 100) / 100;
 }
 

@@ -4,7 +4,7 @@ rules_version = '2';
 //  FIRESTORE RULES GABUNGAN — Allegro Global Construction
 //
 //  Satu Firebase project dipakai dua aplikasi:
-//    1. ALLEGRO EMS      — absensi, payroll, HRIS   (Tahap 22: staf proyek mencatat absen tim seperti mandor, KTP dibaca HR/Owner, mandor tanpa cuti/izin/SP, izin pulang diketahui atasan)
+//    1. ALLEGRO EMS      — absensi, payroll, HRIS   (Tahap 22: staf proyek mencatat absen tim seperti mandor, KTP dibaca HR/Owner, mandor tanpa cuti/izin/SP, izin pulang diketahui atasan, masuk hari libur + tanpaLembur)
 //    2. ALLEGRO PROJECT  — admin proyek (Fase 1)    (blok ap* di bagian bawah)
 //
 //  Bagian EMS disalin apa adanya dari rules Tahap 22 (firestore.rules di repo allegro-ems).
@@ -1213,7 +1213,24 @@ service cloud.firestore {
         && d.alasan is string && d.alasan.size() > 0
         && d.terlambat is bool
         && d.sumber in ['SENDIRI', 'MANDOR', 'PENGELOLA']
+        // Kosong pada data lama = LEMBUR. MASUK_LIBUR = pengajuan masuk hari libur (10 Okt 2026).
+        && d.get('jenis', 'LEMBUR') in ['LEMBUR', 'MASUK_LIBUR']
         && d.status in ['DIAJUKAN', 'DISETUJUI', 'DITOLAK', 'DIBATALKAN'];
+    }
+
+    /** Pengajuan masuk hari libur boleh untuk tanggal yang akan datang; batas 7 hari hanya untuk lembur. */
+    function masukLibur() {
+      return request.resource.data.get('jenis', 'LEMBUR') == 'MASUK_LIBUR';
+    }
+
+    /**
+     * Karyawan yang ditandai tidak dihitung lembur (employees.tanpaLembur,
+     * 10 Okt 2026) tidak bisa diajukan lemburnya oleh siapa pun. Masuk hari
+     * libur tetap boleh karena hanya dicatat, tidak dibayar sebagai lembur.
+     */
+    function bolehDihitungLembur(employeeId) {
+      return masukLibur()
+        || get(/databases/$(database)/documents/employees/$(employeeId)).data.get('tanpaLembur', false) != true;
     }
 
     /**
@@ -1243,17 +1260,19 @@ service cloud.firestore {
         && request.resource.data.status == 'DIAJUKAN'
         && request.resource.data.jamDisetujui == null
         && request.resource.data.diputuskanOleh == null
+        && bolehDihitungLembur(request.resource.data.employeeId)
         && (
           // Pengelola mengajukan atas nama siapa pun, tanpa batas waktu
           // (jalur untuk pengajuan yang terlambat).
           (urusKepegawaian() && request.resource.data.sumber == 'PENGELOLA')
           ||
-          // Diri sendiri, di dalam batas waktu.
+          // Diri sendiri, di dalam batas waktu (masuk libur: tanpa batas,
+          // karena diajukan sebelum harinya).
           (sudahLogin()
             && request.resource.data.sumber == 'SENDIRI'
             && request.resource.data.employeeId == karyawanSaya()
             && request.resource.data.terlambat == false
-            && tanggalLemburMasihBoleh(request.resource.data.tanggal))
+            && (masukLibur() || tanggalLemburMasihBoleh(request.resource.data.tanggal)))
           ||
           // Mandor untuk anak buah yang sedang ditugaskan kepadanya.
           (isMandor()
@@ -1262,7 +1281,7 @@ service cloud.firestore {
             && request.resource.data.mandorId == profilSaya().employeeId
             && get(/databases/$(database)/documents/employees/$(request.resource.data.employeeId)).data.currentMandorId
                  == profilSaya().employeeId
-            && tanggalLemburMasihBoleh(request.resource.data.tanggal))
+            && (masukLibur() || tanggalLemburMasihBoleh(request.resource.data.tanggal)))
         );
 
       // Isi pengajuan beku. Yang boleh berubah hanya keputusannya (HR/Owner/Admin)

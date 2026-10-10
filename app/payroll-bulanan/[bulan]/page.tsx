@@ -37,7 +37,8 @@ import {
 import { eksporPayrollBulananExcel, eksporPayrollBulananPdf } from "@/lib/ekspor-payroll-bulanan";
 import { namaBerkasSlip, unduhSlipPdf } from "@/lib/slip-gaji";
 import { ambilLemburDisetujui } from "@/lib/data-lembur";
-import { totalJamLemburDisetujui } from "@/lib/lembur";
+import { totalJamLemburDisetujui, totalJamMasukLiburDisetujui } from "@/lib/lembur";
+import { semuaKaryawan } from "@/lib/data";
 import type { ItemPayrollBulanan, PayrollBulanan, PengajuanLembur, SlipGaji, StatusPayroll } from "@/types";
 
 const TOMBOL_MAJU: Record<StatusPayroll, string> = {
@@ -130,6 +131,14 @@ function Isi({ bulan }: { bulan: string }) {
     ambilLemburDisetujui(`${bulan}-01`, akhir).then(setLemburDisetujui).catch(() => setLemburDisetujui([]));
   }, [bulan]);
 
+  // Karyawan yang ditandai tidak dihitung lembur: kolom lemburnya dikunci nol.
+  const [tanpaLembur, setTanpaLembur] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    semuaKaryawan()
+      .then((k) => setTanpaLembur(new Set(k.filter((e) => e.tanpaLembur).map((e) => e.id))))
+      .catch(() => {});
+  }, []);
+
   const bisaUbah = p?.status === "DRAFT" || p?.status === "REVIEW";
   const berikut = p ? statusBerikutBulanan(p.status) : null;
   // Menyetujui dan langkah sesudahnya hanya Owner (dijaga juga di Security Rules).
@@ -212,7 +221,8 @@ function Isi({ bulan }: { bulan: string }) {
     setSibuk("simpan");
     setSalahForm(null);
     try {
-      await ubahItemBulanan(ubah, isian);
+      // Yang tidak dihitung lembur: kolom lembur selalu tersimpan nol, apa pun isinya.
+      await ubahItemBulanan(ubah, tanpaLembur.has(ubah.employeeId) ? { ...isian, lembur: 0 } : isian);
       setPesan(`Rincian ${ubah.employeeName} tersimpan.`);
       setUbah(null);
     } catch {
@@ -565,12 +575,25 @@ function Isi({ bulan }: { bulan: string }) {
               <Field
                 label="Lembur"
                 bantuan={
-                  totalJamLemburDisetujui(lemburDisetujui, ubah.employeeId) > 0
-                    ? `Pengakuan lembur disetujui bulan ini: ${totalJamLemburDisetujui(lemburDisetujui, ubah.employeeId)} jam`
-                    : "Tidak ada pengakuan lembur yang disetujui bulan ini"
+                  tanpaLembur.has(ubah.employeeId)
+                    ? "Tidak dihitung lembur (ditetapkan di Data Karyawan)"
+                    : [
+                        totalJamLemburDisetujui(lemburDisetujui, ubah.employeeId) > 0
+                          ? `Pengakuan lembur disetujui bulan ini: ${totalJamLemburDisetujui(lemburDisetujui, ubah.employeeId)} jam`
+                          : "Tidak ada pengakuan lembur yang disetujui bulan ini",
+                        totalJamMasukLiburDisetujui(lemburDisetujui, ubah.employeeId) > 0
+                          ? `masuk hari libur disetujui: ${totalJamMasukLiburDisetujui(lemburDisetujui, ubah.employeeId)} jam (tarif belum ditetapkan)`
+                          : "",
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")
                 }
               >
-                <IsianRupiah nilai={isian.lembur} ubah={set("lembur")} mati={!bisaUbah} />
+                <IsianRupiah
+                  nilai={tanpaLembur.has(ubah.employeeId) ? 0 : isian.lembur}
+                  ubah={set("lembur")}
+                  mati={!bisaUbah || tanpaLembur.has(ubah.employeeId)}
+                />
               </Field>
               <Field label="Keterangan lembur">
                 <input className="input-dasar" disabled={!bisaUbah} value={isian.lemburKet}

@@ -12,7 +12,7 @@ import {
   where,
 } from "firebase/firestore";
 import { dbClient } from "@/lib/firebase";
-import { periksaPengajuanLembur } from "@/lib/lembur";
+import { periksaPengajuanLembur, type JenisPengajuanLembur } from "@/lib/lembur";
 import type { Employee, PengajuanLembur, StatusPengajuan } from "@/types";
 
 const KOLEKSI = "overtimeRequests";
@@ -78,7 +78,11 @@ export async function ajukanLembur(opsi: {
   lampiranUrl: string | null;
   sumber: PengajuanLembur["sumber"];
   oleh: string;
+  /** Bawaan LEMBUR. MASUK_LIBUR wajib menyertakan tanggalLibur. */
+  jenis?: JenisPengajuanLembur;
+  tanggalLibur?: boolean;
 }) {
+  const jenis = opsi.jenis || "LEMBUR";
   const hasil = periksaPengajuanLembur({
     tanggal: opsi.tanggal,
     hariIni: opsi.hariIni,
@@ -86,6 +90,9 @@ export async function ajukanLembur(opsi: {
     jamSelesai: opsi.jamSelesai,
     alasan: opsi.alasan,
     olehPengelola: opsi.sumber === "PENGELOLA",
+    jenis,
+    tanggalLibur: opsi.tanggalLibur,
+    tanpaLembur: opsi.karyawan.tanpaLembur,
   });
   if (!hasil.boleh) throw new Error(hasil.alasan || "Pengajuan tidak bisa dikirim.");
 
@@ -96,6 +103,7 @@ export async function ajukanLembur(opsi: {
     divisi: opsi.karyawan.divisi || "",
     atasanId: opsi.karyawan.atasanId || "",
     mandorId: opsi.karyawan.currentMandorId || "",
+    jenis,
     tanggal: opsi.tanggal,
     jamMulai: opsi.jamMulai,
     jamSelesai: opsi.jamSelesai,

@@ -740,6 +740,21 @@ function Isi({ kode }: { kode: string }) {
                 </span>
               </span>
             </label>
+            <label className="mb-3 flex items-start gap-2 rounded-lg bg-surface p-3 text-sm text-ink">
+              <input
+                type="checkbox"
+                className="mt-1"
+                checked={!!uData.tanpaLembur}
+                onChange={(e) => setUData({ ...uData, tanpaLembur: e.target.checked })}
+              />
+              <span>
+                <b>Tidak dihitung lembur</b>
+                <span className="block text-xs text-muted">
+                  Pengakuan lembur atas namanya ditolak dan kolom lembur di payroll bulanan dikunci nol. Pengajuan
+                  masuk hari libur tetap boleh, hanya untuk pencatatan.
+                </span>
+              </span>
+            </label>
             <div className="grid gap-4 sm:grid-cols-3">
               <Field label="Jam masuk">
                 <input
@@ -886,6 +901,7 @@ function Isi({ kode }: { kode: string }) {
                   jamPulang: uData.jamPulang || "",
                   jamPulangSabtu: uData.jamPulangSabtu || "",
                   tidakWajibAbsen: !!uData.tidakWajibAbsen,
+                  tanpaLembur: !!uData.tanpaLembur,
                   statusPtkp: uData.statusPtkp || "",
                   npwp: uData.npwp || "",
                   bpjsKesehatan: uData.bpjsKesehatan || "",

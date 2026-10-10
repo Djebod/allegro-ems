@@ -1,12 +1,15 @@
 import {
   batasAkhirPengajuan,
+  hariLibur,
   hitungJamLembur,
   jamLemburDibayar,
+  jenisPengajuan,
   masihBolehDiajukan,
   periksaPengajuanLembur,
   petaLemburDisetujui,
   selisihHari,
   totalJamLemburDisetujui,
+  totalJamMasukLiburDisetujui,
 } from "@/lib/lembur";
 import { jenisPekerja } from "@/lib/karyawan";
 import type { PengajuanLembur } from "@/types";
@@ -49,6 +52,27 @@ h = periksaPengajuanLembur({ ...dasar, tanggal: "2026-10-01", olehPengelola: tru
 cek("lewat 7 hari: pengelola boleh, ditandai terlambat", [h.boleh, h.terlambat], [true, true]);
 h = periksaPengajuanLembur({ ...dasar, tanggal: "2026-10-09" });
 cek("lembur hari ini sendiri boleh diajukan", h.boleh, true);
+h = periksaPengajuanLembur({ ...dasar, tanpaLembur: true });
+cek("tidak dihitung lembur: pengakuan lembur ditolak", h.boleh, false);
+
+console.log("\n== Masuk hari libur ==");
+const liburNasional = [{ tanggal: "2026-12-25" }];
+cek("Minggu adalah hari libur", hariLibur("2026-10-11", liburNasional), true);
+cek("Sabtu bukan hari libur", hariLibur("2026-10-10", liburNasional), false);
+cek("libur nasional terdaftar", hariLibur("2026-12-25", liburNasional), true);
+cek("tanggal rusak bukan libur", hariLibur("abc", liburNasional), false);
+const libur = { ...dasar, jenis: "MASUK_LIBUR" as const, jamMulai: "08:00", jamSelesai: "16:00", alasan: "Pengawasan cor" };
+h = periksaPengajuanLembur({ ...libur, tanggal: "2026-10-18", tanggalLibur: true });
+cek("masuk libur tanggal depan diterima, tidak terlambat", [h.boleh, h.terlambat, h.jamLembur], [true, false, 8]);
+h = periksaPengajuanLembur({ ...libur, tanggal: "2026-10-12", tanggalLibur: false });
+cek("bukan hari libur ditolak", h.boleh, false);
+h = periksaPengajuanLembur({ ...libur, tanggal: "2026-10-04", tanggalLibur: true });
+cek("masuk libur 5 hari lalu masih boleh", [h.boleh, h.terlambat], [true, false]);
+h = periksaPengajuanLembur({ ...libur, tanggal: "2026-09-27", tanggalLibur: true });
+cek("masuk libur lewat 7 hari: karyawan ditolak", [h.boleh, h.terlambat], [false, true]);
+h = periksaPengajuanLembur({ ...libur, tanggal: "2026-10-18", tanggalLibur: true, tanpaLembur: true });
+cek("tidak dihitung lembur tetap boleh masuk libur", h.boleh, true);
+cek("jenis kosong dibaca LEMBUR", jenisPengajuan({}), "LEMBUR");
 
 const buat = (id: string, tanggal: string, jam: number, lain: Partial<PengajuanLembur> = {}): PengajuanLembur => ({
   id, employeeId: "TKG-001", employeeName: "Budi", divisi: "", atasanId: "", mandorId: "MDR-01",
@@ -64,13 +88,16 @@ const daftar = [
   buat("D", "2026-10-07", 2, { status: "DITOLAK" }),
   buat("E", "2026-10-07", 2, { status: "DIAJUKAN" }),
   buat("F", "2026-10-08", 4, { employeeId: "TKG-002" }),
+  buat("G", "2026-10-11", 8, { jenis: "MASUK_LIBUR", jamDisetujui: 7 }),
 ];
 const peta = petaLemburDisetujui(daftar, "TKG-001");
 cek("dua pengajuan satu hari dijumlah", peta.get("2026-10-05"), 3.5);
 cek("jam disetujui mengalahkan jam diminta", peta.get("2026-10-06"), 2);
 cek("ditolak dan menunggu tidak masuk", peta.has("2026-10-07"), false);
 cek("orang lain tidak masuk", peta.has("2026-10-08"), false);
+cek("masuk hari libur tidak dibayar sebagai lembur", peta.has("2026-10-11"), false);
 cek("total jam disetujui", totalJamLemburDisetujui(daftar, "TKG-001"), 5.5);
+cek("total jam masuk libur disetujui", totalJamMasukLiburDisetujui(daftar, "TKG-001"), 7);
 
 console.log("\n== Jam lembur dibayar ==");
 cek("tanpa pengajuan = 0 walau absen 3 jam", jamLemburDibayar(3, undefined), 0);

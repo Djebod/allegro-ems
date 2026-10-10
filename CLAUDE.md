@@ -254,6 +254,8 @@ Jam lembur di absensi **bukan dasar pembayaran**. Lembur harus diajukan lewat `o
 | Jam disetujui | boleh dikurangi dari yang diajukan, tidak boleh ditambah |
 | Payroll mingguan | dibayar yang **terkecil** dari jam absen dan jam disetujui; tanpa pengajuan = 0 dan dicatat `lemburTanpaPengajuanJam`; ada pengajuan tanpa sesi lembur di absensi = jam disetujui (dengan catatan); sesi dinyatakan tidak valid oleh Admin = 0 walau disetujui |
 | Payroll bulanan | kolom lembur tetap rupiah manual; jam disetujui ditampilkan sebagai acuan |
+| Tidak dihitung lembur | `employees.tanpaLembur` (Data Karyawan → "Tidak dihitung lembur"; contoh Reinaldo, 10 Okt 2026): pengakuan lembur ditolak di form dan rules (`bolehDihitungLembur`), kolom lembur payroll bulanan dikunci nol |
+| Masuk hari libur | `overtimeRequests.jenis = 'MASUK_LIBUR'` (kosong = `LEMBUR`), diajukan dari menu Lembur → "Ajukan masuk hari libur", **boleh untuk tanggal yang akan datang**, tanggal harus Minggu atau terdaftar di `holidays` (`hariLibur()`, dicek di form, bukan rules), disetujui HR/Owner seperti lembur. Jamnya **tidak dibayar** sebagai lembur (`petaLemburDisetujui` melewatinya) sampai tarif hari libur ditetapkan; payroll bulanan hanya menampilkannya sebagai petunjuk |
 
 Batas 7 hari juga ditegakkan di `firestore.rules` (`tanggalLemburMasihBoleh`) memakai `int()` dan `timestamp.date()`. **Belum pernah diuji di Firestore sungguhan** — kalau pengajuan sendiri selalu ditolak "insufficient permissions", curigai fungsi itu lebih dulu.
 

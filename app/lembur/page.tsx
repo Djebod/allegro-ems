@@ -11,16 +11,22 @@ import { useAuth } from "@/lib/auth";
 import { dbClient } from "@/lib/firebase";
 import { pantauTimMandor } from "@/lib/data";
 import { ajukanLembur, batalkanLembur, pantauLemburSaya, pantauLemburTim } from "@/lib/data-lembur";
+import { ambilHariLibur } from "@/lib/data-cuti";
 import {
+  NAMA_JENIS_LEMBUR,
   NAMA_STATUS_LEMBUR,
   batasAkhirPengajuan,
+  hariLibur,
   hitungJamLembur,
+  jenisPengajuan,
   masihBolehDiajukan,
+  selisihHari,
+  type JenisPengajuanLembur,
 } from "@/lib/lembur";
 import { BATAS_AJUKAN_LEMBUR_HARI } from "@/lib/constants";
 import { FOLDER_LEMBUR, cloudinarySiap, unggahFoto } from "@/lib/cloudinary";
 import { tanggalHariIni, tanggalPendek } from "@/lib/absensi";
-import type { Employee, PengajuanLembur, StatusPengajuan } from "@/types";
+import type { Employee, HariLibur, PengajuanLembur, StatusPengajuan } from "@/types";
 
 function warnaStatus(s: StatusPengajuan) {
   if (s === "DISETUJUI") return "bg-green-100 text-green-800";
@@ -44,6 +50,9 @@ function Isi() {
   const [pesan, setPesan] = useState<string | null>(null);
 
   const [buka, setBuka] = useState(false);
+  /** LEMBUR = pengakuan sesudah dikerjakan; MASUK_LIBUR = pengajuan masuk hari Minggu / libur. */
+  const [jenis, setJenis] = useState<JenisPengajuanLembur>("LEMBUR");
+  const [libur, setLibur] = useState<HariLibur[]>([]);
   const [untuk, setUntuk] = useState("");
   const [tanggal, setTanggal] = useState(hariIni);
   const [jamMulai, setJamMulai] = useState("17:00");
@@ -79,6 +88,15 @@ function Isi() {
     return () => lepas.forEach((f) => f());
   }, [employeeId, mandor]);
 
+  // Daftar hari libur tahun ini dan tahun depan, untuk memeriksa tanggal
+  // pengajuan masuk hari libur (boleh diajukan jauh hari sebelumnya).
+  useEffect(() => {
+    const tahun = Number(hariIni.slice(0, 4));
+    Promise.all([ambilHariLibur(tahun), ambilHariLibur(tahun + 1)])
+      .then(([a, b]) => setLibur([...a, ...b]))
+      .catch(() => setLibur([]));
+  }, [hariIni]);
+
   const riwayat = useMemo(() => {
     const peta = new Map<string, PengajuanLembur>();
     [...riwayatSaya, ...riwayatTim].forEach((p) => peta.set(p.id, p));
@@ -88,14 +106,35 @@ function Isi() {
   }, [riwayatSaya, riwayatTim]);
 
   const jamLembur = hitungJamLembur(jamMulai, jamSelesai);
-  const terlambat = /^\d{4}-\d{2}-\d{2}$/.test(tanggal) && !masihBolehDiajukan(tanggal, hariIni);
+  const masukLibur = jenis === "MASUK_LIBUR";
+  const tanggalSah = /^\d{4}-\d{2}-\d{2}$/.test(tanggal);
+  const tanggalLibur = hariLibur(tanggal, libur);
+  // Masuk libur untuk tanggal yang akan datang tidak mungkin terlambat.
+  const terlambat =
+    tanggalSah && !(masukLibur && selisihHari(hariIni, tanggal) > 0) && !masihBolehDiajukan(tanggal, hariIni);
 
   const pilihanUntuk: Employee[] = useMemo(() => {
     if (!saya) return [];
-    if (!mandor) return [saya];
-    const anakBuah = tim.filter((t) => t.id !== saya.id);
-    return [saya, ...anakBuah];
-  }, [saya, tim, mandor]);
+    const semua = mandor ? [saya, ...tim.filter((t) => t.id !== saya.id)] : [saya];
+    // Yang tidak dihitung lembur tidak ditawarkan untuk pengakuan lembur;
+    // masuk hari libur tetap boleh (hanya pencatatan).
+    return masukLibur ? semua : semua.filter((k) => !k.tanpaLembur);
+  }, [saya, tim, mandor, masukLibur]);
+
+  function bukaForm(j: JenisPengajuanLembur) {
+    setSalah(null);
+    setJenis(j);
+    setUntuk(employeeId);
+    setTanggal(hariIni);
+    if (j === "MASUK_LIBUR") {
+      setJamMulai("08:00");
+      setJamSelesai("16:00");
+    } else {
+      setJamMulai("17:00");
+      setJamSelesai("19:00");
+    }
+    setBuka(true);
+  }
 
   async function pilihLampiran(file?: File) {
     if (!file) return;
@@ -128,14 +167,17 @@ function Isi() {
         lampiranUrl: lampiran,
         sumber: target.id === employeeId ? "SENDIRI" : "MANDOR",
         oleh: profile?.email || "",
+        jenis,
+        tanggalLibur,
       });
       setBuka(false);
       setAlasan("");
       setLampiran(null);
+      const nama = masukLibur ? "Pengajuan masuk hari libur" : "Pengakuan lembur";
       setPesan(
         target.id === employeeId
-          ? "Pengakuan lembur terkirim dan menunggu persetujuan HR/Owner."
-          : `Pengakuan lembur untuk ${target.name} terkirim dan menunggu persetujuan HR/Owner.`
+          ? `${nama} terkirim dan menunggu persetujuan HR/Owner.`
+          : `${nama} untuk ${target.name} terkirim dan menunggu persetujuan HR/Owner.`
       );
     } catch (e) {
       setSalah(e instanceof Error ? e.message : "Pengajuan gagal dikirim.");
@@ -157,16 +199,13 @@ function Isi() {
   return (
     <>
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <button
-          className="btn-utama"
-          onClick={() => {
-            setSalah(null);
-            setUntuk(employeeId);
-            setTanggal(hariIni);
-            setBuka(true);
-          }}
-        >
-          Ajukan pengakuan lembur
+        {!(saya?.tanpaLembur && !mandor) && (
+          <button className="btn-utama" onClick={() => bukaForm("LEMBUR")}>
+            Ajukan pengakuan lembur
+          </button>
+        )}
+        <button className="btn-kuning" onClick={() => bukaForm("MASUK_LIBUR")}>
+          Ajukan masuk hari libur
         </button>
         <Link className="btn-ringan" href="/beranda">
           Beranda
@@ -174,6 +213,11 @@ function Isi() {
       </div>
 
       <div className="kartu mb-4 text-sm text-muted">
+        {saya?.tanpaLembur && (
+          <p className="mb-2 font-semibold text-allegro-700">
+            Anda ditetapkan tidak dihitung lembur, jadi pengakuan lembur atas nama Anda tidak bisa diajukan.
+          </p>
+        )}
         <p>
           Lembur <b className="text-ink">tidak dibayar hanya karena tercatat di absensi</b>. Setiap lembur harus
           diajukan di sini lengkap dengan alasannya, lalu disetujui HR/Owner.
@@ -182,6 +226,11 @@ function Isi() {
           Batas pengajuan: paling lambat <b className="text-ink">{BATAS_AJUKAN_LEMBUR_HARI} hari</b> setelah tanggal
           lembur. Lewat batas itu, minta Admin/HR mengajukannya atas nama Anda.
           {mandor ? " Sebagai mandor, Anda juga bisa mengajukan untuk anak buah Anda." : ""}
+        </p>
+        <p className="mt-1">
+          Masuk pada hari Minggu atau hari libur nasional diajukan lewat <b className="text-ink">Ajukan masuk hari
+          libur</b>, boleh sebelum harinya, dan disetujui HR/Owner. Jamnya dicatat, belum otomatis dibayar sebagai
+          lembur sampai tarif hari libur ditetapkan.
         </p>
       </div>
 
@@ -229,6 +278,11 @@ function Isi() {
                   )}
                   <td className="whitespace-nowrap">
                     {tanggalPendek(p.tanggal)}
+                    {jenisPengajuan(p) === "MASUK_LIBUR" && (
+                      <span className="label-status ml-1 bg-allegro-100 text-allegro-700" title="Pengajuan masuk hari libur">
+                        libur
+                      </span>
+                    )}
                     {p.terlambat && (
                       <span
                         className="ml-1 inline-block h-2 w-2 rounded-full bg-kuning-500 align-middle"
@@ -291,7 +345,11 @@ function Isi() {
         </div>
       )}
 
-      <Modal judul="Ajukan pengakuan lembur" terbuka={buka} onTutup={() => setBuka(false)}>
+      <Modal
+        judul={masukLibur ? "Ajukan masuk hari libur" : "Ajukan pengakuan lembur"}
+        terbuka={buka}
+        onTutup={() => setBuka(false)}
+      >
         <div className="space-y-4">
           {salah && <Pesan jenis="gagal" isi={salah} />}
 
@@ -308,15 +366,30 @@ function Isi() {
             </Field>
           )}
 
-          <Field label="Tanggal lembur" wajib bantuan="Tidak boleh di masa depan; pengakuan dibuat setelah lemburnya dikerjakan.">
+          <Field
+            label={masukLibur ? "Tanggal masuk (hari libur)" : "Tanggal lembur"}
+            wajib
+            bantuan={
+              masukLibur
+                ? "Hari Minggu atau hari libur yang terdaftar. Boleh diajukan sebelum harinya."
+                : "Tidak boleh di masa depan; pengakuan dibuat setelah lemburnya dikerjakan."
+            }
+          >
             <input
               type="date"
               className="input-dasar"
               value={tanggal}
-              max={hariIni}
+              max={masukLibur ? undefined : hariIni}
               onChange={(e) => setTanggal(e.target.value)}
             />
           </Field>
+
+          {masukLibur && tanggalSah && !tanggalLibur && (
+            <Pesan
+              jenis="gagal"
+              isi="Tanggal ini bukan hari Minggu atau hari libur yang terdaftar di menu Hari libur. Untuk hari kerja biasa, pakai pengakuan lembur."
+            />
+          )}
 
           {terlambat && (
             <Pesan
@@ -326,25 +399,33 @@ function Isi() {
           )}
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Jam mulai" wajib>
+            <Field label={masukLibur ? "Jam masuk" : "Jam mulai"} wajib>
               <input type="time" className="input-dasar" value={jamMulai} onChange={(e) => setJamMulai(e.target.value)} />
             </Field>
-            <Field label="Jam selesai" wajib>
+            <Field label={masukLibur ? "Jam pulang" : "Jam selesai"} wajib>
               <input type="time" className="input-dasar" value={jamSelesai} onChange={(e) => setJamSelesai(e.target.value)} />
             </Field>
           </div>
           <p className="text-xs text-muted">
-            Lama lembur <strong className="text-ink">{jamLembur} jam</strong>. Jam selesai yang lebih kecil dari jam
-            mulai dianggap lewat tengah malam.
+            {masukLibur ? "Lama kerja" : "Lama lembur"} <strong className="text-ink">{jamLembur} jam</strong>. Jam
+            selesai yang lebih kecil dari jam mulai dianggap lewat tengah malam.
           </p>
 
-          <Field label="Alasan lembur" wajib bantuan="Pekerjaan apa yang dikerjakan dan siapa yang memerintahkan.">
+          <Field
+            label={masukLibur ? "Alasan masuk hari libur" : "Alasan lembur"}
+            wajib
+            bantuan="Pekerjaan apa yang dikerjakan dan siapa yang memerintahkan."
+          >
             <textarea
               className="input-dasar"
               rows={3}
               value={alasan}
               onChange={(e) => setAlasan(e.target.value)}
-              placeholder="Pengecoran lantai 2 harus selesai malam itu, atas perintah PM."
+              placeholder={
+                masukLibur
+                  ? "Pengawasan pengecoran hari Minggu di proyek Dago, atas perintah PM."
+                  : "Pengecoran lantai 2 harus selesai malam itu, atas perintah PM."
+              }
             />
           </Field>
 
@@ -374,7 +455,11 @@ function Isi() {
             </div>
           </div>
 
-          <button className="btn-utama w-full" onClick={kirim} disabled={sibuk || terlambat}>
+          <button
+            className="btn-utama w-full"
+            onClick={kirim}
+            disabled={sibuk || terlambat || (masukLibur && tanggalSah && !tanggalLibur)}
+          >
             {sibuk ? "Mengirim…" : "Kirim pengajuan"}
           </button>
         </div>
@@ -386,7 +471,11 @@ function Isi() {
 export default function HalamanLemburSaya() {
   return (
     <Guard izinkan={["ADMIN", "FINANCE", "MANDOR", "HR", "OWNER", "KARYAWAN"]}>
-      <Shell judul="Pengakuan Lembur" keterangan="Ajukan lembur yang sudah dikerjakan, lengkap dengan alasannya." lebar>
+      <Shell
+        judul="Pengakuan Lembur"
+        keterangan="Ajukan lembur yang sudah dikerjakan, atau pengajuan masuk pada hari libur, lengkap dengan alasannya."
+        lebar
+      >
         <Isi />
       </Shell>
     </Guard>

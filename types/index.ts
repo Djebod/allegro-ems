@@ -126,6 +126,14 @@ export interface Employee {
   tidakWajibAbsen?: boolean;
 
   /**
+   * Tidak dihitung lembur (keputusan client 10 Okt 2026, contoh: Reinaldo).
+   * Pengakuan lembur atas namanya ditolak, kolom lembur payroll bulanan
+   * dikunci nol. Pengajuan masuk hari libur tetap boleh (untuk pencatatan).
+   * Kosong atau false berarti lembur dihitung seperti biasa.
+   */
+  tanpaLembur?: boolean;
+
+  /**
    * Atasan langsung, berisi kode karyawan. Dipakai supaya atasan bisa
    * melihat kehadiran bawahannya. Untuk tukang dan kenek, isinya kode
    * mandornya.
@@ -559,10 +567,18 @@ export interface PengajuanLembur {
   /** Mandor yang membawahi saat itu (pekerja lapangan), untuk hak baca mandor. */
   mandorId: string;
 
+  /**
+   * LEMBUR = pengakuan lembur sesudah dikerjakan (bawaan; kosong pada data
+   * lama). MASUK_LIBUR = pengajuan masuk pada hari Minggu / hari libur,
+   * boleh diajukan sebelum harinya. Jamnya TIDAK ikut dibayar sebagai lembur
+   * sampai tarif hari libur ditetapkan client (10 Okt 2026).
+   */
+  jenis?: "LEMBUR" | "MASUK_LIBUR";
+
   tanggal: string;
   jamMulai: string;
   jamSelesai: string;
-  /** Lama lembur yang diminta, jam, dua angka di belakang koma. */
+  /** Lama lembur (atau lama kerja hari libur) yang diminta, jam, dua angka di belakang koma. */
   jamLembur: number;
   alasan: string;
   lampiranUrl?: string | null;
