@@ -31,6 +31,16 @@ h = hitungKantor({ masuk: "08:35", pulang: "17:10", ...jadwal });
 cek("telat 35 menit", h.terlambatMenit, 35);
 cek("jam kerja", h.workHours, 7.58);
 
+// Toleransi telat (Bang Syam, 10 Okt 2026): jadwal 08.00 boleh sampai 15 menit,
+// jadwal 09.00 tidak ada toleransi. Lewat toleransi, seluruh menitnya dihitung.
+console.log("\n== Toleransi telat ==");
+cek("jadwal 08.00, datang 08.10 -> tidak telat", hitungKantor({ masuk: "08:10", pulang: null, ...jadwal }).terlambatMenit, 0);
+cek("jadwal 08.00, datang tepat 08.15 -> masih ditoleransi", hitungKantor({ masuk: "08:15", pulang: null, ...jadwal }).terlambatMenit, 0);
+cek("jadwal 08.00, datang 08.16 -> telat 16 menit penuh", hitungKantor({ masuk: "08:16", pulang: null, ...jadwal }).terlambatMenit, 16);
+cek("jadwal 09.00, datang 09.01 -> telat 1 menit", hitungKantor({ masuk: "09:01", pulang: null, jadwalMasuk: "09:00", jadwalPulang: "17:00" }).terlambatMenit, 1);
+cek("jadwal 09.00, datang 09.00 -> tidak telat", hitungKantor({ masuk: "09:00", pulang: null, jadwalMasuk: "09:00", jadwalPulang: "17:00" }).terlambatMenit, 0);
+cek("toleransi tidak menambah jam kerja", hitungKantor({ masuk: "08:10", pulang: "17:00", ...jadwal }).workHours, 7.83);
+
 h = hitungKantor({ masuk: "08:00", pulang: "13:00", ...jadwal });
 cek("hari pendek tanpa potongan istirahat", h.workHours, 5);
 cek("pulang cepat 240 menit", h.pulangCepatMenit, 240);

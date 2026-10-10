@@ -17,11 +17,12 @@
  *   dikenai skor dan denda. Di aplikasi: izin "Datang terlambat" yang
  *   DISETUJUI pada tanggal itu.
  *
- * DUA HAL YANG DIAMBIL APA ADANYA DARI PENGUMUMAN, MENUNGGU KONFIRMASI:
- * 1. Tepat 15 menit tidak tercantum ("< 15" lalu "16 - 30"). Di sini
- *    dimasukkan ke golongan pertama.
- * 2. Skor 16-30 menit tertulis 10, sama dengan golongan di bawahnya,
- *    padahal dendanya dua kali lipat. Bisa jadi maksudnya 20.
+ * DIKONFIRMASI CLIENT 10 OKT 2026 (jawaban A4):
+ * 1. Tepat 15 menit masuk golongan pertama.
+ * 2. Skor 16-30 menit memang 10, sama dengan golongan di bawahnya.
+ * 3. Toleransi mengikuti jadwal masuk (TOLERANSI_TELAT_MENIT di constants):
+ *    jadwal 08.00 boleh 15 menit, jadwal 09.00 ketat. Di dalam toleransi
+ *    terlambatMenit = 0 sehingga tidak masuk tabel ini sama sekali.
  * Kalau client meralat, cukup ubah tabel GOLONGAN_TELAT di bawah.
  */
 

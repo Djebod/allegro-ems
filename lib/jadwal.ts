@@ -1,7 +1,14 @@
 "use client";
 
+import { TOLERANSI_TELAT_MENIT } from "@/lib/constants";
+
 /** Jadwal kerja kantor. Dipakai menentukan telat dan pulang lebih awal. */
 export const JADWAL_BAWAAN = { masuk: "08:00", pulang: "17:00", pulangSabtu: "12:00" };
+
+/** Toleransi telat (menit) untuk jadwal masuk tertentu; 0 bila tidak diatur. */
+export function toleransiTelat(jadwalMasuk: string): number {
+  return TOLERANSI_TELAT_MENIT[jadwalMasuk] ?? 0;
+}
 
 export function keMenit(jam: string): number {
   const [h, m] = jam.split(":").map(Number);

@@ -1,7 +1,7 @@
 "use client";
 
 import { MAX_REGULAR_HOURS_PER_DAY } from "@/lib/constants";
-import { keMenit } from "@/lib/jadwal";
+import { keMenit, toleransiTelat } from "@/lib/jadwal";
 import type { AbsenKantor, Kantor, Project, StatusAbsenKantor } from "@/types";
 
 /**
@@ -51,7 +51,10 @@ export function hitungKantor(opsi: {
     return { workHours: 0, terlambatMenit: 0, pulangCepatMenit: 0, ...kosong, status: "HADIR" };
   }
 
-  const terlambatMenit = Math.max(0, keMenit(opsi.masuk) - keMenit(opsi.jadwalMasuk));
+  // Di dalam toleransi jadwalnya (08.00 boleh sampai 15 menit, 09.00 tidak
+  // ada) tidak dihitung telat sama sekali; lewat itu seluruh menitnya dihitung.
+  const selisihMasuk = Math.max(0, keMenit(opsi.masuk) - keMenit(opsi.jadwalMasuk));
+  const terlambatMenit = selisihMasuk <= toleransiTelat(opsi.jadwalMasuk) ? 0 : selisihMasuk;
 
   const istirahatTerbuka = !!opsi.istirahat && !opsi.selesaiIstirahat;
   const istirahatMenit =

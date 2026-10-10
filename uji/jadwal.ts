@@ -1,4 +1,4 @@
-import { hariSabtu, jadwalUntuk, keJam, keMenit } from "@/lib/jadwal";
+import { hariSabtu, jadwalUntuk, keJam, keMenit, toleransiTelat } from "@/lib/jadwal";
 
 let lolos = 0, gagal = 0;
 function cek(nama: string, dapat: unknown, harap: unknown) {
@@ -9,6 +9,11 @@ function cek(nama: string, dapat: unknown, harap: unknown) {
 
 const admin = { jamMasuk: "08:00", jamPulang: "17:00", jamPulangSabtu: "12:00" };
 const planner = { jamMasuk: "09:00", jamPulang: "17:00", jamPulangSabtu: "15:00" };
+
+console.log("\n== Toleransi telat per jadwal masuk ==");
+cek("jadwal 08.00 -> 15 menit", toleransiTelat("08:00"), 15);
+cek("jadwal 09.00 -> tidak ada", toleransiTelat("09:00"), 0);
+cek("jadwal lain yang belum diatur -> tidak ada", toleransiTelat("08:30"), 0);
 
 console.log("\n== Jadwal kerja ==");
 cek("admin hari biasa", jadwalUntuk(admin, "2026-09-16"), { masuk: "08:00", pulang: "17:00" });

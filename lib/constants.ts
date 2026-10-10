@@ -64,6 +64,18 @@ export const JAM_LEMBUR_SETARA_SEHARI = 6;
  */
 export const POSISI_LAPANGAN = ["MANDOR", "TUKANG", "KENEK"] as const;
 
+/**
+ * Toleransi keterlambatan absen kantor, menurut jadwal masuk karyawan
+ * (Bang Syam, 10 Okt 2026): yang dijadwalkan masuk 08.00 boleh datang sampai
+ * 15 menit sesudahnya tanpa dihitung telat; yang masuk 09.00 tidak ada
+ * toleransi sama sekali. Jadwal masuk yang tidak ada di daftar ini = 0.
+ * Lewat toleransi, SELURUH menit keterlambatannya dihitung (08.16 = telat
+ * 16 menit), bukan hanya kelebihannya.
+ */
+export const TOLERANSI_TELAT_MENIT: Record<string, number> = {
+  "08:00": 15,
+};
+
 /** Radius maksimum absensi dari titik koordinat Project (meter). */
 export const DEFAULT_ATTENDANCE_RADIUS_METER = 1000;
 

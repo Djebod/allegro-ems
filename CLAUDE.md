@@ -274,6 +274,7 @@ Mesin fingerprint **tidak dipakai lagi**. Staf kantor absen sendiri lewat HP:
 - Absen istirahat tanpa absen selesai → ditandai `istirahatTerbuka`, **Admin yang memutuskan** jam selesainya lewat koreksi; sementara dipotong 1 jam
 - Tidak absen istirahat sama sekali → tetap dipotong 1 jam untuk hari lebih dari 6 jam
 - Hari Sabtu tidak ada absen istirahat
+- **Toleransi telat per jadwal masuk** (10 Okt 2026): jadwal 08.00 boleh datang sampai 08.15 tanpa dihitung telat, jadwal 09.00 tanpa toleransi. Lewat toleransi seluruh menitnya dihitung (08.16 = telat 16 menit). Tabelnya `TOLERANSI_TELAT_MENIT` di `lib/constants.ts`; jadwal yang tidak terdaftar = 0. Diterapkan di `hitungKantor`, jadi catatan absen yang sudah tersimpan sebelum aturan ini tidak berubah sampai dikoreksi atau dihitung ulang
 - Absen pulang tetap bisa kapan saja sesudah masuk
 - **Swafoto wajib** (kamera depan). Tanpa sidik jari, foto adalah satu-satunya bukti orangnya sendiri yang absen
 - GPS diukur ke **seluruh kantor aktif**, dipakai yang terdekat. Orang Bandung yang sedang di kantor Jakarta tetap terhitung di kantor
@@ -392,7 +393,7 @@ Daftar pertanyaan dijawab client pada presentasi 10 Okt 2026. Jawaban aslinya ad
 | A1, B1 | **Lembur 6 jam = 1 hari upah.** Hari kerja: jam lembur dibayar `tarifHarian / 6` per jam. Hari libur: 8 jam pertama = hari kerja biasa, lembur baru berlaku setelah jam 17.00 dengan rumus sama. Lapangan: tarif per mandor (tiap mandor tarif harian berbeda), hari libur sama dengan hari biasa | **Sudah dipasang** (10 Okt 2026), lihat bagian 7 Pengakuan lembur |
 | A2 | **Potongan alpa = gaji pokok / jumlah hari kerja bulan itu** (hari kalender dikurangi Minggu dan tanggal merah `holidays`; Sabtu hari kerja) | **Sudah dipasang** (10 Okt 2026): `potonganAlpa = alpa × upahSehari`, pola koreksi sama dengan lembur |
 | A3 | **Uang rajin tetap manual**, sistem menandai layak/tidak: gugur bila ada telat, alpa, izin, sakit, atau cuti dalam bulan itu | Penanda di rekap/payroll bulanan |
-| A4 | Telat tepat 15 menit = golongan pertama (sudah). Skor 16-30 menit = 10, **sama dengan golongan pertama** (dibiarkan); jam 9 ketat, tanpa toleransi (E2) | Tidak ada perubahan |
+| A4, E2 | Telat tepat 15 menit = golongan pertama (sudah). Skor 16-30 menit = 10, **sama dengan golongan pertama** (dibiarkan). **Toleransi mengikuti jadwal masuk** (Bang Syam, 10 Okt 2026): jadwal 08.00 boleh 15 menit, jadwal 09.00 tanpa toleransi | **Sudah dipasang** (10 Okt 2026): `TOLERANSI_TELAT_MENIT` di `lib/constants.ts`, `toleransiTelat()` di `lib/jadwal.ts`, diterapkan di `hitungKantor` |
 | A5 | Skor telat 100 → **SP 1 dibuat sistem, berstatus menunggu persetujuan Ko Freddy**; baru berlaku ke karyawan setelah disetujui | `lib/sp.ts`, `lib/data-sp.ts`: status DRAFT/DISETUJUI pada SP otomatis |
 | A6 | BPJS dipotong **penuh**; **Kesehatan dan Ketenagakerjaan dipisah** di data karyawan dan slip | `employees.iuranBpjs` dipecah dua kolom |
 | A7 | PPh 21 **boleh dicatat**; client punya rumus yang sudah pernah dibuat, **minta berkasnya** sebelum dipasang | Menunggu berkas |
