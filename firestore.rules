@@ -2113,12 +2113,18 @@ service cloud.firestore {
         && d.kategori is string && d.kategori.size() > 0
         && d.jenis in ['UNIT','STOK','HABIS_PAKAI']
         && d.kepemilikan in ['MILIK','SEWA']
+        && d.get('kelas', 'B') in ['A','B','C']
         && d.lokasiId is string && d.lokasiId.size() > 0
         && d.status in ['TERSEDIA','DIPINJAM','SERVIS','RUSAK','HILANG','AFKIR']
         && d.hargaBeli is number && d.hargaBeli >= 0
         && d.jumlahTotal is number && d.jumlahTotal >= 0
         // Foto boleh kosong; kalau diisi wajib dari Cloudinary.
         && (d.get('fotoUrl', '') == '' || fotoCloudinary(d.fotoUrl));
+    }
+
+    /** Peminjaman sesudah batch ini (alat dan peminjaman ditulis bersama). */
+    function pinjamanSesudah(id) {
+      return getAfter(/databases/$(database)/documents/apAssetLoans/$(id)).data;
     }
 
     // ---------- apAssets (master alat) ----------
@@ -2133,13 +2139,48 @@ service cloud.firestore {
         && request.resource.data.get('pemegangEmail', '') == '';
 
       // Tahap A: pengelola gudang mengubah data master dan memindahkan antar
-      // gudang. Status, proyek, dan pemegang BEKU di sini — Tahap B membuka
-      // jalurnya bersama dokumen peminjaman supaya tiap perpindahan berjejak.
+      // gudang. Status, proyek, dan pemegang BEKU di sini.
       allow update: if pengelolaGudang() && asetSah()
         && request.resource.data.status == resource.data.status
         && request.resource.data.get('projectCode', '') == resource.data.get('projectCode', '')
         && request.resource.data.get('pemegangEmail', '') == resource.data.get('pemegangEmail', '')
         && request.resource.data.get('jumlahDiProyek', {}) == resource.data.get('jumlahDiProyek', {});
+
+      // Tahap B: status/proyek/pemegang/jumlahDiProyek hanya bergerak BERSAMA
+      // dokumen peminjaman (satu batch). Data master lainnya beku di jalur ini.
+      // getAfter() membaca keadaan peminjaman sesudah batch, sehingga alat yang
+      // ditulis DIPINJAM wajib punya peminjaman yang memang sudah BERJALAN.
+      allow update: if wargaProyek()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+             'status','projectCode','pemegangEmail','pemegangNama','pinjamanId',
+             'jumlahDiProyek','skorTerakhir','lokasiId','updatedAt','updatedBy'])
+        && request.resource.data.status in ['TERSEDIA','DIPINJAM','RUSAK']
+        && (
+          // UNIT keluar / pindah: peminjaman yang ditunjuk harus BERJALAN & berproyek sama.
+          (request.resource.data.status == 'DIPINJAM'
+            && request.resource.data.pinjamanId is string
+            && request.resource.data.pinjamanId.size() > 0
+            && pinjamanSesudah(request.resource.data.pinjamanId).status == 'BERJALAN'
+            && pinjamanSesudah(request.resource.data.pinjamanId).projectCode == request.resource.data.projectCode)
+          ||
+          // UNIT kembali (TERSEDIA / RUSAK): peminjaman asalnya harus sudah DIKEMBALIKAN.
+          (resource.data.status == 'DIPINJAM'
+            && request.resource.data.status in ['TERSEDIA','RUSAK']
+            && request.resource.data.get('projectCode', '') == ''
+            && request.resource.data.get('pemegangEmail', '') == ''
+            && resource.data.get('pinjamanId', '') != ''
+            && pinjamanSesudah(resource.data.pinjamanId).status == 'DIKEMBALIKAN')
+          ||
+          // STOK / HABIS_PAKAI: hanya jumlahDiProyek yang bergeser, status tetap,
+          // dan pinjamanId menunjuk peminjaman yang sedang diproses di batch ini.
+          (resource.data.jenis != 'UNIT'
+            && request.resource.data.status == resource.data.status
+            && request.resource.data.get('projectCode', '') == resource.data.get('projectCode', '')
+            && request.resource.data.get('pemegangEmail', '') == resource.data.get('pemegangEmail', '')
+            && request.resource.data.pinjamanId is string
+            && request.resource.data.pinjamanId.size() > 0
+            && pinjamanSesudah(request.resource.data.pinjamanId).status in ['BERJALAN','DIKEMBALIKAN','DIPINDAHKAN'])
+        );
 
       // Alat tidak dihapus; yang salah input dinonaktifkan lewat AFKIR (Tahap D).
       // Sementara itu atasan boleh menghapus salah input yang belum pernah bergerak.
@@ -2178,6 +2219,97 @@ service cloud.firestore {
         && request.resource.data.jenis is string && request.resource.data.jenis.size() > 0
         && request.resource.data.oleh == emailUser();
       allow update, delete: if false;
+    }
+
+    // ---------- apAssetLoans (peminjaman alat, FORM-LOG/INV) ----------
+    // Alur: DIAJUKAN → DIKETAHUI (pengawas) → DISETUJUI (gudang) → KELUAR (gudang
+    // serahkan) → BERJALAN (peminjam/pengaju konfirmasi terima) → DIKEMBALIKAN
+    // (gudang terima) atau DIPINDAHKAN (ke peminjaman baru atas nama PIC lain).
+    function pengawasAset() {
+      return superProyek() || berperanProyek(['SUPER_ADMIN','DIREKSI','HEAD_ADMIN','KOORDINATOR','ADMIN_PROYEK']);
+    }
+    function pengajuAset() {
+      return superProyek() || berperanProyek(['SUPER_ADMIN','HEAD_ADMIN','ADMIN_PROYEK','PIC','KOORDINATOR','STAF_LAPANGAN','LOGISTIK']);
+    }
+    function pinjamSah() {
+      let d = request.resource.data;
+      return d.nomor is string && d.nomor.size() > 0
+        && d.projectCode is string && d.projectCode.size() > 0
+        && d.peminjamNama is string && d.peminjamNama.size() > 0
+        && d.tanggalPinjam is string && d.tanggalPinjam.size() == 10
+        && d.items is list && d.items.size() > 0
+        && d.riwayat is list
+        && d.status in ['DIAJUKAN','DIKETAHUI','DISETUJUI','KELUAR','BERJALAN','DIKEMBALIKAN','DIPINDAHKAN','DITOLAK','DIBATALKAN'];
+    }
+    /** Isi pokok peminjaman beku sejak diajukan. */
+    function pinjamIntiTetap() {
+      return request.resource.data.nomor == resource.data.nomor
+        && request.resource.data.projectCode == resource.data.projectCode
+        && request.resource.data.diajukanOleh == resource.data.diajukanOleh
+        && request.resource.data.peminjamNama == resource.data.peminjamNama
+        && request.resource.data.riwayat.size() >= resource.data.riwayat.size();
+    }
+
+    match /apAssetLoans/{pinjamId} {
+      allow read: if wargaProyek();
+
+      // Lahir DIAJUKAN atas nama pengaju; atau langsung BERJALAN bila hasil
+      // "pindah antar proyek" (asalPinjamanId menunjuk peminjaman yang DIPINDAHKAN
+      // dalam batch yang sama).
+      allow create: if pengajuAset() && pinjamSah()
+        && request.resource.data.diajukanOleh == emailUser()
+        && (
+          request.resource.data.status == 'DIAJUKAN'
+          || (request.resource.data.status == 'BERJALAN'
+              && request.resource.data.asalPinjamanId is string
+              && request.resource.data.asalPinjamanId.size() > 0
+              && pinjamanSesudah(request.resource.data.asalPinjamanId).status == 'DIPINDAHKAN')
+        );
+
+      allow update: if pinjamSah() && pinjamIntiTetap()
+        && request.resource.data.items.size() == resource.data.items.size()
+        && (
+          // Pengawas "mengetahui" atau menolak.
+          (pengawasAset()
+            && resource.data.status == 'DIAJUKAN'
+            && request.resource.data.status in ['DIKETAHUI','DITOLAK'])
+          ||
+          // Gudang menyetujui / menolak setelah diketahui, menyerahkan dengan
+          // kondisi keluar, dan menerima kembali dengan kondisi masuk.
+          (pengelolaGudang()
+            && (
+              (resource.data.status == 'DIKETAHUI' && request.resource.data.status in ['DISETUJUI','DITOLAK'])
+              || (resource.data.status == 'DISETUJUI' && request.resource.data.status == 'KELUAR'
+                  && request.resource.data.kondisiKeluar is map
+                  && request.resource.data.kondisiKeluar.skorFisik is number
+                  && request.resource.data.kondisiKeluar.skorFisik >= 1
+                  && request.resource.data.kondisiKeluar.skorPerforma is number
+                  && request.resource.data.kondisiKeluar.skorPerforma >= 1)
+              || (resource.data.status == 'BERJALAN' && request.resource.data.status in ['BERJALAN','DIKEMBALIKAN']
+                  && request.resource.data.get('kondisiKeluar', null) == resource.data.get('kondisiKeluar', null)
+                  && (request.resource.data.status == 'BERJALAN'
+                      || (request.resource.data.kondisiMasuk is map
+                          && request.resource.data.kondisiMasuk.skorFisik is number
+                          && request.resource.data.kondisiMasuk.skorFisik >= 1
+                          && request.resource.data.kondisiMasuk.skorPerforma is number
+                          && request.resource.data.kondisiMasuk.skorPerforma >= 1)))
+            ))
+          ||
+          // Pengaju / pengawas proyek: konfirmasi terima (KELUAR → BERJALAN),
+          // membatalkan sebelum alat keluar, atau memindahkan ke proyek lain.
+          ((resource.data.diajukanOleh == emailUser() || resource.data.get('pengawasEmail', '') == emailUser() || pengelolaGudang())
+            && (
+              (resource.data.status == 'KELUAR' && request.resource.data.status == 'BERJALAN'
+                && request.resource.data.get('kondisiKeluar', null) == resource.data.get('kondisiKeluar', null))
+              || (resource.data.status in ['DIAJUKAN','DIKETAHUI','DISETUJUI'] && request.resource.data.status == 'DIBATALKAN')
+              || (resource.data.status == 'BERJALAN' && request.resource.data.status == 'DIPINDAHKAN'
+                  && request.resource.data.pindahKeId is string
+                  && request.resource.data.pindahKeId.size() > 0
+                  && pinjamanSesudah(request.resource.data.pindahKeId).status == 'BERJALAN')
+            ))
+        );
+
+      allow delete: if false;
     }
 
     // ---------- koleksi lain masih ditutup ----------
