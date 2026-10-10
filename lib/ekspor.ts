@@ -252,6 +252,7 @@ export async function eksporPayroll(opsi: {
     { header: "Potongan bon", key: "bon", width: 14 },
     { header: "Potongan lain", key: "lain", width: 14 },
     { header: "Diterima", key: "bersih", width: 15 },
+    { header: "Rekening pembayar", key: "rekening", width: 18 },
     { header: "Catatan", key: "catatan", width: 30 },
   ];
   ws.columns = KOLOM.map(({ key, width }) => ({ key, width }));
@@ -317,6 +318,7 @@ export async function eksporPayroll(opsi: {
       bon: i.loanDeduction,
       lain: i.otherDeduction,
       bersih: i.netPay,
+      rekening: i.rekeningPembayar || "",
       catatan: i.catatan || "",
     });
     baris.font = { size: 10 };

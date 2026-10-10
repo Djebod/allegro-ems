@@ -1,6 +1,6 @@
 import { tanggalDalamBulan, type BarisRekap } from "@/lib/rekap-kantor";
 import { hariLibur, tarifLemburPerJam } from "@/lib/lembur";
-import type { BarisTunjangan, EmployeeLoan, GajiBulanan, HariLibur, ItemPayrollBulanan, JenisTunjangan, StatusPayroll } from "@/types";
+import type { BarisTunjangan, Employee, EmployeeLoan, GajiBulanan, HariLibur, ItemPayrollBulanan, JenisTunjangan, StatusPayroll } from "@/types";
 
 /**
  * PAYROLL BULANAN STAF KANTOR - perhitungan murni.
@@ -90,8 +90,25 @@ export const KOLOM_MANUAL = [
   "potonganLainKet",
   "potonganBon",
   "potonganBpjs",
+  "potonganBpjsKesehatan",
+  "potonganBpjsKetenagakerjaan",
+  "rekeningPembayar",
   "catatan",
 ] as const;
+
+/**
+ * Iuran BPJS seorang karyawan, dipisah (client A6, 10 Okt 2026). Kolom lama
+ * `iuranBpjs` dibaca sebagai Ketenagakerjaan selama kolom barunya belum
+ * diisi, karena saat kolom lama dipakai perusahaan belum punya BPJS Kesehatan.
+ */
+export function iuranBpjsKaryawan(
+  e: Pick<Employee, "iuranBpjs" | "iuranBpjsKesehatan" | "iuranBpjsKetenagakerjaan"> | undefined
+): { kesehatan: number; ketenagakerjaan: number } {
+  return {
+    kesehatan: Math.max(0, Math.round(e?.iuranBpjsKesehatan || 0)),
+    ketenagakerjaan: Math.max(0, Math.round(e?.iuranBpjsKetenagakerjaan ?? e?.iuranBpjs ?? 0)),
+  };
+}
 
 export type IsianManual = Pick<ItemPayrollBulanan, (typeof KOLOM_MANUAL)[number]>;
 
@@ -157,7 +174,13 @@ export function hitungAngka<T extends ItemBaru>(item: T): T {
   const tambahanLain = bulat(item.tambahanLain);
   const potonganAlpa = bulat(item.potonganAlpa);
   const potonganLain = bulat(item.potonganLain);
-  const potonganBpjs = bulat(item.potonganBpjs);
+  // BPJS dipisah (client A6, 10 Okt 2026): totalnya selalu jumlah keduanya.
+  // Baris lama yang belum punya pemisahan memakai totalnya apa adanya,
+  // dibaca sebagai Ketenagakerjaan.
+  const sudahDipisah = item.potonganBpjsKesehatan !== undefined || item.potonganBpjsKetenagakerjaan !== undefined;
+  const potonganBpjsKesehatan = sudahDipisah ? bulat(item.potonganBpjsKesehatan) : 0;
+  const potonganBpjsKetenagakerjaan = sudahDipisah ? bulat(item.potonganBpjsKetenagakerjaan) : bulat(item.potonganBpjs);
+  const potonganBpjs = potonganBpjsKesehatan + potonganBpjsKetenagakerjaan;
 
   const kotor = item.gajiPokok + totalTunjangan + bonus + lembur + uangKerajinan + tambahanLain;
   // BPJS ikut dipotong sebelum bon: iuran harus tetap dibayar, bon bisa
@@ -176,6 +199,8 @@ export function hitungAngka<T extends ItemBaru>(item: T): T {
     potonganAlpa,
     potonganLain,
     potonganBpjs,
+    potonganBpjsKesehatan,
+    potonganBpjsKetenagakerjaan,
     potonganBon,
     kotor,
     totalPotongan,
@@ -190,8 +215,12 @@ export function susunItemBulanan(opsi: {
   bon: EmployeeLoan | undefined;
   /** Jenis tunjangan yang diatur di aplikasi. Kosong = tanpa tunjangan. */
   jenisTunjangan?: JenisTunjangan[];
-  /** Iuran BPJS bulanan dari data karyawan. Kosong = tidak dipotong. */
+  /** Iuran BPJS lama (belum dipisah) dari data karyawan; dibaca sebagai Ketenagakerjaan. */
   iuranBpjs?: number;
+  iuranBpjsKesehatan?: number;
+  iuranBpjsKetenagakerjaan?: number;
+  /** Rekening pembayar dari data karyawan; bawaan untuk periode ini. */
+  rekeningPembayar?: string;
   /**
    * Hari kerja sebulan penuh (`hariKerjaBulan`), pembagi upah sehari.
    * Kosong = pakai hari kerja rekap (sama untuk bulan yang sudah lewat).
@@ -216,6 +245,19 @@ export function susunItemBulanan(opsi: {
   const potonganAlpaOtomatis = Math.round(r.alpa * upahSehari);
   const lembur = opsi.tanpaLembur ? 0 : pakaiKoreksi(lama.lembur, lama.lemburOtomatis, lemburOtomatis);
   const uangRajin = periksaUangRajin(r);
+
+  // BPJS: isian lama yang belum dipisah dibawa ke Ketenagakerjaan supaya
+  // koreksi totalnya tidak hilang saat hitung ulang.
+  const iuran = iuranBpjsKaryawan({
+    iuranBpjs: opsi.iuranBpjs,
+    iuranBpjsKesehatan: opsi.iuranBpjsKesehatan,
+    iuranBpjsKetenagakerjaan: opsi.iuranBpjsKetenagakerjaan,
+  });
+  const lamaDipisah = lama.potonganBpjsKesehatan !== undefined || lama.potonganBpjsKetenagakerjaan !== undefined;
+  const potonganBpjsKesehatan = lamaDipisah ? lama.potonganBpjsKesehatan ?? 0 : lama.potonganBpjs !== undefined ? 0 : iuran.kesehatan;
+  const potonganBpjsKetenagakerjaan = lamaDipisah
+    ? lama.potonganBpjsKetenagakerjaan ?? 0
+    : lama.potonganBpjs ?? iuran.ketenagakerjaan;
 
   return hitungAngka({
     employeeId: r.employeeId,
@@ -260,8 +302,11 @@ export function susunItemBulanan(opsi: {
     potonganLainKet: lama.potonganLainKet ?? "",
     potonganBon: lama.potonganBon ?? usulanPotonganBon(opsi.bon, opsi.bulan),
     // Seperti potongan bon: koreksi manual (termasuk dikosongkan) tidak
-    // ditimpa saat hitung ulang.
-    potonganBpjs: lama.potonganBpjs ?? opsi.iuranBpjs ?? 0,
+    // ditimpa saat hitung ulang. Totalnya dihitung hitungAngka.
+    potonganBpjs: 0,
+    potonganBpjsKesehatan,
+    potonganBpjsKetenagakerjaan,
+    rekeningPembayar: lama.rekeningPembayar ?? opsi.rekeningPembayar ?? "",
     catatan: lama.catatan ?? "",
 
     kotor: 0,

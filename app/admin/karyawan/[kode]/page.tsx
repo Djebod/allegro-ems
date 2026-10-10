@@ -311,9 +311,17 @@ function Isi({ kode }: { kode: string }) {
             <dd className="font-medium text-ink">{karyawan.bpjsKetenagakerjaan || "—"}</dd>
           </div>
           <div>
-            <dt className="text-muted">Iuran BPJS per bulan</dt>
+            <dt className="text-muted">Iuran BPJS Kesehatan / bulan</dt>
             <dd className="font-medium text-ink">
-              {karyawan.iuranBpjs ? `Rp ${keRupiah(karyawan.iuranBpjs)}` : "—"}
+              {karyawan.iuranBpjsKesehatan ? `Rp ${keRupiah(karyawan.iuranBpjsKesehatan)}` : "—"}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-muted">Iuran BPJS Ketenagakerjaan / bulan</dt>
+            <dd className="font-medium text-ink">
+              {(karyawan.iuranBpjsKetenagakerjaan ?? karyawan.iuranBpjs)
+                ? `Rp ${keRupiah(karyawan.iuranBpjsKetenagakerjaan ?? karyawan.iuranBpjs ?? 0)}`
+                : "—"}
             </dd>
           </div>
           <div>
@@ -836,15 +844,31 @@ function Isi({ kode }: { kode: string }) {
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
                 <Field
-                  label="Iuran BPJS per bulan (Rp)"
-                  bantuan="Dipotong otomatis di payroll bulanan. Kosongkan kalau tidak dipotong."
+                  label="Iuran BPJS Kesehatan per bulan (Rp)"
+                  bantuan="Dipotong penuh di payroll bulanan, baris terpisah di slip. Kosongkan kalau belum ikut."
                 >
                   <input
                     className="input-dasar"
                     inputMode="numeric"
                     placeholder="0"
-                    value={uData.iuranBpjs ? keRupiah(uData.iuranBpjs) : ""}
-                    onChange={(e) => setUData({ ...uData, iuranBpjs: bacaAngka(e.target.value) })}
+                    value={uData.iuranBpjsKesehatan ? keRupiah(uData.iuranBpjsKesehatan) : ""}
+                    onChange={(e) => setUData({ ...uData, iuranBpjsKesehatan: bacaAngka(e.target.value) })}
+                  />
+                </Field>
+                <Field
+                  label="Iuran BPJS Ketenagakerjaan per bulan (Rp)"
+                  bantuan="Angka iuran lama (sebelum dipisah) tampil di sini. Kosongkan kalau tidak dipotong."
+                >
+                  <input
+                    className="input-dasar"
+                    inputMode="numeric"
+                    placeholder="0"
+                    value={
+                      (uData.iuranBpjsKetenagakerjaan ?? uData.iuranBpjs)
+                        ? keRupiah(uData.iuranBpjsKetenagakerjaan ?? uData.iuranBpjs ?? 0)
+                        : ""
+                    }
+                    onChange={(e) => setUData({ ...uData, iuranBpjsKetenagakerjaan: bacaAngka(e.target.value) })}
                   />
                 </Field>
               </div>
@@ -911,7 +935,13 @@ function Isi({ kode }: { kode: string }) {
                   npwp: uData.npwp || "",
                   bpjsKesehatan: uData.bpjsKesehatan || "",
                   bpjsKetenagakerjaan: uData.bpjsKetenagakerjaan || "",
-                  iuranBpjs: Math.max(0, Math.round(Number(uData.iuranBpjs) || 0)),
+                  // Kolom lama ikut disalin ke Ketenagakerjaan supaya tidak terbaca dua kali.
+                  iuranBpjsKesehatan: Math.max(0, Math.round(Number(uData.iuranBpjsKesehatan) || 0)),
+                  iuranBpjsKetenagakerjaan: Math.max(
+                    0,
+                    Math.round(Number(uData.iuranBpjsKetenagakerjaan ?? uData.iuranBpjs) || 0)
+                  ),
+                  iuranBpjs: 0,
                   bankName: uData.bankName || "",
                   bankAccountNumber: uData.bankAccountNumber || "",
                   bankAccountName: uData.bankAccountName || "",

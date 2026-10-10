@@ -257,6 +257,9 @@ async function susunSemua(bulan: string, lama: Map<string, IsianLama> = new Map(
       bon: bon.find((b) => b.employeeId === r.employeeId),
       jenisTunjangan,
       iuranBpjs: karyawan?.iuranBpjs,
+      iuranBpjsKesehatan: karyawan?.iuranBpjsKesehatan,
+      iuranBpjsKetenagakerjaan: karyawan?.iuranBpjsKetenagakerjaan,
+      rekeningPembayar: karyawan?.rekeningPembayar,
       hariKerjaBulan: hariKerjaSebulan,
       // `masukLibur` berisi semua overtimeRequests bulan itu; yang jenis
       // LEMBUR dan DISETUJUI disaring di totalJamLemburDisetujui.

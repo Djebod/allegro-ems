@@ -19,6 +19,7 @@ import {
   ubahItemPayroll,
 } from "@/lib/data";
 import { eksporPayroll } from "@/lib/ekspor";
+import { REKENING_PEMBAYAR } from "@/lib/constants";
 import { bacaAngka, keRupiah, rupiahPenuh } from "@/lib/rupiah";
 import { tanggalPendek } from "@/lib/absensi";
 import type { Payroll, PayrollItem, StatusPayroll } from "@/types";
@@ -57,6 +58,7 @@ function Isi({ id }: { id: string }) {
   const [konfirmasi, setKonfirmasi] = useState(false);
   const [konfirmasiHapus, setKonfirmasiHapus] = useState(false);
   const [catatanUlang, setCatatanUlang] = useState<string[]>([]);
+  const [uRekening, setURekening] = useState("");
 
   async function muat() {
     setPayroll(await ambilPayroll(id));
@@ -92,6 +94,7 @@ function Isi({ id }: { id: string }) {
     setUBon(keRupiah(item.loanDeduction || 0));
     setULain(keRupiah(item.otherDeduction || 0));
     setUCatatan(item.catatan || "");
+    setURekening(item.rekeningPembayar || "");
     setSalah(null);
   }
 
@@ -105,6 +108,7 @@ function Isi({ id }: { id: string }) {
         loanDeduction: bacaAngka(uBon),
         otherDeduction: bacaAngka(uLain),
         catatan: uCatatan.trim(),
+        rekeningPembayar: uRekening,
       });
       await muat();
       setUbah(null);
@@ -304,6 +308,26 @@ function Isi({ id }: { id: string }) {
         </details>
       )}
 
+      {/* Rekening pembayar bisa berbeda tiap periode (client A9, 10 Okt 2026): jumlah per rekening untuk transfer. */}
+      {items.length > 0 && (
+        <div className="kartu mt-4">
+          <p className="mb-1 text-[11px] text-muted">Bersih per rekening pembayar</p>
+          <div className="flex flex-wrap gap-x-5 gap-y-1 text-sm">
+            {Object.entries(
+              items.reduce<Record<string, number>>((akum, i) => {
+                const k = i.rekeningPembayar || "Belum dipilih";
+                akum[k] = (akum[k] || 0) + i.netPay;
+                return akum;
+              }, {})
+            ).map(([rk, total]) => (
+              <span key={rk} className={rk === "Belum dipilih" ? "text-bahaya" : "text-ink"}>
+                {rk}: <b>{rupiahPenuh(total)}</b>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="mt-4 overflow-x-auto rounded-xl border border-line">
         <table className="tabel-padat">
           <thead>
@@ -414,6 +438,17 @@ function Isi({ id }: { id: string }) {
             <div className="rounded-lg bg-surface p-3 text-sm text-muted">
               Upah pokok {rupiahPenuh(ubah.regularPay)} · lembur {rupiahPenuh(ubah.overtimePay)}
             </div>
+
+            <Field label="Rekening pembayar" bantuan="Bawaan dari data karyawan; boleh diganti untuk periode ini saja.">
+              <select className="input-dasar" value={uRekening} onChange={(e) => setURekening(e.target.value)}>
+                <option value="">- belum dipilih -</option>
+                {REKENING_PEMBAYAR.map((rk) => (
+                  <option key={rk} value={rk}>
+                    {rk}
+                  </option>
+                ))}
+              </select>
+            </Field>
 
             <Field label="Tambahan" bantuan="Uang makan, bonus, atau tambahan lain.">
               <input

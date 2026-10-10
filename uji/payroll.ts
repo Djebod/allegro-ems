@@ -8,7 +8,7 @@ function cek(nama: string, dapat: unknown, harap: unknown) {
   sama ? lolos++ : gagal++;
 }
 
-const orang = { id: "TKG-001", name: "Budi", position: "TUKANG", status: "ACTIVE" } as Employee;
+const orang = { id: "TKG-001", name: "Budi", position: "TUKANG", status: "ACTIVE", rekeningPembayar: "ALLEGRO JAKARTA" } as Employee;
 
 function hari(tanggal: string, masuk: string, pulang: string, opsi: Partial<{
   mulaiIstirahat: string; selesaiIstirahat: string; lemburMulai: string; lemburSelesai: string;
@@ -37,6 +37,7 @@ let h = hitungUpahKaryawan({ karyawan: orang, tarif: tarifHarian, sisaBon: 0,
   absensi: [hari("2026-09-14","00:00","08:00",{mulaiIstirahat:"04:00",selesaiIstirahat:"05:00"})] });
 cek("1 hari penuh 7 jam kerja -> 1 hari upah", h.item.regularPay, 150000);
 cek("  jam kerjanya", h.item.totalWorkHours, 7);
+cek("  rekening pembayar disalin dari data karyawan (bisa diubah per periode)", h.item.rekeningPembayar, "ALLEGRO JAKARTA");
 
 h = hitungUpahKaryawan({ karyawan: orang, tarif: tarifHarian, sisaBon: 0,
   absensi: [hari("2026-09-14","00:00","08:00",{mulaiIstirahat:"04:00"})] });

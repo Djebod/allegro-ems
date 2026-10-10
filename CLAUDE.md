@@ -314,7 +314,7 @@ Satu karyawan satu bon aktif. Bisa dicicil; besarnya dibulatkan ke atas supaya c
 
 ### Potongan BPJS (8 Okt 2026)
 
-Iuran BPJS disimpan sebagai **angka rupiah per bulan** di `employees.iuranBpjs` (Detail Karyawan → Pajak & BPJS), bukan persen. Saat payroll bulanan disusun, nilainya disalin ke `potonganBpjs` pada baris payroll dan masih bisa dikoreksi selama DRAFT/REVIEW. Hitung ulang **tidak menimpa** koreksi itu (pola sama dengan potongan bon). BPJS dipotong **sebelum** bon: iuran harus tetap dibayar, bon bisa menunggu. Belum ditanyakan ke client apakah yang dipotong iuran penuh atau porsi karyawan saja; sistem hanya memotong angka yang diisi.
+Iuran BPJS disimpan sebagai **angka rupiah per bulan**, bukan persen, dan **dipotong penuh** (client A6, 10 Okt 2026). Sejak 10 Okt 2026 **dipisah**: `employees.iuranBpjsKesehatan` dan `employees.iuranBpjsKetenagakerjaan` (Detail Karyawan → Pajak & BPJS). Kolom lama `iuranBpjs` dibaca sebagai Ketenagakerjaan bila kolom baru belum diisi (`iuranBpjsKaryawan()` di `lib/payroll-bulanan.ts`), karena saat itu perusahaan belum punya BPJS Kesehatan; menyimpan form karyawan memindahkannya ke kolom baru dan menolkan yang lama. Di baris payroll: `potonganBpjsKesehatan` + `potonganBpjsKetenagakerjaan`, totalnya `potonganBpjs` (rules menjaga total = jumlah keduanya); baris lama hanya punya total, dibaca sebagai Ketenagakerjaan saat dikoreksi atau dihitung ulang. Slip dan ekspor Excel menampilkan dua baris. Masih bisa dikoreksi selama DRAFT/REVIEW; hitung ulang **tidak menimpa** koreksi (pola potongan bon). BPJS dipotong **sebelum** bon.
 
 ---
 
@@ -396,10 +396,10 @@ Daftar pertanyaan dijawab client pada presentasi 10 Okt 2026. Jawaban aslinya ad
 | A3 | **Uang rajin tetap manual**, sistem menandai layak/tidak: gugur bila ada telat, alpa, izin, sakit, atau cuti dalam bulan itu | **Sudah dipasang** (10 Okt 2026): `periksaUangRajin()` di `lib/payroll-bulanan.ts`, penanda `layakUangRajin` + `penggugurUangRajin` di baris payroll, peringatan bila diisi padahal tidak layak. Telat berizin ikut menggugurkan; dinas luar tidak |
 | A4, E2 | Telat tepat 15 menit = golongan pertama (sudah). Skor 16-30 menit = 10, **sama dengan golongan pertama** (dibiarkan). **Toleransi mengikuti jadwal masuk** (Bang Syam, 10 Okt 2026): jadwal 08.00 boleh 15 menit, jadwal 09.00 tanpa toleransi | **Sudah dipasang** (10 Okt 2026): `TOLERANSI_TELAT_MENIT` di `lib/constants.ts`, `toleransiTelat()` di `lib/jadwal.ts`, diterapkan di `hitungKantor` |
 | A5 | Skor telat 100 → **SP 1 dibuat sistem, berstatus menunggu persetujuan Ko Freddy**; baru berlaku ke karyawan setelah disetujui | `lib/sp.ts`, `lib/data-sp.ts`: status DRAFT/DISETUJUI pada SP otomatis |
-| A6 | BPJS dipotong **penuh**; **Kesehatan dan Ketenagakerjaan dipisah** di data karyawan dan slip | `employees.iuranBpjs` dipecah dua kolom |
+| A6 | BPJS dipotong **penuh**; **Kesehatan dan Ketenagakerjaan dipisah** di data karyawan dan slip | **Sudah dipasang** (10 Okt 2026), lihat bagian 7 Potongan BPJS |
 | A7 | PPh 21 **boleh dicatat**; client punya rumus yang sudah pernah dibuat, **minta berkasnya** sebelum dipasang | Menunggu berkas |
 | A8 | THR dibayar setahun sekali sebelum Lebaran; rumus belum dijawab | Menunggu rumus |
-| A9 | **Rekening pembayar bisa berubah tiap periode**: diisi/diubah saat payroll disusun, bawaan dari data karyawan | Kolom rekening pada baris payroll, bukan hanya di `employees` |
+| A9 | **Rekening pembayar bisa berubah tiap periode**: diisi/diubah saat payroll disusun, bawaan dari data karyawan | **Sudah dipasang** (10 Okt 2026): `rekeningPembayar` disalin ke `payrollItems` (mingguan, `hitungUpahKaryawan`) dan `payrollBulananItems` (`susunItemBulanan`), bisa diganti di modal ubah baris selama DRAFT/REVIEW, hitung ulang mempertahankan; ringkasan "per rekening pembayar" di kedua halaman dan kolom di ekspor Excel |
 | A10 | Cut-off absensi akhir bulan; **gajian hari Sabtu** terdekat tanggal 1, paling lambat tanggal 3 | Tanggal bayar pada payroll bulanan |
 | A11 | Gaji **tidak dibulatkan** | Tidak ada perubahan |
 | B6 | Batas ajukan lembur sendiri **1 hari** setelah tanggal lembur (bukan 7). Lembur < 1 jam gugur, tapi bisa dianulir Admin | **Sudah dipasang** (10 Okt 2026). Anulir lembur < 1 jam belum ada |

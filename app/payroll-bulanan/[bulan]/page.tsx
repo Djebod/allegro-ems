@@ -39,6 +39,7 @@ import { namaBerkasSlip, unduhSlipPdf } from "@/lib/slip-gaji";
 import { ambilLemburDisetujui } from "@/lib/data-lembur";
 import { totalJamLemburDisetujui, totalJamMasukLiburDisetujui } from "@/lib/lembur";
 import { semuaKaryawan } from "@/lib/data";
+import { REKENING_PEMBAYAR } from "@/lib/constants";
 import type { ItemPayrollBulanan, PayrollBulanan, PengajuanLembur, SlipGaji, StatusPayroll } from "@/types";
 
 const TOMBOL_MAJU: Record<StatusPayroll, string> = {
@@ -211,6 +212,10 @@ function Isi({ bulan }: { bulan: string }) {
       potonganLainKet: i.potonganLainKet,
       potonganBon: i.potonganBon,
       potonganBpjs: i.potonganBpjs || 0,
+      // Baris lama belum dipisah: totalnya dibaca sebagai Ketenagakerjaan.
+      potonganBpjsKesehatan: i.potonganBpjsKesehatan ?? 0,
+      potonganBpjsKetenagakerjaan: i.potonganBpjsKetenagakerjaan ?? i.potonganBpjs ?? 0,
+      rekeningPembayar: i.rekeningPembayar || "",
       catatan: i.catatan,
     });
     setSalahForm(null);
@@ -390,6 +395,26 @@ function Isi({ bulan }: { bulan: string }) {
             </div>
           ))}
         </div>
+
+        {/* Rekening pembayar bisa berbeda tiap bulan (client A9, 10 Okt 2026): jumlah per rekening untuk transfer. */}
+        {items.length > 0 && (
+          <div className="mt-4 border-t border-line pt-3">
+            <p className="mb-1 text-[11px] text-muted">Diterima per rekening pembayar</p>
+            <div className="flex flex-wrap gap-x-5 gap-y-1 text-sm">
+              {Object.entries(
+                items.reduce<Record<string, number>>((akum, i) => {
+                  const k = i.rekeningPembayar || "Belum dipilih";
+                  akum[k] = (akum[k] || 0) + i.bersih;
+                  return akum;
+                }, {})
+              ).map(([rk, total]) => (
+                <span key={rk} className={rk === "Belum dipilih" ? "text-bahaya" : "text-ink"}>
+                  {rk}: <b>{bolehGaji && tampilGaji ? rupiahPenuh(total) : SAMARAN_GAJI}</b>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {salah && (
@@ -568,6 +593,21 @@ function Isi({ bulan }: { bulan: string }) {
               <Field label="Gaji pokok">
                 <input className="input-dasar tracking-wider" disabled value={gaji(ubah.gajiPokok)} />
               </Field>
+              <Field label="Rekening pembayar" bantuan="Bawaan dari data karyawan; boleh diganti untuk bulan ini saja">
+                <select
+                  className="input-dasar"
+                  disabled={!bisaUbah}
+                  value={isian.rekeningPembayar || ""}
+                  onChange={(e) => set("rekeningPembayar")(e.target.value)}
+                >
+                  <option value="">- belum dipilih -</option>
+                  {REKENING_PEMBAYAR.map((rk) => (
+                    <option key={rk} value={rk}>
+                      {rk}
+                    </option>
+                  ))}
+                </select>
+              </Field>
               <Field label="Bonus bulanan">
                 <IsianRupiah nilai={isian.bonus || 0} ubah={set("bonus")} mati={!bisaUbah} />
               </Field>
@@ -645,8 +685,14 @@ function Isi({ bulan }: { bulan: string }) {
               <Field label="Potongan bon" bantuan={`Sisa bon ${r(ubah.sisaBon)}`}>
                 <IsianRupiah nilai={isian.potonganBon} ubah={set("potonganBon")} mati={!bisaUbah || !ubah.sisaBon} />
               </Field>
-              <Field label="Potongan BPJS" bantuan="Terisi dari iuran di data karyawan, bisa dikoreksi">
-                <IsianRupiah nilai={isian.potonganBpjs || 0} ubah={set("potonganBpjs")} mati={!bisaUbah} />
+              <Field label="Potongan BPJS Kesehatan" bantuan="Terisi dari iuran di data karyawan, bisa dikoreksi">
+                <IsianRupiah nilai={isian.potonganBpjsKesehatan || 0} ubah={set("potonganBpjsKesehatan")} mati={!bisaUbah} />
+              </Field>
+              <Field
+                label="Potongan BPJS Ketenagakerjaan"
+                bantuan={`Terisi dari iuran di data karyawan, bisa dikoreksi · total BPJS ${r((isian.potonganBpjsKesehatan || 0) + (isian.potonganBpjsKetenagakerjaan || 0))}`}
+              >
+                <IsianRupiah nilai={isian.potonganBpjsKetenagakerjaan || 0} ubah={set("potonganBpjsKetenagakerjaan")} mati={!bisaUbah} />
               </Field>
               <Field label="Potongan lain">
                 <IsianRupiah nilai={isian.potonganLain} ubah={set("potonganLain")} mati={!bisaUbah} />

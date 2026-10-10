@@ -984,13 +984,14 @@ async function segarkanTotal(payrollId: string) {
 
 export async function ubahItemPayroll(
   item: PayrollItem,
-  ubahan: Partial<Pick<PayrollItem, "additionalPay" | "loanDeduction" | "otherDeduction" | "catatan">>
+  ubahan: Partial<Pick<PayrollItem, "additionalPay" | "loanDeduction" | "otherDeduction" | "catatan" | "rekeningPembayar">>
 ) {
   const baru = segarkanItem({ ...item, ...ubahan });
   await updateDoc(doc(dbClient(), "payrollItems", item.id), {
     additionalPay: baru.additionalPay,
     loanDeduction: baru.loanDeduction,
     otherDeduction: baru.otherDeduction,
+    rekeningPembayar: baru.rekeningPembayar || "",
     catatan: baru.catatan,
     grossPay: baru.grossPay,
     netPay: baru.netPay,

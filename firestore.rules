@@ -1016,9 +1016,14 @@ service cloud.firestore {
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
              'bonus', 'lembur', 'lemburKet', 'potonganAlpa', 'uangKerajinan', 'tambahanLain',
              'tambahanLainKet', 'potonganLain', 'potonganLainKet', 'potonganBon',
-             'potonganBpjs', 'catatan', 'kotor', 'totalPotongan', 'bersih', 'updatedAt'])
+             'potonganBpjs', 'potonganBpjsKesehatan', 'potonganBpjsKetenagakerjaan',
+             'rekeningPembayar', 'catatan', 'kotor', 'totalPotongan', 'bersih', 'updatedAt'])
         && (request.resource.data.uangKerajinan == resource.data.uangKerajinan || isOwner())
         && request.resource.data.potonganBon <= resource.data.sisaBon
+        // BPJS dipisah (10 Okt 2026): totalnya harus jumlah keduanya.
+        && request.resource.data.get('potonganBpjs', 0)
+             == request.resource.data.get('potonganBpjsKesehatan', 0)
+              + request.resource.data.get('potonganBpjsKetenagakerjaan', 0)
         // Tunjangan tetap adalah salinan (tidak bisa diubah); bonus diisi manual.
         && request.resource.data.kotor == resource.data.gajiPokok
              + resource.data.get('totalTunjangan', 0) + request.resource.data.get('bonus', 0)

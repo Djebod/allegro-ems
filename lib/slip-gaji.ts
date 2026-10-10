@@ -325,7 +325,13 @@ function halamanGaji(doc: JsPDF, s: DataSlip, logoUrl: string | null, autoTable:
   barisGaji("Potongan Kasbon", "", "", "", ribu(s.potonganBon), true);
   barisGaji("Potongan Telat", "", "", "", ribu(s.dendaTelat), true);
   if (s.potonganAlpa) barisGaji("Potongan Alpa", "", "", "", ribu(s.potonganAlpa), true);
-  if (s.potonganBpjs) barisGaji("Potongan BPJS", "", "", "", ribu(s.potonganBpjs), true);
+  // BPJS dipisah di slip (client A6, 10 Okt 2026); slip lama hanya punya totalnya.
+  if (s.potonganBpjsKesehatan || s.potonganBpjsKetenagakerjaan) {
+    if (s.potonganBpjsKesehatan) barisGaji("Potongan BPJS Kesehatan", "", "", "", ribu(s.potonganBpjsKesehatan), true);
+    if (s.potonganBpjsKetenagakerjaan) barisGaji("Potongan BPJS Ketenagakerjaan", "", "", "", ribu(s.potonganBpjsKetenagakerjaan), true);
+  } else if (s.potonganBpjs) {
+    barisGaji("Potongan BPJS", "", "", "", ribu(s.potonganBpjs), true);
+  }
   if (s.potonganLain) {
     barisGaji(`Potongan Lain${s.potonganLainKet ? ` (${s.potonganLainKet})` : ""}`.slice(0, 40), "", "", "", ribu(s.potonganLain), true);
   }

@@ -101,10 +101,16 @@ export interface Employee {
   bpjsKesehatan?: string;
   bpjsKetenagakerjaan?: string;
   /**
-   * Iuran BPJS yang dipotong dari gaji tiap bulan, rupiah. Diisi Admin/HR
-   * sebagai angka, bukan persen, karena besarnya ditetapkan di luar
-   * aplikasi. Kosong atau nol berarti tidak dipotong.
+   * Iuran BPJS yang dipotong dari gaji tiap bulan, rupiah, dipotong penuh.
+   * Diisi Admin/HR sebagai angka, bukan persen, karena besarnya ditetapkan
+   * di luar aplikasi. Kosong atau nol berarti tidak dipotong.
+   * Dipisah Kesehatan dan Ketenagakerjaan (client A6, 10 Okt 2026).
+   * `iuranBpjs` adalah kolom lama sebelum dipisah; dibaca sebagai
+   * Ketenagakerjaan bila `iuranBpjsKetenagakerjaan` belum diisi, karena
+   * saat itu perusahaan belum mendaftarkan BPJS Kesehatan.
    */
+  iuranBpjsKesehatan?: number;
+  iuranBpjsKetenagakerjaan?: number;
   iuranBpjs?: number;
 
   /* --- Kepegawaian --- */
@@ -469,6 +475,8 @@ export interface PayrollItem {
   otherDeduction: number;
   netPay: number;
 
+  /** Rekening pembayar, disalin dari data karyawan; boleh diubah per periode (client A9, 10 Okt 2026). */
+  rekeningPembayar?: string;
   catatan: string;
   createdAt?: unknown;
 }
@@ -874,10 +882,19 @@ export interface ItemPayrollBulanan {
   potonganLainKet: string;
   potonganBon: number;
   /**
-   * Terisi otomatis dari iuranBpjs karyawan saat payroll disusun, masih
+   * Terisi otomatis dari iuran BPJS karyawan saat payroll disusun, masih
    * bisa dikoreksi selama DRAFT/REVIEW. Kosong pada payroll lama = 0.
+   * Sejak 10 Okt 2026 dipisah: `potonganBpjs` = Kesehatan + Ketenagakerjaan
+   * (dijaga rules). Baris lama hanya punya totalnya.
    */
   potonganBpjs?: number;
+  potonganBpjsKesehatan?: number;
+  potonganBpjsKetenagakerjaan?: number;
+  /**
+   * Rekening perusahaan yang membayar, disalin dari data karyawan saat
+   * disusun dan boleh diubah per periode (client A9, 10 Okt 2026).
+   */
+  rekeningPembayar?: string;
   catatan: string;
 
   /* --- hasil hitung --- */

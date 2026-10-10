@@ -70,12 +70,27 @@ cek("isian manual tetap", [ulang.lembur, ulang.uangKerajinan, ulang.potonganBon,
 console.log("\n== Potongan BPJS ==");
 const bpjs = susunItemBulanan({ bulan: "2026-09", rekap, gaji: riwayat[1], bon: undefined, iuranBpjs: 150_000 });
 cek("terisi otomatis dari iuran karyawan", bpjs.potonganBpjs, 150_000);
+// Dipisah (client A6, 10 Okt 2026): iuran lama yang belum dipisah dibaca sebagai Ketenagakerjaan.
+cek("iuran lama = Ketenagakerjaan, Kesehatan nol", [bpjs.potonganBpjsKesehatan, bpjs.potonganBpjsKetenagakerjaan], [0, 150_000]);
+const bpjs2 = susunItemBulanan({ bulan: "2026-09", rekap, gaji: riwayat[1], bon: undefined, iuranBpjsKesehatan: 50_000, iuranBpjsKetenagakerjaan: 120_000 });
+cek("dua iuran dipotong keduanya, total = jumlahnya", [bpjs2.potonganBpjsKesehatan, bpjs2.potonganBpjsKetenagakerjaan, bpjs2.potonganBpjs], [50_000, 120_000, 170_000]);
+cek("iuran terpisah mengalahkan iuran lama", susunItemBulanan({ bulan: "2026-09", rekap, gaji: riwayat[1], bon: undefined, iuranBpjs: 150_000, iuranBpjsKetenagakerjaan: 120_000 }).potonganBpjs, 120_000);
+cek("koreksi salah satu mengubah total", hitungAngka({ ...bpjs2, potonganBpjsKesehatan: 0 }).potonganBpjs, 120_000);
+cek("baris lama tanpa pemisahan: total tetap dipakai", hitungAngka({ ...bpjs2, potonganBpjsKesehatan: undefined, potonganBpjsKetenagakerjaan: undefined, potonganBpjs: 99_000 }).potonganBpjs, 99_000);
+cek("hitung ulang baris lama: koreksi total dibawa ke Ketenagakerjaan", susunItemBulanan({ bulan: "2026-09", rekap, gaji: riwayat[1], bon: undefined, iuranBpjsKesehatan: 50_000, lama: { potonganBpjs: 100_000 } }).potonganBpjsKetenagakerjaan, 100_000);
+cek("hitung ulang mempertahankan koreksi terpisah", susunItemBulanan({ bulan: "2026-09", rekap, gaji: riwayat[1], bon: undefined, iuranBpjsKesehatan: 50_000, lama: { potonganBpjsKesehatan: 10_000, potonganBpjsKetenagakerjaan: 0 } }).potonganBpjs, 10_000);
 cek("masuk total potongan", bpjs.totalPotongan, 105_000 + 360_000 + 150_000);
 cek("mengurangi gaji diterima", bpjs.bersih, 4_500_000 - 105_000 - 360_000 - 150_000);
 cek("tanpa iuran berarti nol", susunItemBulanan({ bulan: "2026-09", rekap, gaji: riwayat[1], bon: undefined }).potonganBpjs, 0);
 cek("hitung ulang mempertahankan koreksi", susunItemBulanan({ bulan: "2026-09", rekap, gaji: riwayat[1], bon: undefined, iuranBpjs: 150_000, lama: { potonganBpjs: 100_000 } }).potonganBpjs, 100_000);
 cek("hitung ulang nol tetap nol, bukan diisi ulang", susunItemBulanan({ bulan: "2026-09", rekap, gaji: riwayat[1], bon: undefined, iuranBpjs: 150_000, lama: { potonganBpjs: 0 } }).potonganBpjs, 0);
-cek("minus jadi nol", hitungAngka({ ...bpjs, potonganBpjs: -1 }).potonganBpjs, 0);
+cek("minus jadi nol", hitungAngka({ ...bpjs, potonganBpjsKetenagakerjaan: -1 }).potonganBpjs, 0);
+
+console.log("\n== Rekening pembayar per periode (client A9, 10 Okt 2026) ==");
+const rek = susunItemBulanan({ bulan: "2026-09", rekap, gaji: riwayat[1], bon: undefined, rekeningPembayar: "ALLEGRO BANDUNG" });
+cek("disalin dari data karyawan saat disusun", rek.rekeningPembayar, "ALLEGRO BANDUNG");
+cek("hitung ulang mempertahankan rekening yang diubah di periode ini", susunItemBulanan({ bulan: "2026-09", rekap, gaji: riwayat[1], bon: undefined, rekeningPembayar: "ALLEGRO BANDUNG", lama: { rekeningPembayar: "BLU FINANCE" } }).rekeningPembayar, "BLU FINANCE");
+cek("tanpa rekening di data karyawan -> kosong", susunItemBulanan({ bulan: "2026-09", rekap, gaji: riwayat[1], bon: undefined }).rekeningPembayar, "");
 cek("bon mengalah pada BPJS saat gaji tipis", hitungAngka({ ...bpjs, gajiPokok: 300_000, potonganAlpa: 0, sisaBon: 1_000_000, potonganBon: 1_000_000 }).potonganBon, 300_000 - 105_000 - 150_000);
 
 console.log("\n== Potongan alpa dan lembur otomatis (client, 10 Okt 2026) ==");

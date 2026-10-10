@@ -221,6 +221,8 @@ export function hitungUpahKaryawan(opsi: {
       loanDeduction,
       otherDeduction: 0,
       netPay: grossPay - loanDeduction,
+      // Bawaan dari data karyawan; Finance boleh mengubahnya untuk periode ini saja.
+      rekeningPembayar: opsi.karyawan.rekeningPembayar || "",
       catatan: "",
     },
   };
