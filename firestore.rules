@@ -100,7 +100,7 @@ service cloud.firestore {
       return superProyek() || berperanProyek([
         'SUPER_ADMIN', 'DIREKSI', 'HEAD_ADMIN', 'PURCHASING',
         'ADMIN_PROYEK', 'ADMIN_DATA', 'PLANNER', 'QS', 'KOORDINATOR', 'PIC',
-        'STAF_LAPANGAN'
+        'STAF_LAPANGAN', 'LOGISTIK'
       ]);
     }
 
@@ -2075,6 +2075,88 @@ service cloud.firestore {
       allow create: if wargaProyek()
         && request.resource.data.aksi is string && request.resource.data.aksi.size() > 0
         && request.resource.data.koleksi is string && request.resource.data.koleksi.size() > 0
+        && request.resource.data.oleh == emailUser();
+      allow update, delete: if false;
+    }
+
+    // ================= [ADMIN PROYEK] Modul Aset & Alat — Tahap A =================
+    // Pengelola gudang = LOGISTIK (Logistik SPV, keputusan 10 Okt 2026), dengan
+    // Head Admin / Admin Proyek / Purchasing sebagai pengganti. KLIEN tidak pernah
+    // masuk sini karena semua hak di bawah memakai wargaProyek()/berperanProyek().
+    function pengelolaGudang() {
+      return superProyek() || berperanProyek(['SUPER_ADMIN','HEAD_ADMIN','LOGISTIK','ADMIN_PROYEK','PURCHASING']);
+    }
+
+    function asetSah() {
+      let d = request.resource.data;
+      return d.kode is string && d.kode.size() > 0
+        && d.nama is string && d.nama.size() > 0
+        && d.kategori is string && d.kategori.size() > 0
+        && d.jenis in ['UNIT','STOK','HABIS_PAKAI']
+        && d.kepemilikan in ['MILIK','SEWA']
+        && d.lokasiId is string && d.lokasiId.size() > 0
+        && d.status in ['TERSEDIA','DIPINJAM','SERVIS','RUSAK','HILANG','AFKIR']
+        && d.hargaBeli is number && d.hargaBeli >= 0
+        && d.jumlahTotal is number && d.jumlahTotal >= 0
+        // Foto boleh kosong; kalau diisi wajib dari Cloudinary.
+        && (d.get('fotoUrl', '') == '' || fotoCloudinary(d.fotoUrl));
+    }
+
+    // ---------- apAssets (master alat) ----------
+    match /apAssets/{asetId} {
+      allow read: if wargaProyek();
+
+      // Alat baru selalu TERSEDIA di gudang, belum dipegang siapa pun. Status
+      // lain hanya lahir lewat transaksi (Tahap B–D), bukan diketik di form.
+      allow create: if pengelolaGudang() && asetSah()
+        && request.resource.data.status == 'TERSEDIA'
+        && request.resource.data.get('projectCode', '') == ''
+        && request.resource.data.get('pemegangEmail', '') == '';
+
+      // Tahap A: pengelola gudang mengubah data master dan memindahkan antar
+      // gudang. Status, proyek, dan pemegang BEKU di sini — Tahap B membuka
+      // jalurnya bersama dokumen peminjaman supaya tiap perpindahan berjejak.
+      allow update: if pengelolaGudang() && asetSah()
+        && request.resource.data.status == resource.data.status
+        && request.resource.data.get('projectCode', '') == resource.data.get('projectCode', '')
+        && request.resource.data.get('pemegangEmail', '') == resource.data.get('pemegangEmail', '')
+        && request.resource.data.get('jumlahDiProyek', {}) == resource.data.get('jumlahDiProyek', {});
+
+      // Alat tidak dihapus; yang salah input dinonaktifkan lewat AFKIR (Tahap D).
+      // Sementara itu atasan boleh menghapus salah input yang belum pernah bergerak.
+      allow delete: if atasanProyek() && resource.data.status == 'TERSEDIA';
+    }
+
+    // ---------- apAssetLocations (gudang & sub-gudang) ----------
+    // ID dokumen = kode lokasi (GJKT, GJKT-A, GBDG). Tidak dihapus — alat lama
+    // masih menunjuk ke sini — cukup dinonaktifkan.
+    match /apAssetLocations/{lokasiId} {
+      allow read: if wargaProyek();
+      allow create, update: if (atasanProyek() || berperanProyek(['LOGISTIK']))
+        && request.resource.data.nama is string && request.resource.data.nama.size() > 0
+        && request.resource.data.induk is string
+        && request.resource.data.induk != lokasiId
+        && request.resource.data.aktif is bool;
+      allow delete: if false;
+    }
+
+    // ---------- apAssetCategories (kategori alat) ----------
+    match /apAssetCategories/{kategoriId} {
+      allow read: if wargaProyek();
+      allow create, update: if pengelolaGudang()
+        && request.resource.data.nama is string && request.resource.data.nama.size() > 0
+        && request.resource.data.aktif is bool;
+      allow delete: if false;
+    }
+
+    // ---------- apAssetLogs (buku mutasi alat) ----------
+    // Tambah-saja, seperti apAuditLog: dibuat bersama transaksinya atas nama
+    // pelakunya sendiri, tidak pernah diubah atau dihapus.
+    match /apAssetLogs/{logId} {
+      allow read: if wargaProyek();
+      allow create: if wargaProyek()
+        && request.resource.data.assetId is string && request.resource.data.assetId.size() > 0
+        && request.resource.data.jenis is string && request.resource.data.jenis.size() > 0
         && request.resource.data.oleh == emailUser();
       allow update, delete: if false;
     }
