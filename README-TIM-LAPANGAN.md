@@ -27,6 +27,38 @@ baca `employees` dan `attendance` yang `currentProjectId`/`projectId`-nya
 sama dengan penugasan pembaca. Query `projectId == X` dan `date == Y` tidak
 butuh composite index (dua kesamaan digabung Firestore sendiri).
 
+## Staf proyek mencatat absen tim seperti mandor
+
+Mandor biasanya vendor. Staf kantor yang ditugaskan ke proyek
+(`currentProjectId`, posisi bukan MANDOR/TUKANG/KENEK) kini bisa membuka menu
+**Absen tim** dan mencatat masuk, istirahat, lembur, dan pulang untuk semua
+pekerja lapangan di proyeknya, dengan foto dan GPS, persis seperti mandor.
+
+Yang dijaga supaya tidak menggeser data lain:
+- catatan tetap menyimpan `mandorId` milik mandor si pekerja (tim mandor dan
+  payroll mingguan tidak berubah), dan `recordedBy` berisi email staf;
+- rules `stafKantorProyek()` + `stafProyekMencatat()`: proyek harus proyek
+  penugasan staf, dan `mandorId` harus sama dengan `currentMandorId` pekerja;
+- mandor vendor yang punya akun tetap bisa mencatat sendiri; dokumen per
+  orang per hari mencegah dobel;
+- absen staf sendiri tetap lewat Absen saya (absen kantor di titik proyek).
+
+Hak "absen tim" sengaja diikat ke **penugasan proyek**, bukan ke peran
+MANDOR: peran MANDOR berarti pihak ketiga tanpa cuti/SP/slip, dan satu akun
+hanya punya satu peran.
+
+## Struktur sementara: atasan langsung
+
+Belum ada HRD. Semua staf diisi Atasan langsung = kode Reinaldo, dan atasan
+Reinaldo = Ko Freddy (Data Karyawan atau kolom Kode Atasan di impor Excel).
+Efeknya tanpa kode baru: Beranda Reinaldo menampilkan kehadiran dan
+pengajuan cuti seluruh staf.
+
+Langkah "Diketahui" pada izin pulang dipindah dari HR ke **atasan langsung**
+(bagian "Izin bawahan menunggu diketahui" di menu Izin pulang). Owner tetap
+yang menyetujui. Peran HR dibiarkan kosong sampai ada HRD; pekerjaan data
+kepegawaian dipegang Admin.
+
 ## Thumbnail KTP dan pembanding wajah di rincian absen
 
 Di **Absensi lapangan → Rincian** dan **Absensi kantor → Rincian**, foto KTP

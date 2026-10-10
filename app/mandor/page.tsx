@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { doc, getDoc } from "firebase/firestore";
 import Guard from "@/components/Guard";
 import Shell from "@/components/Shell";
 import FotoKaryawan from "@/components/FotoKaryawan";
@@ -9,7 +10,16 @@ import BadgeLokasi from "@/components/BadgeLokasi";
 import KameraBelakang from "@/components/KameraBelakang";
 import { Pesan } from "@/components/Field";
 import { useAuth } from "@/lib/auth";
-import { catatSesi, pantauAbsensiHarian, pantauTimMandor, semuaProyek } from "@/lib/data";
+import { dbClient } from "@/lib/firebase";
+import {
+  catatSesi,
+  pantauAbsensiHarian,
+  pantauAbsensiProyek,
+  pantauPekerjaProyek,
+  pantauTimMandor,
+  semuaProyek,
+} from "@/lib/data";
+import { posisiLapangan } from "@/lib/karyawan";
 import { FOLDER_ABSENSI, cloudinarySiap, unggahFoto } from "@/lib/cloudinary";
 import { jarakMeter } from "@/lib/lokasi";
 import {
@@ -54,35 +64,62 @@ function Isi() {
   const [mengirim, setMengirim] = useState(false);
   const [mencariLokasi, setMencariLokasi] = useState(false);
 
+  /** Dokumen karyawan saya sendiri; undefined = masih dimuat, null = tidak ada. */
+  const [sayaSendiri, setSayaSendiri] = useState<Employee | null | undefined>(undefined);
+
   useEffect(() => {
     if (!mandorId) {
+      setSayaSendiri(null);
       setMemuat(false);
       return;
     }
     semuaProyek().then(setProyek).catch(() => {});
-    const lepasTim = pantauTimMandor(
-      mandorId,
-      (d) => {
-        setTim(d);
-        setMemuat(false);
-      },
-      () => {
-        setSalah("Daftar tim tidak bisa dibaca. Pastikan Security Rules terbaru sudah di-publish.");
-        setMemuat(false);
-      }
-    );
-    const lepasAbsen = pantauAbsensiHarian(mandorId, tanggal, setAbsensi, () => {});
+    getDoc(doc(dbClient(), "employees", mandorId))
+      .then((s) => setSayaSendiri(s.exists() ? { id: s.id, ...(s.data() as Omit<Employee, "id">) } : null))
+      .catch(() => setSayaSendiri(null));
+  }, [mandorId]);
+
+  /**
+   * Mandor melihat timnya sendiri (currentMandorId). Staf kantor yang
+   * ditugaskan ke proyek melihat semua pekerja lapangan di proyek itu dan
+   * mencatat absen mereka dengan cara yang sama — mandor biasanya vendor,
+   * staf proyek adalah orang kantor yang mengawasi di lokasi (10 Okt 2026).
+   */
+  const modeStaf = Boolean(sayaSendiri && !posisiLapangan(sayaSendiri.position));
+  const proyekStaf = (modeStaf && sayaSendiri?.currentProjectId) || "";
+
+  useEffect(() => {
+    if (sayaSendiri === undefined) return;
+    if (!sayaSendiri || (modeStaf && !proyekStaf)) {
+      setMemuat(false);
+      return;
+    }
+    const gagal = () => {
+      setSalah("Daftar tim tidak bisa dibaca. Pastikan Security Rules terbaru sudah di-publish.");
+      setMemuat(false);
+    };
+    const terima = (d: Employee[]) => {
+      setTim(d);
+      setMemuat(false);
+    };
+    const lepasTim = modeStaf
+      ? pantauPekerjaProyek(proyekStaf, terima, gagal)
+      : pantauTimMandor(mandorId, terima, gagal);
+    const lepasAbsen = modeStaf
+      ? pantauAbsensiProyek(proyekStaf, tanggal, setAbsensi, () => {})
+      : pantauAbsensiHarian(mandorId, tanggal, setAbsensi, () => {});
     return () => {
       lepasTim();
       lepasAbsen();
     };
-  }, [mandorId, tanggal]);
+  }, [sayaSendiri, modeStaf, proyekStaf, mandorId, tanggal]);
 
-  const sayaSendiri = useMemo(() => tim.find((t) => t.id === mandorId), [tim, mandorId]);
   const proyekSaya = useMemo(
     () => proyek.find((p) => p.id === sayaSendiri?.currentProjectId) || null,
     [proyek, sayaSendiri]
   );
+  const petaNama = useMemo(() => new Map(tim.map((k) => [k.id, k.name])), [tim]);
+  const namaMandor = (k: Employee) => petaNama.get(k.currentMandorId || "") || k.currentMandorId || "-";
 
   /** Ambil lokasi segar tiap kali absen, jangan pakai yang lama. */
   const ambilTitik = useCallback((): Promise<TitikAbsen> => {
@@ -155,8 +192,12 @@ function Isi() {
       const nama = await catatSesi({
         karyawan: antrean.karyawan,
         projectId: proyekSaya.id,
-        sectionId: sayaSendiri.currentSectionId || "",
-        mandorId,
+        // Staf proyek: section dan mandor diambil dari si pekerja, supaya
+        // catatannya tetap di bawah mandornya. Mandor: seperti semula.
+        sectionId: modeStaf
+          ? antrean.karyawan.currentSectionId || ""
+          : sayaSendiri.currentSectionId || "",
+        mandorId: modeStaf ? antrean.karyawan.currentMandorId || antrean.karyawan.id : mandorId,
         jenis: antrean.jenis,
         titik: antrean.titik,
         photoUrl: foto.url,
@@ -186,7 +227,11 @@ function Isi() {
     return (
       <Pesan
         jenis="gagal"
-        isi="Anda belum ditugaskan ke proyek mana pun, atau proyeknya belum punya titik lokasi. Minta Admin memeriksa penugasan Anda."
+        isi={
+          modeStaf
+            ? "Halaman ini untuk mandor dan staf yang ditugaskan ke proyek. Anda belum ditugaskan ke proyek mana pun; minta Admin mengisi penugasan proyek di Data Karyawan."
+            : "Anda belum ditugaskan ke proyek mana pun, atau proyeknya belum punya titik lokasi. Minta Admin memeriksa penugasan Anda."
+        }
       />
     );
 
@@ -214,9 +259,12 @@ function Isi() {
           </span>
         </div>
         <p className="mt-3 text-xs text-muted">
-          Absen hanya bisa dicatat dalam radius {proyekSaya.attendanceRadiusMeter} meter dari titik
-          proyek, dan wajib berfoto. Anak buah yang punya akun juga bisa absen sendiri lewat menu Absen saya;
-          catatannya tetap muncul di sini. Tabel jam seluruh tim ada di{" "}
+          {modeStaf
+            ? "Anda staf yang ditugaskan ke proyek ini, jadi bisa mencatat absen pekerja lapangan seperti mandor. Catatannya tetap tercatat di bawah mandor masing-masing, dan nama Anda tersimpan sebagai pencatat. Absen Anda sendiri lewat menu Absen saya. "
+            : "Absen hanya bisa dicatat dalam radius " +
+              proyekSaya.attendanceRadiusMeter +
+              " meter dari titik proyek, dan wajib berfoto. Anak buah yang punya akun juga bisa absen sendiri lewat menu Absen saya; catatannya tetap muncul di sini. "}
+          Tabel jam seluruh tim ada di{" "}
           <Link href="/tim-lapangan" className="text-allegro-600 underline">
             Tim lapangan
           </Link>
@@ -271,7 +319,7 @@ function Isi() {
       <div className="kartu mt-4">
         <label className="block">
           <span className="mb-1 block text-sm font-medium text-ink">
-            Anak buah saya
+            {modeStaf ? "Pekerja lapangan di proyek ini" : "Anak buah saya"}
             <span className="ml-2 font-normal text-muted">{anakBuah.length} orang</span>
           </span>
           <select
@@ -282,14 +330,18 @@ function Isi() {
             <option value="">Tampilkan semua</option>
             {anakBuah.map((k) => (
               <option key={k.id} value={k.id}>
-                {k.name} · {k.position} · {absensi[k.id]?.status || "BELUM"}
+                {k.name} · {k.position}
+                {modeStaf && k.position !== "MANDOR" ? ` · mandor ${namaMandor(k)}` : ""} ·{" "}
+                {absensi[k.id]?.status || "BELUM"}
               </option>
             ))}
           </select>
         </label>
         {anakBuah.length === 0 && (
           <p className="mt-2 text-xs text-muted">
-            Belum ada tukang atau kenek yang ditugaskan di bawah Anda. Minta Admin memeriksa penugasannya.
+            {modeStaf
+              ? "Belum ada pekerja lapangan yang ditugaskan di proyek ini. Minta Admin memeriksa penugasannya."
+              : "Belum ada tukang atau kenek yang ditugaskan di bawah Anda. Minta Admin memeriksa penugasannya."}
           </p>
         )}
       </div>
@@ -311,6 +363,7 @@ function Isi() {
                     </p>
                     <p className="text-xs text-muted">
                       {k.employeeCode} · {k.position}
+                      {modeStaf && k.position !== "MANDOR" ? ` · mandor ${namaMandor(k)}` : ""}
                     </p>
                   </div>
                 </div>
@@ -379,8 +432,10 @@ function Isi() {
 
 export default function MandorDashboard() {
   return (
-    <Guard izinkan={["MANDOR"]}>
-      <Shell judul="Absensi Lapangan" keterangan="Absen diri sendiri dan anggota tim di lokasi proyek.">
+    // Dibuka untuk semua peran: staf yang ditugaskan ke proyek mencatat absen
+    // pekerja lapangan seperti mandor. Yang tidak ditugaskan diberi pesan.
+    <Guard izinkan={["ADMIN", "FINANCE", "MANDOR", "HR", "OWNER", "KARYAWAN"]}>
+      <Shell judul="Absensi Lapangan" keterangan="Mandor dan staf proyek mencatat absen pekerja lapangan di lokasi proyek.">
         <Isi />
       </Shell>
     </Guard>

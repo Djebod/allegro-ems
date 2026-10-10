@@ -4,7 +4,7 @@ rules_version = '2';
 //  FIRESTORE RULES GABUNGAN — Allegro Global Construction
 //
 //  Satu Firebase project dipakai dua aplikasi:
-//    1. ALLEGRO EMS      — absensi, payroll, HRIS   (Tahap 22: tim lapangan untuk staf proyek, KTP dibaca HR/Owner, mandor tanpa cuti/izin/SP)
+//    1. ALLEGRO EMS      — absensi, payroll, HRIS   (Tahap 22: staf proyek mencatat absen tim seperti mandor, KTP dibaca HR/Owner, mandor tanpa cuti/izin/SP, izin pulang diketahui atasan)
 //    2. ALLEGRO PROJECT  — admin proyek (Fase 1)    (blok ap* di bagian bawah)
 //
 //  Bagian EMS disalin apa adanya dari rules Tahap 22 (firestore.rules di repo allegro-ems).
@@ -583,6 +583,29 @@ service cloud.firestore {
         && d.projectId == k.get('currentProjectId', null);
     }
 
+    /**
+     * Staf kantor (bukan posisi lapangan) yang ditugaskan ke proyek boleh
+     * mencatat absen pekerja lapangan di proyek itu, sama seperti mandor
+     * (keputusan client 10 Okt 2026). Mandor biasanya vendor; staf proyek
+     * adalah orang kantor yang mengawasi di lokasi, posisinya di atas mandor.
+     */
+    function stafKantorProyek() {
+      return punyaProyekPenugasan()
+        && !(posisiKaryawan(karyawanSaya()) in ['MANDOR', 'TUKANG', 'KENEK']);
+    }
+
+    /**
+     * Catatan yang ditulis staf proyek: proyeknya harus proyek penugasan si
+     * staf, dan mandorId tetap mandor si pekerja — supaya tim mandor dan
+     * pengelompokan payroll tidak bergeser ke staf.
+     */
+    function stafProyekMencatat() {
+      let d = request.resource.data;
+      return stafKantorProyek()
+        && d.projectId == proyekPenugasanSaya()
+        && d.mandorId == get(/databases/$(database)/documents/employees/$(d.employeeId)).data.get('currentMandorId', null);
+    }
+
     /** Dokumen absensi lapangan baru: hari ini, semua sesinya berjam server. */
     function sesiLapanganBaruSah() {
       return tanggalHariIniWIB(request.resource.data.date)
@@ -638,6 +661,8 @@ service cloud.firestore {
             && (
               (isMandor() && request.resource.data.mandorId == profilSaya().employeeId)
               || absenDiriSendiri()
+              // Staf proyek mencatat untuk pekerja di proyeknya (10 Okt 2026).
+              || stafProyekMencatat()
             )
           )
         );
@@ -663,6 +688,9 @@ service cloud.firestore {
             && (
               (isMandor() && resource.data.mandorId == profilSaya().employeeId)
               || (sudahLogin() && resource.data.employeeId == karyawanSaya())
+              // Staf proyek menambah sesi pada catatan di proyeknya; mandorId
+              // sudah dijaga tidak berubah oleh syarat di atas.
+              || (stafKantorProyek() && resource.data.projectId == proyekPenugasanSaya())
             )
           )
         );
@@ -1116,8 +1144,11 @@ service cloud.firestore {
           && sesiTetapAtauBaru('keluar')
           && sesiTetapAtauBaru('kembali')
         ) || (
-          // HR: "Diketahui oleh", sekali saja.
-          (isHR() || isAdmin())
+          // "Diketahui oleh", sekali saja: atasan langsung si karyawan
+          // (atasanId disalin saat izin dibuat), atau HR/Admin sebagai
+          // cadangan. Belum ada HRD (10 Okt 2026); semua staf di bawah
+          // satu atasan, dan atasan itu di bawah Owner.
+          (isHR() || isAdmin() || (sudahLogin() && resource.data.atasanId == karyawanSaya()))
           && resource.data.diketahuiOleh == null
           && resource.data.status in ['MENUNGGU', 'DISETUJUI']
           && request.resource.data.diff(resource.data).affectedKeys()

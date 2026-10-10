@@ -34,7 +34,9 @@ export const MENU: GrupMenu[] = [
     item: [
       { label: "Beranda", href: "/beranda", peran: SEMUA },
       { label: "Absen saya", href: "/absen", peran: BUKAN_MANDOR },
-      { label: "Absen tim", href: "/mandor", peran: ["MANDOR"] },
+      // Mandor mencatat timnya; staf kantor yang ditugaskan ke proyek mencatat
+      // pekerja lapangan proyeknya dengan cara yang sama (10 Okt 2026).
+      { label: "Absen tim", href: "/mandor", peran: SEMUA },
       { label: "Cuti dan izin", href: "/cuti", peran: BUKAN_MANDOR },
       // Pengakuan lembur: diajukan sendiri (mandor juga untuk anak buahnya),
       // disetujui HR/Owner. Lembur tanpa ini tidak dibayar.

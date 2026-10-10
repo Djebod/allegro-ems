@@ -11,8 +11,11 @@ disesuaikan; alamatnya tetap `/izin-keluar` dan koleksinya tetap `izinKeluar`.
 
 1. **Karyawan** (menu *Izin pulang*): pilih keperluan **Dinas** atau
    **Pribadi**, tanggal, jam pulang rencana, dan alasan. Kirim.
-2. **HR** (menu *Kelola izin pulang*): tekan **Tandai diketahui** - pengganti
-   tanda tangan "Diketahui oleh".
+2. **Atasan langsung** (menu *Izin pulang*, bagian "Izin bawahan menunggu
+   diketahui"): tekan **Tandai diketahui** - pengganti tanda tangan
+   "Diketahui oleh". Belum ada HRD (10 Okt 2026), jadi langkah ini
+   dikerjakan atasan yang tercatat di kolom Atasan langsung; HR/Admin bisa
+   mewakili dari menu *Kelola izin pulang*.
 3. **Owner**: **Setujui** atau **Tolak** (tolak wajib beralasan) - pengganti
    "Disetujui oleh".
 4. Saat benar-benar pulang, karyawan menekan **Pulang sekarang**: swafoto dan
@@ -46,6 +49,7 @@ Koleksi `izinKeluar` (tidak berubah sejak Tahap 19, ditambah penolakan
 untuk mandor di Tahap 22):
 - karyawan membuat untuk dirinya sendiri (bukan posisi MANDOR), mencatat
   pulang sekali (tidak bisa ditimpa), dan membatalkan yang belum dipakai;
-- HR/Admin hanya bisa mengisi "diketahui", sekali;
+- atasan langsung (`atasanId`), HR, atau Admin hanya bisa mengisi
+  "diketahui", sekali;
 - Owner hanya bisa menyetujui/menolak yang masih menunggu;
 - tidak ada yang bisa menghapus.

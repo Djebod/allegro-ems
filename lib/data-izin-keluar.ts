@@ -34,6 +34,19 @@ export function pantauIzinSaya(employeeId: string, setData: (d: IzinKeluar[]) =>
   );
 }
 
+/**
+ * Izin milik bawahan langsung seorang atasan (atasanId disalin saat izin
+ * dibuat). Dipakai atasan untuk menandai "diketahui" — belum ada HRD
+ * (10 Okt 2026), jadi langkah itu dikerjakan atasan langsung.
+ */
+export function pantauIzinBawahan(atasanId: string, setData: (d: IzinKeluar[]) => void, gagal: () => void) {
+  return onSnapshot(
+    query(collection(dbClient(), KOLEKSI), where("atasanId", "==", atasanId)),
+    (snap) => setData(snap.docs.map((d) => keIzin(d.id, d.data())).sort(urutBaru)),
+    gagal
+  );
+}
+
 /** Semua izin dalam rentang tanggal, untuk HR/Owner. */
 export function pantauIzinRentang(
   dari: string,

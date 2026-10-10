@@ -140,7 +140,7 @@ function Isi() {
         <td className="max-w-[280px] truncate">{i.alasan}</td>
         <td className="whitespace-nowrap">{i.rencanaKeluar}</td>
         <td className="whitespace-nowrap">{i.keluar ? jamWIB(i.keluar.waktu) : "-"}</td>
-        <td className="whitespace-nowrap text-[11px]">{i.diketahuiOleh ? "✓ HR" : "—"}</td>
+        <td className="whitespace-nowrap text-[11px]">{i.diketahuiOleh ? `✓ ${i.diketahuiOleh}` : "—"}</td>
         <td>
           <span className={`label-status ${warnaKeadaan(k)}`}>{k}</span>
         </td>
@@ -168,7 +168,7 @@ function Isi() {
         <th>Alasan</th>
         <th>Rencana</th>
         <th>Pulang</th>
-        <th>HR</th>
+        <th>Diketahui</th>
         <th>Keadaan</th>
         <th></th>
       </tr>
@@ -269,7 +269,7 @@ function Isi() {
 
             <div className="rounded-lg border border-line p-3 text-sm">
               <p>
-                <b>Diketahui HR:</b> {izinBuka.diketahuiOleh || "belum"}
+                <b>Diketahui atasan:</b> {izinBuka.diketahuiOleh || "belum"}
               </p>
               <p>
                 <b>Keputusan Owner:</b>{" "}
@@ -285,9 +285,9 @@ function Isi() {
               <button
                 className="btn-utama w-full"
                 disabled={sibuk}
-                onClick={() => jalankan(() => ketahuiIzinKeluar(izinBuka, profile?.name || ""), "Izin ditandai sudah diketahui HR.")}
+                onClick={() => jalankan(() => ketahuiIzinKeluar(izinBuka, profile?.name || ""), "Izin ditandai sudah diketahui.")}
               >
-                Tandai diketahui (HR)
+                Tandai diketahui (mewakili atasan)
               </button>
             )}
 
@@ -338,7 +338,7 @@ export default function HalamanKelolaIzinKeluar() {
     <Guard izinkan={["ADMIN", "HR", "OWNER", "FINANCE"]}>
       <Shell
         judul="Kelola Izin Pulang"
-        keterangan="Izin pulang di luar jam kantor: HR menandai diketahui, Owner menyetujui. Jam pulang dicatat karyawan dengan swafoto dan GPS."
+        keterangan="Izin pulang di luar jam kantor: atasan langsung menandai diketahui, Owner menyetujui. Jam pulang dicatat karyawan dengan swafoto dan GPS."
         lebar
       >
         <Isi />

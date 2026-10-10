@@ -19,7 +19,7 @@ cek("teks durasi", [teksDurasi(45), teksDurasi(120), teksDurasi(135)], ["45 meni
 
 const dasar = { status: "MENUNGGU", diketahuiOleh: null, keluar: null, kembali: null } as any;
 cek("baru diajukan", keadaanIzin(dasar), "Menunggu");
-cek("sudah diketahui HR", keadaanIzin({ ...dasar, diketahuiOleh: "Firda" }), "Diketahui HR, menunggu Owner");
+cek("sudah diketahui atasan", keadaanIzin({ ...dasar, diketahuiOleh: "Reinaldo" }), "Diketahui atasan, menunggu Owner");
 cek("disetujui", keadaanIzin({ ...dasar, status: "DISETUJUI" }), "Disetujui");
 cek("sudah mencatat pulang", keadaanIzin({ ...dasar, keluar: {} }), "Sudah pulang");
 cek("pulang menang atas disetujui", keadaanIzin({ ...dasar, status: "DISETUJUI", keluar: {} }), "Sudah pulang");

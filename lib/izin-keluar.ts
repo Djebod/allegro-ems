@@ -44,7 +44,7 @@ export function keadaanIzin(i: Pick<IzinKeluar, "status" | "diketahuiOleh" | "ke
   if (i.kembali) return "Sudah kembali";
   if (i.keluar) return "Sudah pulang";
   if (i.status === "DISETUJUI") return "Disetujui";
-  return i.diketahuiOleh ? "Diketahui HR, menunggu Owner" : "Menunggu";
+  return i.diketahuiOleh ? "Diketahui atasan, menunggu Owner" : "Menunggu";
 }
 
 export function warnaKeadaan(t: string) {

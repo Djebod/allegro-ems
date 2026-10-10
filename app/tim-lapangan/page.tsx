@@ -184,7 +184,7 @@ function Isi() {
 
       <p className="mt-2 text-xs text-muted">
         Jam {tanggalPendek(tanggal)}. Jam tebal berwarna adalah jam setelah dikoreksi Admin.
-        {modeMandor && (
+        {(modeMandor || (saya?.currentProjectId && !pengelola)) && (
           <>
             {" "}
             Untuk mencatat absen, buka{" "}

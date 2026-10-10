@@ -14,7 +14,14 @@ import { jarakMeter } from "@/lib/lokasi";
 import { cloudinarySiap, unggahFoto } from "@/lib/cloudinary";
 import { tanggalHariIni, tanggalPendek } from "@/lib/absensi";
 import { NAMA_KEPERLUAN, keadaanIzin, teksDurasi, warnaKeadaan } from "@/lib/izin-keluar";
-import { ajukanIzinKeluar, batalkanIzinKeluar, catatSesiIzin, pantauIzinSaya } from "@/lib/data-izin-keluar";
+import {
+  ajukanIzinKeluar,
+  batalkanIzinKeluar,
+  catatSesiIzin,
+  ketahuiIzinKeluar,
+  pantauIzinBawahan,
+  pantauIzinSaya,
+} from "@/lib/data-izin-keluar";
 import { cetakFormIzinKeluar } from "@/lib/cetak-izin-keluar";
 import type { Employee, IzinKeluar, Kantor, KeperluanIzinKeluar, SesiIzinKeluar } from "@/types";
 
@@ -30,6 +37,9 @@ function Isi() {
   const [karyawan, setKaryawan] = useState<Employee | null>(null);
   const [kantor, setKantor] = useState<Kantor[]>([]);
   const [daftar, setDaftar] = useState<IzinKeluar[] | null>(null);
+  /** Izin bawahan langsung yang masih perlu ditandai "diketahui" oleh saya. */
+  const [bawahan, setBawahan] = useState<IzinKeluar[]>([]);
+  const [menandai, setMenandai] = useState<string | null>(null);
   const [salah, setSalah] = useState<string | null>(null);
   const [pesan, setPesan] = useState<string | null>(null);
 
@@ -51,11 +61,33 @@ function Isi() {
       .then((s) => s.exists() && setKaryawan({ id: s.id, ...(s.data() as Omit<Employee, "id">) }))
       .catch(() => {});
     semuaKantor().then(setKantor).catch(() => {});
-    return pantauIzinSaya(employeeId, setDaftar, () => {
+    const lepasSaya = pantauIzinSaya(employeeId, setDaftar, () => {
       setSalah("Data izin tidak bisa dibaca. Pastikan Security Rules terbaru sudah di-publish.");
       setDaftar([]);
     });
+    const lepasBawahan = pantauIzinBawahan(
+      employeeId,
+      (d) => setBawahan(d.filter((i) => !i.diketahuiOleh && (i.status === "MENUNGGU" || i.status === "DISETUJUI"))),
+      () => setBawahan([])
+    );
+    return () => {
+      lepasSaya();
+      lepasBawahan();
+    };
   }, [employeeId]);
+
+  async function tandaiDiketahui(izin: IzinKeluar) {
+    setMenandai(izin.id);
+    setSalah(null);
+    try {
+      await ketahuiIzinKeluar(izin, profile?.name || profile?.email || "");
+      setPesan(`Izin ${izin.employeeName} ditandai diketahui. Keputusan selanjutnya di Owner.`);
+    } catch (e) {
+      setSalah(e instanceof Error ? e.message : "Gagal menandai.");
+    } finally {
+      setMenandai(null);
+    }
+  }
 
   async function kirim() {
     if (!karyawan) return;
@@ -187,13 +219,45 @@ function Isi() {
           {mengirim ? "Mengirim…" : "Kirim izin"}
         </button>
         <p className="mt-3 text-xs text-muted">
-          Izin diketahui HR dan disetujui Owner di aplikasi. Saat benar-benar pulang, tekan <b>Pulang sekarang</b>:
-          jam, swafoto, dan lokasi tercatat sebagai bukti.
+          Izin diketahui atasan langsung dan disetujui Owner di aplikasi. Saat benar-benar pulang, tekan{" "}
+          <b>Pulang sekarang</b>: jam, swafoto, dan lokasi tercatat sebagai bukti.
         </p>
       </div>
 
       {(salah || pesan) && (
         <div className="mt-4">{salah ? <Pesan jenis="gagal" isi={salah} /> : <Pesan jenis="berhasil" isi={pesan!} />}</div>
+      )}
+
+      {/* Hanya tampil bagi yang tercatat sebagai atasan langsung seseorang. */}
+      {bawahan.length > 0 && (
+        <div className="mt-6">
+          <p className="mb-2 text-sm font-semibold text-ink">
+            Izin bawahan menunggu diketahui
+            <span className="label-status ml-2 bg-kuning-400/40 text-allegro-800">{bawahan.length}</span>
+          </p>
+          <div className="space-y-3">
+            {bawahan.map((i) => (
+              <div key={i.id} className="kartu border-kuning-500">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <p className="font-semibold text-ink">
+                      {i.employeeName} · {tanggalPendek(i.tanggal)} · {NAMA_KEPERLUAN[i.keperluan]}
+                    </p>
+                    <p className="text-sm text-muted">
+                      Rencana pulang {i.rencanaKeluar} · {i.alasan}
+                    </p>
+                  </div>
+                  <button className="btn-utama" disabled={menandai === i.id} onClick={() => tandaiDiketahui(i)}>
+                    {menandai === i.id ? "Menyimpan…" : "Tandai diketahui"}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="mt-2 text-xs text-muted">
+            Menandai diketahui bukan menyetujui. Yang menyetujui atau menolak tetap Owner.
+          </p>
+        </div>
       )}
 
       {/* Daftar */}
@@ -243,7 +307,7 @@ function Isi() {
                 </div>
 
                 <p className="mt-2 text-[11px] text-muted">
-                  Diketahui HR: {i.diketahuiOleh || "belum"} · Disetujui Owner:{" "}
+                  Diketahui atasan: {i.diketahuiOleh || "belum"} · Disetujui Owner:{" "}
                   {i.status === "DISETUJUI" ? i.diputuskanOleh : i.status === "DITOLAK" ? `ditolak (${i.catatanKeputusan})` : "belum"}
                 </p>
 
