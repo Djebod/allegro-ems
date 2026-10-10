@@ -845,6 +845,13 @@ export interface ItemPayrollBulanan {
    */
   lemburOtomatis?: number;
   potonganAlpaOtomatis?: number;
+  /**
+   * Uang rajin tetap diisi Owner (client A3, 10 Okt 2026); sistem hanya
+   * menandai layak atau tidak: gugur bila ada telat, alpa, izin, sakit,
+   * atau cuti bulan itu. `penggugurUangRajin` menyebut sebabnya.
+   */
+  layakUangRajin?: boolean;
+  penggugurUangRajin?: string[];
 
   /* --- terisi otomatis, masih bisa dikoreksi --- */
   /** Bonus bulanan: berbeda tiap bulan, jadi diisi manual. */

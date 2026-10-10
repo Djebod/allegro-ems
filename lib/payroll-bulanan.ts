@@ -47,6 +47,24 @@ export function upahSehariStaf(gajiPokok: number, hariKerja: number): number {
 }
 
 /**
+ * Uang rajin tetap diisi Owner secara manual (client A3, 10 Okt 2026); sistem
+ * hanya menandai layak atau tidak. Gugur bila ada telat (termasuk yang
+ * berizin - "tidak ada telat" dibaca apa adanya), alpa, izin, sakit, atau
+ * cuti. Dinas luar tidak menggugurkan karena tetap bekerja.
+ */
+export function periksaUangRajin(
+  r: Pick<BarisRekap, "terlambatKali" | "alpa" | "izin" | "sakit" | "cuti"> & Partial<BarisRekap>
+): { layak: boolean; penggugur: string[] } {
+  const penggugur: string[] = [];
+  if (r.terlambatKali > 0) penggugur.push(`telat ${r.terlambatKali} kali`);
+  if (r.alpa > 0) penggugur.push(`alpa ${r.alpa} hari`);
+  if (r.izin > 0) penggugur.push(`izin ${r.izin} hari`);
+  if (r.sakit > 0) penggugur.push(`sakit ${r.sakit} hari`);
+  if (r.cuti > 0) penggugur.push(`cuti ${r.cuti} hari`);
+  return { layak: penggugur.length === 0, penggugur };
+}
+
+/**
  * Memilih antara angka otomatis baru dan isian lama saat hitung ulang:
  *  - belum pernah ada isian           -> otomatis baru
  *  - isian masih sama dengan otomatis
@@ -197,6 +215,7 @@ export function susunItemBulanan(opsi: {
   const lemburOtomatis = Math.round(lemburJam * tarifLembur);
   const potonganAlpaOtomatis = Math.round(r.alpa * upahSehari);
   const lembur = opsi.tanpaLembur ? 0 : pakaiKoreksi(lama.lembur, lama.lemburOtomatis, lemburOtomatis);
+  const uangRajin = periksaUangRajin(r);
 
   return hitungAngka({
     employeeId: r.employeeId,
@@ -226,6 +245,8 @@ export function susunItemBulanan(opsi: {
     lemburJam,
     lemburOtomatis,
     potonganAlpaOtomatis,
+    layakUangRajin: uangRajin.layak,
+    penggugurUangRajin: uangRajin.penggugur,
 
     bonus: lama.bonus ?? 0,
     lembur,
@@ -254,6 +275,9 @@ export function peringatanItem(i: ItemBaru): string[] {
   const p: string[] = [];
   if (i.gajiPokok <= 0) p.push("Gaji pokok belum diisi");
   if (i.alpa > 0 && i.potonganAlpa === 0) p.push(`${i.alpa} hari alpa, tetapi potongan alpa nol`);
+  if (i.uangKerajinan > 0 && i.layakUangRajin === false) {
+    p.push(`Uang kerajinan diisi padahal ${(i.penggugurUangRajin || []).join(", ")}`);
+  }
   if (i.bersih < 0) p.push("Potongan melebihi gaji");
   if (i.capaiSp) p.push("Skor telat mencapai SP 1");
   if (i.tidakAbsenPulang > 0) p.push(`${i.tidakAbsenPulang} hari tidak absen pulang`);

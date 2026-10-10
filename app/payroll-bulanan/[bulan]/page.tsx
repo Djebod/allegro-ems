@@ -571,7 +571,19 @@ function Isi({ bulan }: { bulan: string }) {
               <Field label="Bonus bulanan">
                 <IsianRupiah nilai={isian.bonus || 0} ubah={set("bonus")} mati={!bisaUbah} />
               </Field>
-              <Field label="Uang kerajinan" bantuan={adalahOwner ? undefined : "Hanya Owner yang bisa mengisi"}>
+              <Field
+                label="Uang kerajinan"
+                bantuan={[
+                  adalahOwner ? "" : "Hanya Owner yang bisa mengisi",
+                  ubah.layakUangRajin === true
+                    ? "Layak: tidak ada telat, alpa, izin, sakit, maupun cuti bulan ini"
+                    : ubah.layakUangRajin === false
+                      ? `Tidak layak: ${(ubah.penggugurUangRajin || []).join(", ")}`
+                      : "",
+                ]
+                  .filter(Boolean)
+                  .join(" · ") || undefined}
+              >
                 <IsianRupiah nilai={isian.uangKerajinan} ubah={set("uangKerajinan")} mati={!bisaUbah || !adalahOwner} />
               </Field>
               <Field

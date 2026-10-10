@@ -1,4 +1,4 @@
-import { gajiUntukBulan, hariKerjaBulan, hitungAngka, hitungTunjangan, peringatanItem, susunItemBulanan, upahSehariStaf, usulanPotonganBon } from "@/lib/payroll-bulanan";
+import { gajiUntukBulan, hariKerjaBulan, hitungAngka, hitungTunjangan, periksaUangRajin, peringatanItem, susunItemBulanan, upahSehariStaf, usulanPotonganBon } from "@/lib/payroll-bulanan";
 import type { BarisRekap } from "@/lib/rekap-kantor";
 import type { EmployeeLoan, GajiBulanan } from "@/types";
 
@@ -106,7 +106,23 @@ cek("hitung ulang: sudah dikoreksi -> koreksi dipertahankan", [koreksi.lembur, k
 cek("  angka otomatis terbaru tetap dicatat", [koreksi.lemburOtomatis, koreksi.potonganAlpaOtomatis], [240_000, 360_000]);
 cek("payroll lama tanpa penanda otomatis: isian dianggap manual", susunItemBulanan({ ...dasarOto, jamLembur: 8, lama: { lembur: 300_000 } }).lembur, 300_000);
 
+console.log("\n== Uang rajin (client A3, 10 Okt 2026): manual, sistem menandai layak/tidak ==");
+const rajin: BarisRekap = { ...rekap, terlambatKali: 0, terlambatMenit: 0, alpa: 0, izin: 0, sakit: 0, cuti: 0, dinas: 2 };
+cek("tanpa telat/alpa/izin/sakit/cuti -> layak, dinas tidak menggugurkan", periksaUangRajin(rajin), { layak: true, penggugur: [] });
+cek("telat menggugurkan", periksaUangRajin({ ...rajin, terlambatKali: 1, terlambatMenit: 5 }), { layak: false, penggugur: ["telat 1 kali"] });
+cek("alpa menggugurkan", periksaUangRajin({ ...rajin, alpa: 1 }).penggugur, ["alpa 1 hari"]);
+cek("izin menggugurkan", periksaUangRajin({ ...rajin, izin: 1 }).penggugur, ["izin 1 hari"]);
+cek("sakit menggugurkan", periksaUangRajin({ ...rajin, sakit: 2 }).penggugur, ["sakit 2 hari"]);
+cek("cuti menggugurkan", periksaUangRajin({ ...rajin, cuti: 1 }).penggugur, ["cuti 1 hari"]);
+cek("semua penggugur disebut", periksaUangRajin(rekap).penggugur, ["telat 3 kali", "alpa 2 hari", "cuti 1 hari"]);
+const itemRajin = susunItemBulanan({ bulan: "2026-09", rekap: rajin, gaji: riwayat[1], bon: undefined });
+cek("penanda tersimpan di baris payroll", [itemRajin.layakUangRajin, itemRajin.penggugurUangRajin], [true, []]);
+cek("penanda tidak layak tersimpan", [item.layakUangRajin, item.penggugurUangRajin], [false, ["telat 3 kali", "alpa 2 hari", "cuti 1 hari"]]);
+cek("uang rajin tetap nol sampai diisi Owner", itemRajin.uangKerajinan, 0);
+
 console.log("\n== Peringatan ==");
+cek("uang rajin diisi padahal tidak layak", peringatanItem({ ...item, uangKerajinan: 100_000 }).includes("Uang kerajinan diisi padahal telat 3 kali, alpa 2 hari, cuti 1 hari"), true);
+cek("uang rajin diisi dan layak -> tidak diperingatkan", peringatanItem({ ...itemRajin, uangKerajinan: 100_000 }).some((p) => p.includes("kerajinan")), false);
 cek("alpa tetapi potongan nol", peringatanItem({ ...item, potonganAlpa: 0 }).includes("2 hari alpa, tetapi potongan alpa nol"), true);
 cek("alpa dengan potongan otomatis tidak diperingatkan", peringatanItem(item).some((p) => p.includes("alpa")), false);
 cek("gaji kosong", peringatanItem({ ...item, gajiPokok: 0 }).includes("Gaji pokok belum diisi"), true);
