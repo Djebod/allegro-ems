@@ -73,6 +73,13 @@ function Isi() {
     [karyawan, saldo]
   );
 
+  // Tahap "Diketahui" milik atasan langsung; HR/Admin hanya cadangan
+  // (belum ada HRD, 10 Okt 2026). Owner tidak bisa melompatinya.
+  const bolehCadangan = profile?.role === "HR" || profile?.role === "ADMIN";
+  const [tandaiJuga, setTandaiJuga] = useState(false);
+  const sudahDiketahui = !!putus?.diketahuiOleh;
+  const bolehSetujui = sudahDiketahui || (bolehCadangan && tandaiJuga);
+
   async function simpanKeputusan(status: "DISETUJUI" | "DITOLAK") {
     if (!putus) return;
     setSibuk(true);
@@ -83,9 +90,11 @@ function Isi() {
         status,
         catatan: catatan.trim(),
         oleh: profile?.email || "",
+        tandaiDiketahuiJuga: bolehCadangan && tandaiJuga,
       });
       setPutus(null);
       setCatatan("");
+      setTandaiJuga(false);
       setPesan(
         status === "DISETUJUI"
           ? "Pengajuan disetujui. Saldo cuti sudah dipotong bila jenisnya memotong."
@@ -206,10 +215,15 @@ function Isi() {
                     </td>
                     <td>
                       <span className={`label-status ${warnaStatus(p.status)}`}>{p.status}</span>
+                      {p.status === "DIAJUKAN" && (
+                        <p className="mt-1 text-[10px] text-muted">
+                          {p.diketahuiOleh ? `diketahui ${p.diketahuiOleh}` : "belum diketahui atasan"}
+                        </p>
+                      )}
                     </td>
                     <td className="whitespace-nowrap text-right">
                       {p.status === "DIAJUKAN" && (
-                        <button className="btn-kuning" onClick={() => setPutus(p)}>
+                        <button className="btn-kuning" onClick={() => { setPutus(p); setTandaiJuga(false); }}>
                           Putuskan
                         </button>
                       )}
@@ -355,6 +369,24 @@ function Isi() {
               </p>
             )}
 
+            {sudahDiketahui ? (
+              <p className="text-xs text-muted">Diketahui oleh {putus.diketahuiOleh}.</p>
+            ) : (
+              <div className="rounded-lg border border-kuning-500 bg-kuning-400/20 px-3 py-2 text-xs text-allegro-800">
+                <p>
+                  Belum ditandai diketahui oleh atasan langsung
+                  {putus.atasanId ? ` (${putus.atasanId})` : " - atasan belum diisi di Data Karyawan"}. Persetujuan
+                  adalah tahap kedua; menolak tetap bisa.
+                </p>
+                {bolehCadangan && (
+                  <label className="mt-2 flex items-start gap-2">
+                    <input type="checkbox" className="mt-0.5" checked={tandaiJuga} onChange={(e) => setTandaiJuga(e.target.checked)} />
+                    <span>Tandai diketahui sekarang sebagai cadangan HR/Admin, lalu setujui</span>
+                  </label>
+                )}
+              </div>
+            )}
+
             <Field label="Catatan keputusan">
               <textarea
                 className="input-dasar"
@@ -367,7 +399,7 @@ function Isi() {
             <div className="flex gap-2">
               <button
                 className="btn-utama flex-1"
-                disabled={sibuk}
+                disabled={sibuk || !bolehSetujui}
                 onClick={() => simpanKeputusan("DISETUJUI")}
               >
                 Setujui

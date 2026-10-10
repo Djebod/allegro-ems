@@ -233,6 +233,7 @@ Dihitung per hari karena batas 8 jam berlaku per hari, dan tarif bisa berubah di
 | Cuti khusus | 1 hari per kejadian |
 | Setengah hari | tidak boleh |
 | Satu divisi satu orang | **peringatan**, bukan penolakan — ada pengecualian PIC proyek yang butuh penilaian manusia |
+| Persetujuan dua tahap (10 Okt 2026) | **Diketahui** atasan langsung (`atasanId`, dari menu Cuti dan izin; HR/Admin cadangan dari Kelola cuti dengan centang), baru **Disetujui** HR/Owner/Admin. Status tetap DIAJUKAN sampai diputuskan; tahap pertama hanya mengisi `diketahuiOleh`. Menolak boleh kapan saja. Rules menegakkan: `DISETUJUI` ditolak bila `diketahuiOleh` kosong, kecuali HR/Admin mengisinya sekaligus |
 | Izin meninggalkan kantor | maksimal 2 jam; lebih dari itu dihitung setengah hari |
 
 ### Surat peringatan
@@ -405,7 +406,7 @@ Daftar pertanyaan dijawab client pada presentasi 10 Okt 2026. Jawaban aslinya ad
 | B4 | Upah mingguan diproses Jumat, dibayar Sabtu | Tanggal bayar pada payroll mingguan |
 | B5 | **Borongan ikut sistem**: volume dari RAB diinput awal proyek, PIC lapangan mengisi progres volume harian, sistem hanya mengecek | Modul baru, terkait RAB di Allegro Project. Belum dirancang |
 | C2 | Cuti bersama: yang belum punya saldo cuti **ganti hari** (bukan potong cuti) | `lib/cuti.ts` |
-| C3, C8 | Persetujuan cuti **dua tahap**: Diketahui atasan langsung (`atasanId`), lalu Disetujui Ko Freddy. Semua atasan berhak di tahap pertama | `leaveRequests` status baru + rules; pola sama dengan izin pulang |
+| C3, C8 | Persetujuan cuti **dua tahap**: Diketahui atasan langsung (`atasanId`), lalu Disetujui Ko Freddy. Semua atasan berhak di tahap pertama | **Sudah dipasang** (10 Okt 2026): kolom `diketahuiOleh`/`diketahuiPada` di `leaveRequests` (status tidak berubah), `ketahuiPengajuan()` di `lib/data-cuti.ts`, bagian "Cuti dan izin bawahan menunggu diketahui" di menu Cuti dan izin; rules menolak DISETUJUI sebelum diketahui kecuali HR/Admin menandai dalam tulisan yang sama |
 | C5, C1 | Sisa cuti **diuangkan** tiap Desember, semua posisi berhak; **nominal per hari belum dijawab** | Menunggu nominal |
 | C6 | Sakit > 6 hari setahun = izin tanpa gaji | `lib/cuti.ts` |
 | C7 | Cuti melahirkan dibayar penuh (sudah). Cuti suami belum dijawab | Tidak ada perubahan |

@@ -15,6 +15,8 @@ import {
   ambilHariLibur,
   ambilSaldo,
   batalkanPengajuan,
+  ketahuiPengajuan,
+  pantauCutiBawahan,
   pantauPengajuan,
   pengajuanBeririsan,
 } from "@/lib/data-cuti";
@@ -66,6 +68,23 @@ function Isi() {
   const [peringatan, setPeringatan] = useState<string[]>([]);
   const berkas = useRef<HTMLInputElement>(null);
 
+  /** Pengajuan bawahan langsung yang masih perlu saya tandai "diketahui" (tahap 1 dari 2). */
+  const [bawahan, setBawahan] = useState<PengajuanCuti[]>([]);
+  const [menandai, setMenandai] = useState<string | null>(null);
+
+  async function tandaiDiketahui(p: PengajuanCuti) {
+    setMenandai(p.id);
+    setSalah(null);
+    try {
+      await ketahuiPengajuan(p, profile?.name || profile?.email || "");
+      setPesan(`Pengajuan ${p.employeeName} ditandai diketahui. Keputusan selanjutnya di HR/Owner.`);
+    } catch (e) {
+      setSalah(e instanceof Error ? e.message : "Gagal menandai.");
+    } finally {
+      setMenandai(null);
+    }
+  }
+
   useEffect(() => {
     if (!employeeId) {
       setMemuat(false);
@@ -79,7 +98,16 @@ function Isi() {
       setMemuat(false);
     })().catch(() => setMemuat(false));
 
-    return pantauPengajuan(setRiwayat, () => {}, employeeId);
+    const lepasRiwayat = pantauPengajuan(setRiwayat, () => {}, employeeId);
+    const lepasBawahan = pantauCutiBawahan(
+      employeeId,
+      (d) => setBawahan(d.filter((p) => p.status === "DIAJUKAN" && !p.diketahuiOleh)),
+      () => setBawahan([])
+    );
+    return () => {
+      lepasRiwayat();
+      lepasBawahan();
+    };
   }, [employeeId, tahun]);
 
   const aturan = JENIS_CUTI[jenis];
@@ -163,6 +191,7 @@ function Isi() {
         mendesak,
         status: "DIAJUKAN",
         diajukanOleh: profile?.email || "",
+        diketahuiOleh: null,
         diputuskanOleh: null,
         catatanKeputusan: "",
         saldoDipotong: false,
@@ -249,6 +278,39 @@ function Isi() {
         </ul>
       )}
 
+      {/* Hanya tampil bagi yang tercatat sebagai atasan langsung seseorang. */}
+      {bawahan.length > 0 && (
+        <div className="mb-6">
+          <p className="mb-2 text-sm font-semibold text-ink">
+            Cuti dan izin bawahan menunggu diketahui
+            <span className="label-status ml-2 bg-kuning-400/40 text-allegro-800">{bawahan.length}</span>
+          </p>
+          <div className="space-y-3">
+            {bawahan.map((p) => (
+              <div key={p.id} className="kartu border-kuning-500">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <p className="font-semibold text-ink">
+                      {p.employeeName} · {JENIS_CUTI[p.jenis]?.label || p.jenis} · {tanggalPendek(p.tanggalMulai)}
+                      {p.tanggalSelesai !== p.tanggalMulai && ` – ${tanggalPendek(p.tanggalSelesai)}`}
+                      {p.jumlahHari ? ` (${p.jumlahHari} hari)` : ""}
+                    </p>
+                    <p className="text-sm text-muted">{p.alasan}</p>
+                  </div>
+                  <button className="btn-utama" disabled={menandai === p.id} onClick={() => tandaiDiketahui(p)}>
+                    {menandai === p.id ? "Menyimpan…" : "Tandai diketahui"}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="mt-2 text-xs text-muted">
+            Menandai diketahui bukan menyetujui. Yang menyetujui atau menolak tetap HR/Owner, dan itu baru bisa
+            dilakukan setelah ditandai diketahui.
+          </p>
+        </div>
+      )}
+
       {riwayat.length === 0 ? (
         <div className="kartu text-center">
           <p className="text-sm text-muted">Belum ada pengajuan.</p>
@@ -284,6 +346,11 @@ function Isi() {
                   </td>
                   <td>
                     <span className={`label-status ${warnaStatus(p.status)}`}>{p.status}</span>
+                    {p.status === "DIAJUKAN" && (
+                      <p className="mt-1 text-[10px] text-muted">
+                        {p.diketahuiOleh ? `diketahui ${p.diketahuiOleh}` : "menunggu diketahui atasan"}
+                      </p>
+                    )}
                   </td>
                   <td className="max-w-[180px]">
                     <p className="truncate text-muted" title={p.catatanKeputusan}>

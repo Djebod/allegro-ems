@@ -200,15 +200,37 @@ export async function pengajuanBeririsan(
  * dikembalikan lagi kalau keputusannya dibatalkan — dijaga penanda
  * saldoDipotong supaya tidak terpotong atau kembali dua kali.
  */
+/**
+ * Tahap pertama, "Diketahui": atasan langsung si karyawan (atasanId disalin
+ * saat pengajuan dibuat), atau HR/Admin sebagai cadangan. Bukan persetujuan;
+ * keputusan tetap di tahap kedua.
+ */
+export async function ketahuiPengajuan(pengajuan: PengajuanCuti, oleh: string) {
+  await updateDoc(doc(dbClient(), "leaveRequests", pengajuan.id), {
+    diketahuiOleh: oleh,
+    diketahuiPada: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+}
+
 export async function putuskanPengajuan(opsi: {
   pengajuan: PengajuanCuti;
   status: Extract<StatusPengajuan, "DISETUJUI" | "DITOLAK">;
   catatan: string;
   oleh: string;
+  /** HR/Admin sebagai cadangan menandai "diketahui" sekaligus saat menyetujui. */
+  tandaiDiketahuiJuga?: boolean;
 }) {
   const db = dbClient();
   const aturan = JENIS_CUTI[opsi.pengajuan.jenis];
   const tahun = Number(opsi.pengajuan.tanggalMulai.slice(0, 4));
+
+  // Dua tahap (client C3, 10 Okt 2026): tidak bisa disetujui sebelum
+  // diketahui atasan langsung. Ditegakkan juga di Security Rules.
+  const sudahDiketahui = !!opsi.pengajuan.diketahuiOleh || !!opsi.tandaiDiketahuiJuga;
+  if (opsi.status === "DISETUJUI" && !sudahDiketahui) {
+    throw new Error("Pengajuan belum ditandai diketahui oleh atasan langsung. Minta atasannya menandai dulu dari menu Cuti dan izin.");
+  }
 
   let saldoDipotong = opsi.pengajuan.saldoDipotong;
 
@@ -239,6 +261,9 @@ export async function putuskanPengajuan(opsi: {
     diputuskanOleh: opsi.oleh,
     saldoDipotong,
     updatedAt: serverTimestamp(),
+    ...(opsi.tandaiDiketahuiJuga && !opsi.pengajuan.diketahuiOleh
+      ? { diketahuiOleh: opsi.oleh, diketahuiPada: serverTimestamp() }
+      : {}),
   });
 }
 

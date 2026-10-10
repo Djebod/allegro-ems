@@ -1183,16 +1183,33 @@ service cloud.firestore {
         && request.resource.data.status == 'DIAJUKAN'
         && request.resource.data.saldoDipotong == false;
 
-      // Keputusan hanya oleh HR/Owner/Admin. Pemiliknya sendiri hanya
-      // boleh membatalkan, bukan mengubah isinya.
+      // Dua tahap seperti formulir kertas (client C3, 10 Okt 2026):
+      // "Diketahui" oleh atasan langsung (HR/Admin cadangan), baru
+      // "Disetujui" oleh HR/Owner/Admin. Pemiliknya sendiri hanya boleh
+      // membatalkan, bukan mengubah isinya.
       allow update: if pengajuanSah()
         && request.resource.data.employeeId == resource.data.employeeId
         && request.resource.data.tanggalMulai == resource.data.tanggalMulai
         && request.resource.data.tanggalSelesai == resource.data.tanggalSelesai
         && request.resource.data.jumlahHari == resource.data.jumlahHari
         && (
-          urusKepegawaian()
-          || (
+          (
+            // Tahap 1: atasan langsung menandai diketahui, sekali saja, selagi menunggu.
+            (isHR() || isAdmin() || (sudahLogin() && resource.data.atasanId == karyawanSaya()))
+            && resource.data.get('diketahuiOleh', null) == null
+            && resource.data.status == 'DIAJUKAN'
+            && request.resource.data.diff(resource.data).affectedKeys()
+                 .hasOnly(['diketahuiOleh', 'diketahuiPada', 'updatedAt'])
+          ) || (
+            // Tahap 2: keputusan. DISETUJUI wajib sudah diketahui, kecuali
+            // HR/Admin menandainya sebagai cadangan dalam tulisan yang sama.
+            urusKepegawaian()
+            && (
+              request.resource.data.status != 'DISETUJUI'
+              || resource.data.get('diketahuiOleh', null) != null
+              || ((isHR() || isAdmin()) && request.resource.data.get('diketahuiOleh', null) != null)
+            )
+          ) || (
             resource.data.employeeId == karyawanSaya()
             && request.resource.data.status == 'DIBATALKAN'
           )

@@ -540,6 +540,13 @@ export interface PengajuanCuti {
 
   status: StatusPengajuan;
   diajukanOleh: string;
+  /**
+   * Dua tahap seperti formulir kertas (client C3, 10 Okt 2026): "Diketahui"
+   * oleh atasan langsung (atasanId; HR/Admin cadangan), baru "Disetujui"
+   * oleh HR/Owner/Admin. Kosong pada pengajuan lama.
+   */
+  diketahuiOleh?: string | null;
+  diketahuiPada?: unknown;
   diputuskanOleh?: string | null;
   catatanKeputusan?: string;
   /** Saldo sudah dipotong atau belum, supaya tidak terpotong dua kali. */
