@@ -266,7 +266,11 @@ service cloud.firestore {
     }
 
     match /sections/{sectionId} {
-      allow read: if pegawaiAktif();
+      // [ADMIN PROYEK] nama section dibutuhkan untuk mencatat uang transport
+      // PP staf per section (apTransportStaf). Hanya membaca, tidak menulis.
+      allow read: if pegawaiAktif()
+        || atasanProyek()
+        || berperanProyek(['ADMIN_PROYEK','ADMIN_DATA','QS','PLANNER']);
       allow create: if isAdmin() && sectionSah();
       allow update: if isAdmin() && sectionSah()
         && request.resource.data.code == resource.data.code
@@ -1911,6 +1915,16 @@ service cloud.firestore {
         && klaim.get('penerima', null) == resource.data.get('penerima', null)
         && klaim.diajukanOleh != emailUser();
     }
+    /** Sama seperti di atas, untuk transfer yang lahir saat catatan uang
+        transport PP staf (apTransportStaf) disetujui. */
+    function transferDariTransportSah() {
+      let tr = get(/databases/$(database)/documents/apTransportStaf/$(resource.data.refId)).data;
+      return resource.data.jenis == 'TRANSPORT'
+        && tr.status in ['DISETUJUI','DIBAYAR']
+        && tr.nominal == resource.data.nominal
+        && tr.get('penerima', null) == resource.data.get('penerima', null)
+        && tr.diajukanOleh != emailUser();
+    }
 
     match /apPaymentRequests/{transferId} {
       // Antrean transfer memuat rekening penerima. QS & Planner ikut membaca
@@ -1922,7 +1936,7 @@ service cloud.firestore {
         && request.resource.data.status == 'DIAJUKAN'
         && request.resource.data.nominal is number
         && request.resource.data.nominal > 0
-        && request.resource.data.jenis in ['NOTA','KONTRA_BON','GAJI','KLAIM','LAIN']
+        && request.resource.data.jenis in ['NOTA','KONTRA_BON','GAJI','KLAIM','TRANSPORT','LAIN']
         // Nama pengaju tidak bisa dipalsukan; dipakai untuk aturan
         // "pengaju tidak boleh menyetujui pengajuannya sendiri".
         && request.resource.data.diajukanOleh == emailUser();
@@ -1945,7 +1959,8 @@ service cloud.firestore {
           // disetujui — pengajunya memang si penyetuju klaim.
           && (request.resource.data.status != 'DISETUJUI'
               || resource.data.get('diajukanOleh', '') != emailUser()
-              || transferDariKlaimSah())
+              || (resource.data.jenis == 'KLAIM' && transferDariKlaimSah())
+              || (resource.data.jenis == 'TRANSPORT' && transferDariTransportSah()))
         ) || (
           // Upload bukti transfer setelah Direksi Finance mentransfer.
           kasir()
@@ -2427,6 +2442,107 @@ service cloud.firestore {
                   && request.resource.data.pindahKeId.size() > 0
                   && pinjamanSesudah(request.resource.data.pindahKeId).status == 'BERJALAN')
             ))
+        );
+
+      allow delete: if false;
+    }
+
+    // ---------- [ADMIN PROYEK] apTransportStaf (uang transport PP staf penugasan) ----------
+    // Satu orang, satu section proyek, SATU kali uang transport pulang-pergi.
+    // Kunci dokumen = <proyek>~<section>~<karyawan> (catatan utama) atau
+    // ...~<urutan> untuk perjalanan ke-2 dst. (pengecualian beralasan oleh atasan).
+    // Karena ID-nya ditentukan dari isi, Firestore sendiri yang menolak
+    // pencatatan kedua untuk orang & section yang sama — tanpa query.
+    function kunciTransport(d) {
+      return d.urutan == 1
+        ? d.projectCode + '~' + d.sectionId + '~' + d.employeeId
+        : d.projectCode + '~' + d.sectionId + '~' + d.employeeId + '~' + string(d.urutan);
+    }
+    function kunciTransportSebelumnya(d) {
+      return d.urutan == 2
+        ? d.projectCode + '~' + d.sectionId + '~' + d.employeeId
+        : d.projectCode + '~' + d.sectionId + '~' + d.employeeId + '~' + string(d.urutan - 1);
+    }
+    function transportSah(d) {
+      return d.projectCode is string && d.projectCode.size() > 0
+        && d.sectionId is string && d.sectionId.size() > 0
+        && d.employeeId is string && d.employeeId.size() > 0
+        && d.urutan is int && d.urutan >= 1
+        && d.nominal is number && d.nominal > 0
+        && d.caraBayar in ['TALANGAN','DIBELIKAN_KANTOR']
+        && (d.get('tiketPergiUrl', '') == '' || fotoCloudinary(d.tiketPergiUrl))
+        && (d.get('tiketPulangUrl', '') == '' || fotoCloudinary(d.tiketPulangUrl));
+    }
+    function pencatatTransport() {
+      return superProyek() || berperanProyek(['SUPER_ADMIN','HEAD_ADMIN','ADMIN_PROYEK','ADMIN_DATA']);
+    }
+    /** Nominal, tiket, cara bayar, rekening penerima, dan pengaju beku. */
+    function transportIntiTetap() {
+      return request.resource.data.nominal == resource.data.nominal
+        && request.resource.data.get('tiketPergiUrl', '') == resource.data.get('tiketPergiUrl', '')
+        && request.resource.data.get('tiketPulangUrl', '') == resource.data.get('tiketPulangUrl', '')
+        && request.resource.data.caraBayar == resource.data.caraBayar
+        && request.resource.data.get('penerima', null) == resource.data.get('penerima', null)
+        && request.resource.data.diajukanOleh == resource.data.diajukanOleh;
+    }
+
+    match /apTransportStaf/{transportId} {
+      // Memuat rekening pribadi staf; QS & Planner ikut membaca untuk laporan RAB vs realisasi.
+      allow read: if atasanProyek()
+        || berperanProyek(['ADMIN_PROYEK','ADMIN_DATA','QS','PLANNER']);
+
+      // Lahir DIAJUKAN atas nama pencatat, ID-nya wajib sama dengan kuncinya.
+      // Urutan ≥ 2 (perjalanan tambahan) hanya oleh Head Admin / Direksi, wajib
+      // beralasan, dan catatan sebelumnya harus sudah ada (berurutan).
+      allow create: if pencatatTransport()
+        && transportSah(request.resource.data)
+        && transportId == kunciTransport(request.resource.data)
+        && request.resource.data.status == 'DIAJUKAN'
+        && request.resource.data.diajukanOleh == emailUser()
+        && (request.resource.data.urutan == 1
+            || (atasanProyek()
+                && request.resource.data.alasanPengecualian is string
+                && request.resource.data.alasanPengecualian.size() > 0
+                && exists(/databases/$(database)/documents/apTransportStaf/$(kunciTransportSebelumnya(request.resource.data)))));
+
+      allow update: if transportSah(request.resource.data)
+        && request.resource.data.projectCode == resource.data.projectCode
+        && request.resource.data.sectionId == resource.data.sectionId
+        && request.resource.data.employeeId == resource.data.employeeId
+        && request.resource.data.urutan == resource.data.urutan
+        && (
+          // Diperbaiki setelah dikembalikan, atau dicatat ulang setelah dibatalkan:
+          // isinya boleh berubah, lahir lagi sebagai DIAJUKAN atas nama pengubah.
+          (pencatatTransport()
+            && resource.data.status in ['DIKEMBALIKAN','DIBATALKAN']
+            && request.resource.data.status == 'DIAJUKAN'
+            && request.resource.data.diajukanOleh == emailUser())
+          ||
+          (transportIntiTetap() && (
+            // Head Admin / Direksi menyetujui atau mengembalikan; tidak boleh
+            // menyetujui catatan yang dibuatnya sendiri (empat mata).
+            (atasanProyek()
+              && resource.data.status == 'DIAJUKAN'
+              && request.resource.data.status == 'DIKEMBALIKAN')
+            || (atasanProyek()
+              && resource.data.status == 'DIAJUKAN'
+              && request.resource.data.status == 'DISETUJUI'
+              && resource.data.diajukanOleh != emailUser())
+            // Tiket dibeli kantor: tidak ada transfer ke staf, langsung selesai.
+            || (atasanProyek()
+              && resource.data.status == 'DIAJUKAN'
+              && request.resource.data.status == 'DIBAYAR'
+              && resource.data.caraBayar == 'DIBELIKAN_KANTOR'
+              && resource.data.diajukanOleh != emailUser())
+            // Pencatat membatalkan sebelum disetujui (jatah bisa dipakai lagi).
+            || (pencatatTransport()
+              && resource.data.status in ['DIAJUKAN','DIKEMBALIKAN']
+              && request.resource.data.status == 'DIBATALKAN')
+            // Selesai dibayar (setelah transfernya dibayar) oleh kasir / atasan.
+            || ((kasir() || atasanProyek())
+              && resource.data.status == 'DISETUJUI'
+              && request.resource.data.status == 'DIBAYAR')
+          ))
         );
 
       allow delete: if false;
