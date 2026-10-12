@@ -9,7 +9,7 @@ import { Field, Pesan } from "@/components/Field";
 import TandaTangan from "@/components/TandaTangan";
 import BandingWajah from "@/components/BandingWajah";
 import { useAuth } from "@/lib/auth";
-import { ambilKtp } from "@/lib/data";
+import { ambilFotoProfil } from "@/lib/data";
 import { koreksiAbsenKantor, pantauAbsenKantor, pantauKoreksiKantor, putuskanAbsenLuar } from "@/lib/data-kantor";
 import { ISTIRAHAT_BAKU_MENIT, jamEfektifKantor, jamWIB, tambahMenit } from "@/lib/kantor";
 import { fotoKecil } from "@/lib/cloudinary";
@@ -102,26 +102,27 @@ function Isi() {
 
   const buka = useMemo(() => data.find((a) => a.id === rincian) || null, [data, rincian]);
 
-  // Foto KTP untuk mencocokkan wajah swafoto. Hanya Admin/HR/Owner yang boleh
-  // membacanya (employeePrivate); Finance melihat rincian tanpa KTP.
-  const bolehLihatKtp = profile?.role === "ADMIN" || profile?.role === "HR" || profile?.role === "OWNER";
-  const [ktp, setKtp] = useState<{ employeeId: string; url: string | null } | undefined>(undefined);
+  // Foto profil untuk mencocokkan wajah swafoto; bukan KTP, karena foto KTP
+  // sering bertahun-tahun lalu dan wajahnya sudah berubah. Pembanding hanya
+  // untuk Admin/HR/Owner yang memvalidasi; Finance melihat rincian tanpa itu.
+  const bolehBanding = profile?.role === "ADMIN" || profile?.role === "HR" || profile?.role === "OWNER";
+  const [foto, setFoto] = useState<{ employeeId: string; url: string | null } | undefined>(undefined);
   useEffect(() => {
     const id = buka?.employeeId;
-    if (!id || !bolehLihatKtp) {
-      setKtp(undefined);
+    if (!id || !bolehBanding) {
+      setFoto(undefined);
       return;
     }
     let batal = false;
-    setKtp(undefined);
-    ambilKtp(id)
-      .then((k) => !batal && setKtp({ employeeId: id, url: k?.ktpPhotoUrl || null }))
-      .catch(() => !batal && setKtp({ employeeId: id, url: null }));
+    setFoto(undefined);
+    ambilFotoProfil(id)
+      .then((url) => !batal && setFoto({ employeeId: id, url }))
+      .catch(() => !batal && setFoto({ employeeId: id, url: null }));
     return () => {
       batal = true;
     };
-  }, [buka?.employeeId, bolehLihatKtp]);
-  const fotoKtp = ktp && ktp.employeeId === buka?.employeeId ? ktp.url : undefined;
+  }, [buka?.employeeId, bolehBanding]);
+  const fotoProfil = foto && foto.employeeId === buka?.employeeId ? foto.url : undefined;
 
   const perluPeriksa = (a: AbsenKantor) =>
     a.perluValidasi || !a.pulang || (!!a.istirahatTerbuka && (!!a.pulang || a.date < tanggalHariIni()));
@@ -403,7 +404,7 @@ function Isi() {
                         </a>
                         <p className="mt-1 text-[10px] text-muted">Swafoto</p>
                       </div>
-                      {bolehLihatKtp && <BandingWajah fotoAbsen={ev.photoUrl} fotoKtp={fotoKtp} namaSesi={judul} />}
+                      {bolehBanding && <BandingWajah fotoAbsen={ev.photoUrl} fotoProfil={fotoProfil} namaSesi={judul} />}
                     </div>
                   )}
                 </div>

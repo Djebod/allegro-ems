@@ -15,7 +15,7 @@ type FaceApi = typeof import("@vladmandic/face-api/dist/face-api.esm.js");
 export const LOKASI_MODEL = "/model-wajah";
 /** Lebar gambar masukan pendeteksi, kelipatan 32. Lebih besar = lebih teliti, lebih lambat. */
 const UKURAN_MASUKAN = 416;
-/** Ambang keyakinan deteksi wajah; foto KTP buram butuh ambang rendah. */
+/** Ambang keyakinan deteksi wajah; foto profil yang gelap atau jauh butuh ambang rendah. */
 const AMBANG_DETEKSI = 0.3;
 
 let pemuatan: Promise<FaceApi> | null = null;
@@ -44,7 +44,7 @@ async function muatModul(): Promise<FaceApi> {
 /**
  * Tautan Cloudinary versi paling lebar 800 px tanpa dipotong. Foto asli
  * bisa beberapa MB; untuk mendeteksi wajah 800 px sudah cukup, dan f_jpg
- * menyamakan format (KTP kadang PNG).
+ * menyamakan format (foto profil kadang PNG).
  */
 function fotoUntukDeteksi(url: string): string {
   const tanda = "/upload/";
@@ -76,12 +76,12 @@ export function sidikWajah(url: string): Promise<Float32Array | null> {
   return p;
 }
 
-export type HasilBanding = { jarak: number } | { gagal: "ABSEN" | "KTP" };
+export type HasilBanding = { jarak: number } | { gagal: "ABSEN" | "PROFIL" };
 
-/** Membandingkan foto absen dengan foto KTP. Jarak kecil = mirip. */
-export async function bandingkanWajah(urlAbsen: string, urlKtp: string): Promise<HasilBanding> {
-  const [absen, ktp] = await Promise.all([sidikWajah(urlAbsen), sidikWajah(urlKtp)]);
-  if (!ktp) return { gagal: "KTP" };
+/** Membandingkan foto absen dengan foto profil karyawan. Jarak kecil = mirip. */
+export async function bandingkanWajah(urlAbsen: string, urlProfil: string): Promise<HasilBanding> {
+  const [absen, profil] = await Promise.all([sidikWajah(urlAbsen), sidikWajah(urlProfil)]);
+  if (!profil) return { gagal: "PROFIL" };
   if (!absen) return { gagal: "ABSEN" };
-  return { jarak: jarakSidik(absen, ktp) };
+  return { jarak: jarakSidik(absen, profil) };
 }

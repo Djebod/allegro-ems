@@ -7,18 +7,19 @@ import { bandingkanWajah } from "@/lib/banding-wajah";
 import { PANDUAN_KEMIRIPAN, tafsirKemiripan, teksJarak, warnaKemiripan, type TafsirKemiripan } from "@/lib/wajah";
 
 /**
- * Thumbnail KTP di sebelah foto absen, plus tombol pembanding wajah.
- * Hanya dipasang untuk yang boleh membaca employeePrivate (Admin/HR/Owner);
+ * Thumbnail foto profil karyawan di sebelah foto absen, plus tombol pembanding wajah.
+ * Dipakai foto profil, bukan KTP, karena foto KTP sering bertahun-tahun lalu dan
+ * wajahnya sudah jauh berubah (Bang Syam, 12 Okt 2026). Hanya untuk Admin/HR/Owner;
  * pemanggil yang memutuskan, komponen ini tidak membaca Firestore.
  */
 export default function BandingWajah({
   fotoAbsen,
-  fotoKtp,
+  fotoProfil,
   namaSesi,
 }: {
   fotoAbsen: string;
-  /** null = KTP belum diunggah; undefined = masih dimuat. */
-  fotoKtp: string | null | undefined;
+  /** null = foto profil belum diunggah; undefined = masih dimuat. */
+  fotoProfil: string | null | undefined;
   namaSesi: string;
 }) {
   const [sibuk, setSibuk] = useState(false);
@@ -26,16 +27,16 @@ export default function BandingWajah({
   const [salah, setSalah] = useState<string | null>(null);
 
   async function bandingkan() {
-    if (!fotoKtp) return;
+    if (!fotoProfil) return;
     setSibuk(true);
     setSalah(null);
     setHasil(null);
     try {
-      const h = await bandingkanWajah(fotoAbsen, fotoKtp);
+      const h = await bandingkanWajah(fotoAbsen, fotoProfil);
       if ("gagal" in h) {
         setSalah(
-          h.gagal === "KTP"
-            ? "Wajah di foto KTP tidak terdeteksi. Minta Admin mengunggah ulang foto KTP yang lebih jelas."
+          h.gagal === "PROFIL"
+            ? "Wajah di foto profil tidak terdeteksi. Minta karyawan mengganti foto profilnya dengan wajah yang jelas."
             : "Wajah di foto absen tidak terdeteksi. Bandingkan dengan mata sendiri."
         );
       } else {
@@ -56,19 +57,19 @@ export default function BandingWajah({
     <div className="flex min-w-0 flex-1 flex-col gap-2">
       <div className="flex items-start gap-3">
         <div className="shrink-0 text-center">
-          {fotoKtp === undefined ? (
+          {fotoProfil === undefined ? (
             <div className="grid h-20 w-20 place-items-center rounded-lg border border-dashed border-line text-[10px] text-muted">
               memuat…
             </div>
-          ) : fotoKtp === null ? (
+          ) : fotoProfil === null ? (
             <div className="grid h-20 w-20 place-items-center rounded-lg border border-dashed border-line px-1 text-center text-[10px] text-muted">
-              KTP belum diunggah
+              Foto profil belum ada
             </div>
           ) : (
-            <a href={fotoKtp} target="_blank" rel="noopener noreferrer">
+            <a href={fotoProfil} target="_blank" rel="noopener noreferrer">
               <Image
-                src={fotoKecil(fotoKtp, 160)}
-                alt={`Foto KTP untuk pembanding ${namaSesi}`}
+                src={fotoKecil(fotoProfil, 160)}
+                alt={`Foto profil untuk pembanding ${namaSesi}`}
                 width={80}
                 height={80}
                 className="h-20 w-20 rounded-lg border border-line object-cover"
@@ -76,11 +77,11 @@ export default function BandingWajah({
               />
             </a>
           )}
-          <p className="mt-1 text-[10px] text-muted">Foto KTP</p>
+          <p className="mt-1 text-[10px] text-muted">Foto profil</p>
         </div>
 
         <div className="min-w-0 flex-1 text-xs">
-          {fotoKtp ? (
+          {fotoProfil ? (
             <>
               <button className="btn-ringan" onClick={bandingkan} disabled={sibuk}>
                 {sibuk ? "Membandingkan…" : hasil || salah ? "Bandingkan ulang" : "Bandingkan wajah"}
@@ -109,8 +110,8 @@ export default function BandingWajah({
               {salah && <p className="mt-2 text-bahaya">{salah}</p>}
             </>
           ) : (
-            fotoKtp === null && (
-              <p className="text-muted">Unggah foto KTP di Data Karyawan supaya wajahnya bisa dibandingkan.</p>
+            fotoProfil === null && (
+              <p className="text-muted">Karyawan belum punya foto profil. Minta ia mengunggahnya dari Beranda → Data Pribadi supaya wajahnya bisa dibandingkan.</p>
             )
           )}
         </div>
@@ -133,8 +134,8 @@ export default function BandingWajah({
             </tbody>
           </table>
           <p className="mt-1">
-            Angka ini hitungan model di browser, bukan keputusan. Foto KTP yang buram atau lama bisa membuat orang
-            yang sama terbaca &quot;meragukan&quot;. Yang memutuskan tetap Admin yang menandatangani validasi.
+            Angka ini hitungan model di browser, bukan keputusan. Foto profil yang buram, gelap, atau diambil dari jauh bisa membuat
+            orang yang sama terbaca &quot;meragukan&quot;. Yang memutuskan tetap Admin yang menandatangani validasi.
           </p>
         </details>
       )}

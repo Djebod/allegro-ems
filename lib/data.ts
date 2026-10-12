@@ -323,6 +323,17 @@ export async function ambilKtp(employeeId: string): Promise<EmployeePrivate | nu
   return snap.exists() ? (snap.data() as EmployeePrivate) : null;
 }
 
+/**
+ * Foto profil karyawan untuk pembanding wajah; null bila belum diunggah.
+ * Dipakai menggantikan foto KTP (12 Okt 2026): KTP sering dibuat bertahun-tahun
+ * lalu, wajahnya sudah jauh berubah, sedangkan foto profil diunggah sendiri
+ * oleh karyawan dan lebih dekat ke wajah hari ini.
+ */
+export async function ambilFotoProfil(employeeId: string): Promise<string | null> {
+  const snap = await getDoc(doc(dbClient(), "employees", employeeId));
+  return snap.exists() ? ((snap.data() as Employee).profilePhotoUrl ?? null) : null;
+}
+
 export async function simpanKtp(employeeId: string, url: string, publicId: string) {
   await setDoc(doc(dbClient(), "employeePrivate", employeeId), {
     employeeId,

@@ -80,11 +80,13 @@ export const TOLERANSI_TELAT_MENIT: Record<string, number> = {
 export const DEFAULT_ATTENDANCE_RADIUS_METER = 1000;
 
 /**
- * Pembanding wajah foto absen dengan foto KTP (10 Okt 2026). Angkanya jarak
+ * Pembanding wajah foto absen dengan foto profil karyawan (10 Okt 2026;
+ * semula foto KTP, diganti 12 Okt 2026 karena wajah di KTP sering jauh
+ * berbeda akibat usia). Angkanya jarak
  * antara dua sidik wajah (128 angka) dari model face-api; semakin kecil
  * semakin mirip. 0,6 adalah ambang bawaan model untuk "orang yang sama";
  * dua batas di bawahnya hanya memperhalus panduan untuk Admin. Hasilnya
- * panduan, bukan keputusan: foto KTP sering buram, lama, dan berkilau.
+ * panduan, bukan keputusan: foto profil bisa buram, gelap, atau dari jauh.
  */
 export const BATAS_WAJAH_SANGAT_MIRIP = 0.4;
 export const BATAS_WAJAH_MIRIP = 0.5;

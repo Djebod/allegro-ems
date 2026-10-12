@@ -9,7 +9,7 @@ import BadgeLokasi from "@/components/BadgeLokasi";
 import FormValidasi from "@/components/FormValidasi";
 import BandingWajah from "@/components/BandingWajah";
 import { Pesan } from "@/components/Field";
-import { ambilKtp, pantauAbsensiRentang, pantauKoreksi, semuaProyek, semuaSection, simpanValidasi } from "@/lib/data";
+import { ambilFotoProfil, pantauAbsensiRentang, pantauKoreksi, semuaProyek, semuaSection, simpanValidasi } from "@/lib/data";
 import { eksporAbsensi } from "@/lib/ekspor";
 import { useAuth } from "@/lib/auth";
 import { fotoKecil } from "@/lib/cloudinary";
@@ -87,26 +87,27 @@ function Isi() {
     return pantauKoreksi(rincianId, setKoreksi, () => setKoreksi([]));
   }, [rincianId]);
 
-  // Foto KTP untuk mencocokkan wajah di foto absen. Hanya Admin/HR/Owner yang
-  // boleh membacanya (employeePrivate); Finance melihat rincian tanpa KTP.
-  const bolehLihatKtp = profile?.role === "ADMIN" || profile?.role === "HR" || profile?.role === "OWNER";
-  const [ktp, setKtp] = useState<{ employeeId: string; url: string | null } | undefined>(undefined);
+  // Foto profil untuk mencocokkan wajah di foto absen; bukan KTP, karena foto
+  // KTP sering bertahun-tahun lalu dan wajahnya sudah berubah. Pembanding hanya
+  // untuk Admin/HR/Owner yang memvalidasi; Finance melihat rincian tanpa itu.
+  const bolehBanding = profile?.role === "ADMIN" || profile?.role === "HR" || profile?.role === "OWNER";
+  const [foto, setFoto] = useState<{ employeeId: string; url: string | null } | undefined>(undefined);
   useEffect(() => {
     const id = rincian?.employeeId;
-    if (!id || !bolehLihatKtp) {
-      setKtp(undefined);
+    if (!id || !bolehBanding) {
+      setFoto(undefined);
       return;
     }
     let batal = false;
-    setKtp(undefined);
-    ambilKtp(id)
-      .then((k) => !batal && setKtp({ employeeId: id, url: k?.ktpPhotoUrl || null }))
-      .catch(() => !batal && setKtp({ employeeId: id, url: null }));
+    setFoto(undefined);
+    ambilFotoProfil(id)
+      .then((url) => !batal && setFoto({ employeeId: id, url }))
+      .catch(() => !batal && setFoto({ employeeId: id, url: null }));
     return () => {
       batal = true;
     };
-  }, [rincian?.employeeId, bolehLihatKtp]);
-  const fotoKtp = ktp && ktp.employeeId === rincian?.employeeId ? ktp.url : undefined;
+  }, [rincian?.employeeId, bolehBanding]);
+  const fotoProfil = foto && foto.employeeId === rincian?.employeeId ? foto.url : undefined;
 
   const terlihat = useMemo(
     () =>
@@ -379,8 +380,8 @@ function Isi() {
                         <p className="mt-1 text-[10px] text-muted">Foto absen</p>
                       </div>
                     )}
-                    {ev.photoUrl && bolehLihatKtp && (
-                      <BandingWajah fotoAbsen={ev.photoUrl} fotoKtp={fotoKtp} namaSesi={NAMA_SESI[jenis]} />
+                    {ev.photoUrl && bolehBanding && (
+                      <BandingWajah fotoAbsen={ev.photoUrl} fotoProfil={fotoProfil} namaSesi={NAMA_SESI[jenis]} />
                     )}
                     <div className="w-full text-xs text-muted">
                       <p>Dicatat oleh {ev.recordedBy}</p>
