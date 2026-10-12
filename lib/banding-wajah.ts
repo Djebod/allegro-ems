@@ -53,21 +53,50 @@ function fotoUntukDeteksi(url: string): string {
   return url.slice(0, i + tanda.length) + "c_limit,w_800,h_800,q_auto,f_jpg/" + url.slice(i + tanda.length);
 }
 
+/**
+ * Potongan wajah yang dibuat Cloudinary sendiri (g_face, pendeteksi wajah di
+ * server Cloudinary, termasuk paket gratis). Dipakai sebagai cadangan bila
+ * wajah di foto utuh terlalu kecil atau terlalu gelap untuk model di browser.
+ * Kalau Cloudinary pun tidak menemukan wajah, c_thumb memotong bagian tengah.
+ */
+function potonganWajahCloudinary(url: string): string | null {
+  const tanda = "/upload/";
+  const i = url.indexOf(tanda);
+  if (i === -1) return null;
+  return url.slice(0, i + tanda.length) + "c_thumb,g_face,z_0.7,w_480,h_480,q_auto,f_jpg/" + url.slice(i + tanda.length);
+}
+
+/** Tahapan deteksi, dari yang paling cepat ke yang paling gigih. */
+const TAHAP_DETEKSI = [
+  { ukuran: UKURAN_MASUKAN, ambang: AMBANG_DETEKSI },
+  { ukuran: 608, ambang: 0.2 },
+];
+
+async function deteksiDariGambar(api: FaceApi, gambar: HTMLImageElement): Promise<Float32Array | null> {
+  for (const t of TAHAP_DETEKSI) {
+    const hasil = await api
+      .detectSingleFace(gambar, new api.TinyFaceDetectorOptions({ inputSize: t.ukuran, scoreThreshold: t.ambang }))
+      .withFaceLandmarks(true)
+      .withFaceDescriptor();
+    if (hasil) return hasil.descriptor;
+  }
+  return null;
+}
+
 /** Sidik wajah (128 angka) dari satu foto; null bila tidak ada wajah terdeteksi. */
 export function sidikWajah(url: string): Promise<Float32Array | null> {
   let p = sidikTersimpan.get(url);
   if (!p) {
     p = (async () => {
       const api = await muatModul();
-      const gambar = await api.fetchImage(fotoUntukDeteksi(url));
-      const hasil = await api
-        .detectSingleFace(
-          gambar,
-          new api.TinyFaceDetectorOptions({ inputSize: UKURAN_MASUKAN, scoreThreshold: AMBANG_DETEKSI })
-        )
-        .withFaceLandmarks(true)
-        .withFaceDescriptor();
-      return hasil ? hasil.descriptor : null;
+      const utuh = await deteksiDariGambar(api, await api.fetchImage(fotoUntukDeteksi(url)));
+      if (utuh) return utuh;
+      // Cadangan: potongan wajah dari Cloudinary. Gagal mengambilnya bukan
+      // galat; hasilnya sama saja dengan "tidak terdeteksi".
+      const potongan = potonganWajahCloudinary(url);
+      if (!potongan) return null;
+      const gambar = await api.fetchImage(potongan).catch(() => null);
+      return gambar ? deteksiDariGambar(api, gambar) : null;
     })();
     sidikTersimpan.set(url, p);
     // Gagal jaringan jangan diingat; biarkan dicoba lagi.
@@ -76,12 +105,16 @@ export function sidikWajah(url: string): Promise<Float32Array | null> {
   return p;
 }
 
-export type HasilBanding = { jarak: number } | { gagal: "ABSEN" | "PROFIL" };
+export type FotoGagal = "ABSEN" | "PROFIL";
+/** `gagal` berisi semua foto yang wajahnya tidak terdeteksi, bisa keduanya. */
+export type HasilBanding = { jarak: number } | { gagal: FotoGagal[] };
 
 /** Membandingkan foto absen dengan foto profil karyawan. Jarak kecil = mirip. */
 export async function bandingkanWajah(urlAbsen: string, urlProfil: string): Promise<HasilBanding> {
   const [absen, profil] = await Promise.all([sidikWajah(urlAbsen), sidikWajah(urlProfil)]);
-  if (!profil) return { gagal: "PROFIL" };
-  if (!absen) return { gagal: "ABSEN" };
+  const gagal: FotoGagal[] = [];
+  if (!absen) gagal.push("ABSEN");
+  if (!profil) gagal.push("PROFIL");
+  if (gagal.length > 0 || !absen || !profil) return { gagal };
   return { jarak: jarakSidik(absen, profil) };
 }

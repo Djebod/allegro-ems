@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { useState } from "react";
 import { fotoKecil } from "@/lib/cloudinary";
-import { bandingkanWajah } from "@/lib/banding-wajah";
+import { bandingkanWajah, type FotoGagal } from "@/lib/banding-wajah";
 import { PANDUAN_KEMIRIPAN, tafsirKemiripan, teksJarak, warnaKemiripan, type TafsirKemiripan } from "@/lib/wajah";
 
 /**
@@ -12,6 +12,26 @@ import { PANDUAN_KEMIRIPAN, tafsirKemiripan, teksJarak, warnaKemiripan, type Taf
  * wajahnya sudah jauh berubah (Bang Syam, 12 Okt 2026). Hanya untuk Admin/HR/Owner;
  * pemanggil yang memutuskan, komponen ini tidak membaca Firestore.
  */
+/**
+ * Kalau kedua foto gagal, hampir pasti bukan salah fotonya melainkan
+ * pendeteksinya tidak berjalan di browser ini; jangan menyalahkan karyawan.
+ */
+function pesanGagal(gagal: FotoGagal[]): string {
+  if (gagal.includes("ABSEN") && gagal.includes("PROFIL")) {
+    return (
+      "Wajah tidak terdeteksi di foto absen maupun foto profil. Kemungkinan pembanding tidak berjalan di browser ini. " +
+      "Coba muat ulang halaman atau pakai Chrome di laptop; kalau masih gagal, bandingkan dengan mata sendiri."
+    );
+  }
+  if (gagal.includes("PROFIL")) {
+    return (
+      "Wajah di foto profil tidak terdeteksi, padahal wajah di foto absen terbaca. " +
+      "Pastikan foto profil menampilkan wajah dari depan, terang, dan cukup besar (bukan foto seluruh badan), lalu minta karyawan menggantinya."
+    );
+  }
+  return "Wajah di foto absen tidak terdeteksi. Bandingkan dengan mata sendiri.";
+}
+
 export default function BandingWajah({
   fotoAbsen,
   fotoProfil,
@@ -34,11 +54,7 @@ export default function BandingWajah({
     try {
       const h = await bandingkanWajah(fotoAbsen, fotoProfil);
       if ("gagal" in h) {
-        setSalah(
-          h.gagal === "PROFIL"
-            ? "Wajah di foto profil tidak terdeteksi. Minta karyawan mengganti foto profilnya dengan wajah yang jelas."
-            : "Wajah di foto absen tidak terdeteksi. Bandingkan dengan mata sendiri."
-        );
+        setSalah(pesanGagal(h.gagal));
       } else {
         setHasil(tafsirKemiripan(h.jarak));
       }
