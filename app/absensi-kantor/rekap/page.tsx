@@ -7,6 +7,7 @@ import { Pesan } from "@/components/Field";
 import { useAuth } from "@/lib/auth";
 import { tanggalHariIni } from "@/lib/absensi";
 import { ambilBahanRekap } from "@/lib/data-rekap";
+import { buatDrafSPOtomatis } from "@/lib/data-sp";
 import { eksporRekapExcel, eksporRekapPdf } from "@/lib/ekspor-rekap";
 import { BATAS_SKOR_SP } from "@/lib/denda-telat";
 import { ARTI_KODE, hitungRekap, namaBulan, type BarisRekap, type HasilRekap, type KodeHari } from "@/lib/rekap-kantor";
@@ -66,14 +67,32 @@ function Isi() {
     setSalah(null);
     try {
       const bahan = await ambilBahanRekap(bulan);
-      setHasil(hitungRekap({ bulan, hariIni, ...bahan }));
+      const ringkasan = hitungRekap({ bulan, hariIni, ...bahan });
+      setHasil(ringkasan);
+      if (profile?.role === "ADMIN" || profile?.role === "HR" || profile?.role === "OWNER") {
+        const [tahun, bln] = bulan.split("-").map(Number);
+        const akhir = String(new Date(tahun, bln, 0).getDate()).padStart(2, "0");
+        await Promise.all(
+          ringkasan.baris.filter((b) => b.capaiSp).map((b) =>
+            buatDrafSPOtomatis({
+              employeeId: b.employeeId,
+              employeeName: b.nama,
+              divisi: b.divisi,
+              bulan,
+              tanggalTerbit: `${bulan}-${akhir}`,
+              uraian: `Skor keterlambatan mencapai ${BATAS_SKOR_SP} pada rekap ${namaBulan(bulan)}. Menunggu penerbitan Owner.`,
+              oleh: profile.email,
+            })
+          )
+        );
+      }
     } catch {
       setSalah("Data rekap tidak bisa dibaca. Periksa koneksi, lalu pastikan Security Rules terbaru sudah di-publish.");
       setHasil(null);
     } finally {
       setMemuat(false);
     }
-  }, [bulan, hariIni]);
+  }, [bulan, hariIni, profile?.role, profile?.email]);
 
   useEffect(() => {
     muat();

@@ -2,6 +2,10 @@
 
 import type { SuratPeringatan, TingkatSP } from "@/types";
 
+export function idDrafSPOtomatis(employeeId: string, bulan: string): string {
+  return `OTOMATIS_${employeeId}_${bulan}`;
+}
+
 /** Masa penilaian sebuah surat peringatan, menurut aturan perusahaan. */
 export const MASA_BERLAKU_BULAN = 3;
 
@@ -26,7 +30,7 @@ export function masaBerlakuSampai(tanggalTerbit: string): string {
 }
 
 export function masihBerlaku(sp: SuratPeringatan, pada: string): boolean {
-  return !sp.dicabut && sp.tanggalTerbit <= pada && pada <= sp.berlakuSampai;
+  return sp.status !== "DRAFT" && !sp.dicabut && sp.tanggalTerbit <= pada && pada <= sp.berlakuSampai;
 }
 
 export interface UsulanTingkat {

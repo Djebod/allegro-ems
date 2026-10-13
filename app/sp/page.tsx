@@ -12,6 +12,7 @@ import {
   pantauKategoriSP,
   pantauSP,
   tambahKategoriSP,
+  terbitkanDrafSP,
   terbitkanSP,
   ubahKategoriSP,
 } from "@/lib/data-sp";
@@ -39,7 +40,7 @@ function Isi({ kelola }: { kelola: boolean }) {
   const [salah, setSalah] = useState<string | null>(null);
   const [pesan, setPesan] = useState<string | null>(null);
   const [sibuk, setSibuk] = useState(false);
-  const [hanyaBerlaku, setHanyaBerlaku] = useState(true);
+  const [hanyaBerlaku, setHanyaBerlaku] = useState(false);
 
   const [buka, setBuka] = useState(false);
   const [pKaryawan, setPKaryawan] = useState("");
@@ -120,9 +121,7 @@ function Isi({ kelola }: { kelola: boolean }) {
       setBuka(false);
       setPUraian("");
       setPLampiran(null);
-      setPesan(
-        `SP ${pTingkat} untuk ${orang.name} diterbitkan, berlaku sampai ${masaBerlakuSampai(pTanggal)}.`
-      );
+      setPesan(`Draf SP ${pTingkat} untuk ${orang.name} menunggu diterbitkan Owner.`);
     } catch (e) {
       setSalah(e instanceof Error ? e.message : "Surat peringatan gagal disimpan.");
     } finally {
@@ -136,7 +135,7 @@ function Isi({ kelola }: { kelola: boolean }) {
         {kelola && (
           <>
             <button className="btn-utama" onClick={() => setBuka(true)}>
-              Terbitkan SP
+              Ajukan draf SP
             </button>
             <button className="btn-ringan" onClick={() => setBukaKategori(true)}>
               Kategori masalah
@@ -233,11 +232,32 @@ function Isi({ kelola }: { kelola: boolean }) {
                             : "bg-surface text-muted"
                         }`}
                       >
-                        {x.dicabut ? "DICABUT" : berlaku ? "BERLAKU" : "LEWAT"}
+                        {x.status === "DRAFT" ? "DRAF MENUNGGU OWNER" : x.dicabut ? "DICABUT" : berlaku ? "BERLAKU" : "LEWAT"}
                       </span>
                     </td>
                     {kelola && (
                       <td className="whitespace-nowrap text-right">
+                        {x.status === "DRAFT" && profile?.role === "OWNER" && (
+                          <button
+                            className="btn-utama px-2 py-1 text-[11px]"
+                            disabled={sibuk}
+                            onClick={async () => {
+                              const setuju = window.confirm(`Terbitkan SP ${x.tingkat} untuk ${x.employeeName}? Tanggal terbit akan menggunakan hari ini.`);
+                              if (!setuju) return;
+                              setSibuk(true);
+                              try {
+                                await terbitkanDrafSP(x.id, hariIni, profile.email);
+                                setPesan(`SP ${x.tingkat} untuk ${x.employeeName} telah diterbitkan.`);
+                              } catch (e) {
+                                setSalah(e instanceof Error ? e.message : "SP gagal diterbitkan.");
+                              } finally {
+                                setSibuk(false);
+                              }
+                            }}
+                          >
+                            Terbitkan
+                          </button>
+                        )}
                         {berlaku && (
                           <button
                             className="btn-ringan px-2 py-1 text-[11px]"
@@ -392,7 +412,7 @@ function Isi({ kelola }: { kelola: boolean }) {
           </div>
 
           <button className="btn-utama w-full" onClick={simpan} disabled={sibuk}>
-            {sibuk ? "Menyimpan…" : "Terbitkan"}
+            {sibuk ? "Menyimpan…" : "Simpan draf untuk persetujuan Owner"}
           </button>
         </div>
       </Modal>

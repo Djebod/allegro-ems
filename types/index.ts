@@ -649,6 +649,10 @@ export interface SuratPeringatan {
   uraian: string;
   lampiranUrl?: string | null;
 
+  /** Draf otomatis akibat skor telat; efektif setelah Ko Freddy/Owner menerbitkan. */
+  status?: "DRAFT" | "TERBIT";
+  /** Bulan rekap yang memicu draf otomatis. */
+  bulanPemicu?: string;
   /** Dicabut sebelum masa berlakunya habis. */
   dicabut: boolean;
   alasanPencabutan?: string;

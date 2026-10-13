@@ -1369,7 +1369,8 @@ service cloud.firestore {
         && d.berlakuSampai is string && d.berlakuSampai.size() == 10
         && d.berlakuSampai > d.tanggalTerbit
         && d.uraian is string && d.uraian.size() > 0
-        && d.dicabut is bool;
+        && d.dicabut is bool
+        && d.get('status', 'TERBIT') in ['DRAFT', 'TERBIT'];
     }
 
     match /warningLetters/{spId} {
@@ -1380,23 +1381,38 @@ service cloud.firestore {
         || (sudahLogin()
             && (resource == null || resource.data.employeeId == karyawanSaya()));
 
+      // Semua SP baru lahir sebagai draf. Penerbitan hanya melalui aksi Owner.
       allow create: if urusKepegawaian()
         && spSah()
-        // Mandor adalah pihak ketiga: tidak menerima SP (client, 10 Okt 2026).
+        && request.resource.data.status == 'DRAFT'
         && posisiKaryawan(request.resource.data.employeeId) != 'MANDOR'
         && request.resource.data.dicabut == false;
 
-      // Yang boleh berubah hanya pencabutannya. Isi suratnya beku —
-      // kalau uraian dan tingkatnya bisa diubah belakangan, catatan
-      // kedisiplinan kehilangan artinya.
-      allow update: if urusKepegawaian()
-        && spSah()
-        && request.resource.data.employeeId == resource.data.employeeId
-        && request.resource.data.kategoriId == resource.data.kategoriId
-        && request.resource.data.tingkat == resource.data.tingkat
-        && request.resource.data.tanggalTerbit == resource.data.tanggalTerbit
-        && request.resource.data.berlakuSampai == resource.data.berlakuSampai
-        && request.resource.data.uraian == resource.data.uraian;
+      allow update: if (
+          // Owner menerbitkan draf tanpa bisa mengubah isi surat.
+          isOwner()
+          && resource.data.get('status', 'TERBIT') == 'DRAFT'
+          && request.resource.data.status == 'TERBIT'
+          && request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['status', 'tanggalTerbit', 'berlakuSampai', 'diterbitkanOleh', 'updatedAt'])
+          && request.resource.data.employeeId == resource.data.employeeId
+          && request.resource.data.kategoriId == resource.data.kategoriId
+          && request.resource.data.tingkat == resource.data.tingkat
+          && request.resource.data.uraian == resource.data.uraian
+        ) || (
+          // Isi surat yang sudah ada beku; HR/Admin/Owner hanya dapat mencabut.
+          urusKepegawaian()
+          && spSah()
+          && request.resource.data.diff(resource.data).affectedKeys()
+               .hasOnly(['dicabut', 'alasanPencabutan', 'updatedAt'])
+          && request.resource.data.employeeId == resource.data.employeeId
+          && request.resource.data.kategoriId == resource.data.kategoriId
+          && request.resource.data.tingkat == resource.data.tingkat
+          && request.resource.data.tanggalTerbit == resource.data.tanggalTerbit
+          && request.resource.data.berlakuSampai == resource.data.berlakuSampai
+          && request.resource.data.uraian == resource.data.uraian
+          && request.resource.data.get('status', 'TERBIT') == resource.data.get('status', 'TERBIT')
+        );
 
       allow delete: if false;
     }

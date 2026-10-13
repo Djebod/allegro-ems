@@ -1,4 +1,4 @@
-import { masaBerlakuSampai, masihBerlaku, tambahBulan, usulkanTingkat } from "@/lib/sp";
+import { idDrafSPOtomatis, masaBerlakuSampai, masihBerlaku, tambahBulan, usulkanTingkat } from "@/lib/sp";
 import type { SuratPeringatan } from "@/types";
 
 let lolos = 0, gagal = 0;
@@ -19,6 +19,10 @@ function sp(o: Partial<SuratPeringatan>): SuratPeringatan {
   } as SuratPeringatan;
 }
 
+console.log("\n== ID draf SP otomatis ==");
+cek("ID unik per karyawan dan bulan", idDrafSPOtomatis("K-01", "2026-09"), "OTOMATIS_K-01_2026-09");
+cek("bulan berbeda membuat draf berbeda", idDrafSPOtomatis("K-01", "2026-10"), "OTOMATIS_K-01_2026-10");
+
 console.log("\n== Masa berlaku tiga bulan ==");
 cek("10 Jan + 3 bulan", masaBerlakuSampai("2026-01-10"), "2026-04-10");
 cek("30 Nov + 3 bulan (Feb hanya 28 hari)", tambahBulan("2026-11-30", 3), "2027-02-28");
@@ -31,6 +35,7 @@ cek("di dalam masa berlaku", masihBerlaku(satu, "2026-03-01"), true);
 cek("tepat di hari terakhir", masihBerlaku(satu, "2026-04-10"), true);
 cek("sehari sesudahnya", masihBerlaku(satu, "2026-04-11"), false);
 cek("yang sudah dicabut", masihBerlaku(sp({ dicabut: true }), "2026-02-01"), false);
+cek("draf belum berlaku", masihBerlaku(sp({ status: "DRAFT" }), "2026-02-01"), false);
 
 console.log("\n== Kenaikan tingkat per kategori ==");
 cek("belum pernah SP", usulkanTingkat([], "K-01", "KETERLAMBATAN", "2026-02-01").tingkat, 1);
