@@ -7,7 +7,7 @@ import { Pesan } from "@/components/Field";
 import { useAuth } from "@/lib/auth";
 import { tanggalHariIni } from "@/lib/absensi";
 import { ambilBahanRekap } from "@/lib/data-rekap";
-import { buatDrafSPOtomatis } from "@/lib/data-sp";
+import { buatDrafSPOtomatis, cekDrafSPOtomatis } from "@/lib/data-sp";
 import { eksporRekapExcel, eksporRekapPdf } from "@/lib/ekspor-rekap";
 import { BATAS_SKOR_SP } from "@/lib/denda-telat";
 import { ARTI_KODE, hitungRekap, namaBulan, type BarisRekap, type HasilRekap, type KodeHari } from "@/lib/rekap-kantor";
@@ -62,14 +62,32 @@ function Isi() {
   const [naik, setNaik] = useState(true);
   const [buka, setBuka] = useState<string | null>(null);
 
+  /** Draf SP otomatis bulan ini: kode karyawan yang drafnya sudah ada di warningLetters. */
+  const [drafAda, setDrafAda] = useState<Set<string>>(new Set());
+  const [membuatDraf, setMembuatDraf] = useState<string | null>(null);
+  const [pesanDraf, setPesanDraf] = useState<{ jenis: "berhasil" | "gagal"; isi: string } | null>(null);
+
+  const bolehBuatDraf = profile?.role === "ADMIN" || profile?.role === "HR" || profile?.role === "OWNER";
+
   const muat = useCallback(async () => {
     setMemuat(true);
     setSalah(null);
-    let ringkasan: HasilRekap;
+    setPesanDraf(null);
     try {
       const bahan = await ambilBahanRekap(bulan);
-      ringkasan = hitungRekap({ bulan, hariIni, ...bahan });
+      const ringkasan = hitungRekap({ bulan, hariIni, ...bahan });
       setHasil(ringkasan);
+      // Draf SP tidak lagi dibuat otomatis di sini (15 Okt 2026, usul Bang
+      // Syam): kegagalannya pernah tampil sebagai "data rekap tidak bisa
+      // dibaca". Sekarang hanya dicek mana yang sudah punya draf; membuatnya
+      // lewat tombol di kolom Skor.
+      if (bolehBuatDraf) {
+        const ada = await cekDrafSPOtomatis(
+          ringkasan.baris.filter((b) => b.capaiSp).map((b) => b.employeeId),
+          bulan
+        ).catch(() => new Set<string>());
+        setDrafAda(ada);
+      }
     } catch (e) {
       // Pesan galat aslinya ikut ditampilkan: "insufficient permissions"
       // berarti rules, "requires an index" berarti composite index, selain
@@ -77,41 +95,47 @@ function Isi() {
       const sebab = e instanceof Error && e.message ? ` (${e.message})` : "";
       setSalah(`Data rekap tidak bisa dibaca${sebab}. Periksa koneksi, lalu pastikan Security Rules terbaru sudah di-publish.`);
       setHasil(null);
-      setMemuat(false);
-      return;
-    }
-    // Draf SP otomatis dibuat terpisah: kalau langkah ini gagal, rekapnya
-    // tetap tampil dan yang dilaporkan adalah kegagalan drafnya, bukan
-    // "data tidak bisa dibaca" (membingungkan, terjadi 15 Okt 2026).
-    try {
-      if (profile?.role === "ADMIN" || profile?.role === "HR" || profile?.role === "OWNER") {
-        const [tahun, bln] = bulan.split("-").map(Number);
-        const akhir = String(new Date(tahun, bln, 0).getDate()).padStart(2, "0");
-        await Promise.all(
-          ringkasan.baris.filter((b) => b.capaiSp).map((b) =>
-            buatDrafSPOtomatis({
-              employeeId: b.employeeId,
-              employeeName: b.nama,
-              divisi: b.divisi,
-              bulan,
-              tanggalTerbit: `${bulan}-${akhir}`,
-              uraian: `Skor keterlambatan mencapai ${BATAS_SKOR_SP} pada rekap ${namaBulan(bulan)}. Menunggu penerbitan Owner.`,
-              oleh: profile.email,
-            })
-          )
-        );
-      }
-    } catch (e) {
-      const sebab = e instanceof Error && e.message ? ` (${e.message})` : "";
-      setSalah(`Rekap terbaca, tetapi draf SP otomatis gagal dibuat${sebab}. Pastikan Security Rules terbaru sudah di-publish.`);
     } finally {
       setMemuat(false);
     }
-  }, [bulan, hariIni, profile?.role, profile?.email]);
+  }, [bulan, hariIni, bolehBuatDraf]);
 
   useEffect(() => {
     muat();
   }, [muat]);
+
+  /** Membuat draf SP 1 untuk satu baris; pesannya menyebut nama orangnya. */
+  async function buatDraf(b: BarisRekap) {
+    if (!profile?.email || membuatDraf) return;
+    setMembuatDraf(b.employeeId);
+    setPesanDraf(null);
+    try {
+      const [tahun, bln] = bulan.split("-").map(Number);
+      const akhir = String(new Date(tahun, bln, 0).getDate()).padStart(2, "0");
+      const hasilBuat = await buatDrafSPOtomatis({
+        employeeId: b.employeeId,
+        employeeName: b.nama,
+        divisi: b.divisi,
+        bulan,
+        tanggalTerbit: `${bulan}-${akhir}`,
+        uraian: `Skor keterlambatan mencapai ${BATAS_SKOR_SP} pada rekap ${namaBulan(bulan)}. Menunggu penerbitan Owner.`,
+        oleh: profile.email,
+      });
+      setDrafAda((lama) => new Set([...lama, b.employeeId]));
+      setPesanDraf({
+        jenis: "berhasil",
+        isi:
+          hasilBuat === "DIBUAT"
+            ? `Draf SP 1 untuk ${b.nama} dibuat. Owner menerbitkannya dari menu Surat peringatan.`
+            : `Draf SP 1 untuk ${b.nama} sudah ada sebelumnya.`,
+      });
+    } catch (e) {
+      const sebab = e instanceof Error && e.message ? e.message : "galat tidak dikenal";
+      setPesanDraf({ jenis: "gagal", isi: `Draf SP untuk ${b.nama} gagal dibuat: ${sebab}` });
+    } finally {
+      setMembuatDraf(null);
+    }
+  }
 
   const daftarDivisi = useMemo(
     () => [...new Set((hasil?.baris || []).map((b) => b.divisi).filter(Boolean))].sort(),
@@ -282,6 +306,11 @@ function Isi() {
           <Pesan jenis="gagal" isi={salah} />
         </div>
       )}
+      {pesanDraf && (
+        <div className="mt-4">
+          <Pesan jenis={pesanDraf.jenis} isi={pesanDraf.isi} />
+        </div>
+      )}
 
       {memuat && !hasil ? (
         <p className="mt-6 text-muted">Menghitung rekap {namaBulan(bulan)}…</p>
@@ -363,6 +392,25 @@ function Isi() {
                         <td className={`text-right ${b.capaiSp ? "font-bold text-bahaya" : ""}`}>
                           {b.skorTelat}
                           {b.capaiSp && <span className="ml-1 rounded bg-red-100 px-1 text-[9px]">SP 1</span>}
+                          {b.capaiSp && bolehBuatDraf && (
+                            <div className="mt-1">
+                              {drafAda.has(b.employeeId) ? (
+                                <span className="text-[10px] font-normal text-muted">draf SP ada</span>
+                              ) : (
+                                <button
+                                  className="btn-kuning !px-2 !py-0.5 text-[11px]"
+                                  disabled={membuatDraf !== null}
+                                  onClick={(e) => {
+                                    // Klik baris membuka rincian harian; tombol ini jangan ikut.
+                                    e.stopPropagation();
+                                    buatDraf(b);
+                                  }}
+                                >
+                                  {membuatDraf === b.employeeId ? "Membuat…" : "Buat draf SP"}
+                                </button>
+                              )}
+                            </div>
+                          )}
                         </td>
                         <td className="whitespace-nowrap text-right">{b.dendaTelat ? rupiah(b.dendaTelat) : "-"}</td>
                         <td className={`text-right ${b.tidakAbsenPulang ? "font-semibold text-amber-800" : ""}`}>

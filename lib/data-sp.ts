@@ -3,6 +3,7 @@
 import {
   collection,
   doc,
+  getDoc,
   getDocs,
   onSnapshot,
   query,
@@ -86,6 +87,29 @@ export function pantauSP(
   );
 }
 
+/** Kode karyawan yang draf SP otomatisnya untuk bulan itu sudah ada. */
+export async function cekDrafSPOtomatis(employeeIds: string[], bulan: string): Promise<Set<string>> {
+  const db = dbClient();
+  const hasil = await Promise.all(
+    employeeIds.map(async (id) => {
+      const snap = await getDoc(doc(db, "warningLetters", idDrafSPOtomatis(id, bulan)));
+      return snap.exists() ? id : null;
+    })
+  );
+  return new Set(hasil.filter((id): id is string => id !== null));
+}
+
+/**
+ * Draf SP 1 otomatis dari skor keterlambatan rekap bulanan. Sejak 15 Okt 2026
+ * dibuat lewat tombol di Rekap bulanan (usul Bang Syam), bukan diam-diam saat
+ * rekap dibuka: kegagalannya pernah tampil sebagai "data rekap tidak bisa
+ * dibaca" dan membingungkan.
+ *
+ * Pemeriksaan dilakukan di sini lebih dulu supaya pesannya menyebut sebabnya:
+ * rules warningLetters membaca dokumen karyawan (posisiKaryawan), dan kalau
+ * dokumennya tidak ada, galat di rules hanya terbaca "insufficient permissions".
+ * Baris rekap bisa berasal dari catatan absen yang karyawannya sudah dihapus.
+ */
 export async function buatDrafSPOtomatis(data: {
   employeeId: string;
   employeeName: string;
@@ -94,24 +118,38 @@ export async function buatDrafSPOtomatis(data: {
   tanggalTerbit: string;
   uraian: string;
   oleh: string;
-}) {
+}): Promise<"DIBUAT" | "SUDAH_ADA"> {
   const db = dbClient();
+  const karyawan = await getDoc(doc(db, "employees", data.employeeId));
+  if (!karyawan.exists()) {
+    throw new Error(`Data karyawan ${data.employeeName} (${data.employeeId}) tidak ditemukan, jadi SP tidak bisa dibuat.`);
+  }
+  if (karyawan.data().position === "MANDOR") {
+    throw new Error(`${data.employeeName} berposisi mandor; mandor tidak diberi surat peringatan.`);
+  }
+
+  // Kategori dibuat terpisah dari transaksi surat supaya kalau salah satu
+  // ditolak rules, jelas yang mana.
+  const kategoriRef = doc(db, "spCategories", "KETERLAMBATAN");
+  if (!(await getDoc(kategoriRef)).exists()) {
+    await setDoc(kategoriRef, {
+      nama: "Keterlambatan",
+      aktif: true,
+      dibuatOleh: data.oleh,
+      createdAt: serverTimestamp(),
+    });
+  }
+
   const id = idDrafSPOtomatis(data.employeeId, data.bulan);
   const suratRef = doc(db, "warningLetters", id);
-  const kategoriRef = doc(db, "spCategories", "KETERLAMBATAN");
+  let hasil: "DIBUAT" | "SUDAH_ADA" = "DIBUAT";
+  // Transaksi menjaga draf yang sudah diterbitkan Owner tidak tertimpa
+  // kembali menjadi DRAFT bila tombolnya ditekan dua kali.
   await runTransaction(db, async (transaksi) => {
-    const [surat, kategori] = await Promise.all([
-      transaksi.get(suratRef),
-      transaksi.get(kategoriRef),
-    ]);
-    if (surat.exists()) return;
-    if (!kategori.exists()) {
-      transaksi.set(kategoriRef, {
-        nama: "Keterlambatan",
-        aktif: true,
-        dibuatOleh: data.oleh,
-        createdAt: serverTimestamp(),
-      });
+    const surat = await transaksi.get(suratRef);
+    if (surat.exists()) {
+      hasil = "SUDAH_ADA";
+      return;
     }
     transaksi.set(suratRef, {
       employeeId: data.employeeId,
@@ -133,7 +171,7 @@ export async function buatDrafSPOtomatis(data: {
       updatedAt: serverTimestamp(),
     });
   });
-  return id;
+  return hasil;
 }
 
 export async function terbitkanDrafSP(id: string, tanggalTerbit: string, oleh: string) {
