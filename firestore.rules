@@ -693,11 +693,14 @@ service cloud.firestore {
         && request.resource.data.date == resource.data.date
         && request.resource.data.mandorId == resource.data.mandorId
         && (
-          isAdmin()
+          // Koreksi bertanda tangan oleh Admin/HR/Owner (HR/Owner sejak
+          // 15 Okt 2026, disamakan dengan absen kantor). Jejaknya ditulis
+          // lebih dulu ke attendanceCorrections oleh simpanValidasi().
+          urusKepegawaian()
           || (
-            // Setelah Admin mengoreksi, mandor maupun pemiliknya tidak bisa
+            // Setelah dikoreksi, mandor maupun pemiliknya tidak bisa
             // menulis lagi pada catatan itu. Kalau masih ada yang keliru,
-            // jalurnya lewat Admin, supaya tetap berjejak.
+            // jalurnya lewat koreksi, supaya tetap berjejak.
             resource.data.isOverridden == false
             // Hanya hari ini, hanya menambah sesi, dan sesi barunya berjam server.
             && tanggalHariIniWIB(resource.data.date)
@@ -747,8 +750,10 @@ service cloud.firestore {
     }
 
     match /attendanceCorrections/{koreksiId} {
-      allow read: if isAdmin() || isFinance();
-      allow create: if isAdmin() && koreksiSah();
+      // HR/Owner ikut mengoreksi absen lapangan sejak 15 Okt 2026, sama
+      // seperti officeAttendanceCorrections untuk absen kantor.
+      allow read: if urusKepegawaian() || isFinance();
+      allow create: if urusKepegawaian() && koreksiSah();
 
       // Jejak audit bersifat tambah-saja. Sekali tertulis, tidak bisa
       // diubah maupun dihapus oleh siapa pun, termasuk Admin.

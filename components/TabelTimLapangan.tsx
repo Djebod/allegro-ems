@@ -22,6 +22,7 @@ export default function TabelTimLapangan({
   namaProyek,
   namaMandor,
   kosong = "Belum ada pekerja lapangan yang ditugaskan.",
+  onRincian,
 }: {
   tim: Employee[];
   absensi: Record<string, Attendance>;
@@ -30,6 +31,8 @@ export default function TabelTimLapangan({
   /** Terisi = kolom Mandor ditampilkan. */
   namaMandor?: (mandorId: string | null | undefined) => string;
   kosong?: string;
+  /** Terisi = tombol Rincian (foto, pembanding wajah, koreksi) ditampilkan pada baris yang sudah absen. */
+  onRincian?: (absen: Attendance) => void;
 }) {
   if (tim.length === 0) {
     return (
@@ -54,6 +57,7 @@ export default function TabelTimLapangan({
             ))}
             <th className="text-right">Jam kerja</th>
             <th>Status</th>
+            {onRincian && <th></th>}
           </tr>
         </thead>
         <tbody>
@@ -93,7 +97,22 @@ export default function TabelTimLapangan({
                 </td>
                 <td>
                   <span className={`label-status ${warnaStatus(a?.status)}`}>{a?.status || "BELUM"}</span>
+                  {a?.isOverridden && (
+                    <span
+                      className="ml-1 inline-block h-2 w-2 rounded-full bg-kuning-500 align-middle"
+                      title="Ada koreksi"
+                    />
+                  )}
                 </td>
+                {onRincian && (
+                  <td className="whitespace-nowrap text-right">
+                    {a && (
+                      <button className="btn-kuning" onClick={() => onRincian(a)}>
+                        Rincian
+                      </button>
+                    )}
+                  </td>
+                )}
               </tr>
             );
           })}

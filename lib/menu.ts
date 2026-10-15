@@ -60,7 +60,9 @@ export const MENU: GrupMenu[] = [
       { label: "Absensi kantor", href: "/absensi-kantor", peran: ["ADMIN", "HR", "OWNER", "FINANCE"] },
       // Finance ikut karena merangkap mengurus payroll bulanan.
       { label: "Rekap bulanan", href: "/absensi-kantor/rekap", peran: ["ADMIN", "HR", "OWNER", "FINANCE"] },
-      { label: "Absensi lapangan", href: "/admin/absensi", peran: ["ADMIN", "FINANCE"] },
+      // HR/Owner ikut (15 Okt 2026): rincian, pembanding wajah, dan koreksi
+      // absen lapangan disamakan dengan laporan absen kantor.
+      { label: "Absensi lapangan", href: "/admin/absensi", peran: ["ADMIN", "HR", "OWNER", "FINANCE"] },
       { label: "Kantor", href: "/admin/kantor", peran: KEPEGAWAIAN },
     ],
   },

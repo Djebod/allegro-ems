@@ -65,10 +65,25 @@ function Isi() {
   const muat = useCallback(async () => {
     setMemuat(true);
     setSalah(null);
+    let ringkasan: HasilRekap;
     try {
       const bahan = await ambilBahanRekap(bulan);
-      const ringkasan = hitungRekap({ bulan, hariIni, ...bahan });
+      ringkasan = hitungRekap({ bulan, hariIni, ...bahan });
       setHasil(ringkasan);
+    } catch (e) {
+      // Pesan galat aslinya ikut ditampilkan: "insufficient permissions"
+      // berarti rules, "requires an index" berarti composite index, selain
+      // itu kemungkinan data yang bentuknya tidak terduga.
+      const sebab = e instanceof Error && e.message ? ` (${e.message})` : "";
+      setSalah(`Data rekap tidak bisa dibaca${sebab}. Periksa koneksi, lalu pastikan Security Rules terbaru sudah di-publish.`);
+      setHasil(null);
+      setMemuat(false);
+      return;
+    }
+    // Draf SP otomatis dibuat terpisah: kalau langkah ini gagal, rekapnya
+    // tetap tampil dan yang dilaporkan adalah kegagalan drafnya, bukan
+    // "data tidak bisa dibaca" (membingungkan, terjadi 15 Okt 2026).
+    try {
       if (profile?.role === "ADMIN" || profile?.role === "HR" || profile?.role === "OWNER") {
         const [tahun, bln] = bulan.split("-").map(Number);
         const akhir = String(new Date(tahun, bln, 0).getDate()).padStart(2, "0");
@@ -86,9 +101,9 @@ function Isi() {
           )
         );
       }
-    } catch {
-      setSalah("Data rekap tidak bisa dibaca. Periksa koneksi, lalu pastikan Security Rules terbaru sudah di-publish.");
-      setHasil(null);
+    } catch (e) {
+      const sebab = e instanceof Error && e.message ? ` (${e.message})` : "";
+      setSalah(`Rekap terbaca, tetapi draf SP otomatis gagal dibuat${sebab}. Pastikan Security Rules terbaru sudah di-publish.`);
     } finally {
       setMemuat(false);
     }

@@ -6,6 +6,7 @@ import { doc, getDoc } from "firebase/firestore";
 import Guard from "@/components/Guard";
 import Shell from "@/components/Shell";
 import TabelTimLapangan from "@/components/TabelTimLapangan";
+import RincianAbsenLapangan from "@/components/RincianAbsenLapangan";
 import { Field, Pesan } from "@/components/Field";
 import { useAuth } from "@/lib/auth";
 import { dbClient } from "@/lib/firebase";
@@ -35,6 +36,8 @@ function Isi() {
   const [tim, setTim] = useState<Employee[] | null>(null);
   const [absensi, setAbsensi] = useState<Record<string, Attendance>>({});
   const [salah, setSalah] = useState<string | null>(null);
+  /** Kode karyawan yang rinciannya sedang dibuka; dicari ulang dari pantauan supaya ikut segar setelah koreksi. */
+  const [rincianDari, setRincianDari] = useState<string | null>(null);
 
   useEffect(() => {
     semuaProyek()
@@ -87,6 +90,8 @@ function Isi() {
   const namaMandor = (id: string | null | undefined) => (id ? petaNama.get(id) || id : "-");
 
   const proyekTampil = modeMandor ? saya?.currentProjectId : projectId;
+  const rincian = (rincianDari && absensi[rincianDari]) || null;
+  const radiusRincian = proyek.find((p) => p.id === rincian?.projectId)?.attendanceRadiusMeter ?? 1000;
   const hadir = (tim || []).filter((k) => absensi[k.id]?.checkIn).length;
   const pulang = (tim || []).filter((k) => absensi[k.id]?.status === "SELESAI").length;
 
@@ -178,12 +183,19 @@ function Isi() {
                 ? "Belum ada tukang atau kenek yang ditugaskan di bawah Anda."
                 : "Belum ada pekerja lapangan yang ditugaskan di proyek ini."
             }
+            onRincian={(a) => setRincianDari(a.employeeId)}
           />
         )}
       </div>
 
+      {/* Rincian yang sama dengan laporan absen kantor: foto tiap sesi,
+          pembanding wajah, koreksi bertanda tangan (Admin/HR/Owner). */}
+      <RincianAbsenLapangan absen={rincian} radiusMeter={radiusRincian} onTutup={() => setRincianDari(null)} />
+
       <p className="mt-2 text-xs text-muted">
-        Jam {tanggalPendek(tanggal)}. Jam tebal berwarna adalah jam setelah dikoreksi Admin.
+        Jam {tanggalPendek(tanggal)}. Jam tebal berwarna adalah jam setelah dikoreksi; titik kuning menandai catatan
+        yang pernah dikoreksi. Tombol Rincian membuka foto tiap sesi
+        {pengelola ? ", pembanding wajah, dan formulir koreksi" : ""}.
         {(modeMandor || (saya?.currentProjectId && !pengelola)) && (
           <>
             {" "}
