@@ -365,7 +365,12 @@ export async function semuaProyek() {
 /* ---------------- Absensi ---------------- */
 
 
-/** Karyawan yang sedang ditugaskan kepada seorang mandor (termasuk mandornya). */
+/**
+ * Karyawan yang sedang ditugaskan kepada seorang mandor (termasuk mandornya).
+ * Hanya posisi lapangan: staf kantor yang dulu telanjur ditag ke mandor
+ * (saat form masih mewajibkannya) bukan anak buah mandor dan absen sendiri
+ * dengan aturan kantor, jadi tidak boleh muncul di Absen tim (15 Okt 2026).
+ */
 export function pantauTimMandor(
   mandorId: string,
   onData: (data: Employee[]) => void,
@@ -379,7 +384,7 @@ export function pantauTimMandor(
         if (a.position !== b.position) return a.position === "MANDOR" ? -1 : 1;
         return a.name.localeCompare(b.name);
       });
-      onData(isi.filter((e) => e.status === "ACTIVE"));
+      onData(isi.filter((e) => e.status === "ACTIVE" && posisiLapangan(e.position)));
     },
     onGagal
   );

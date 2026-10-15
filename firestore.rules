@@ -432,13 +432,19 @@ service cloud.firestore {
       return d.employeeId is string && d.employeeId.size() > 0
         && d.projectId is string && d.projectId.size() > 0
         && d.sectionId is string && d.sectionId.size() > 0
-        && d.mandorId is string && d.mandorId.size() > 0
+        && d.mandorId is string
+        // Mandor wajib untuk posisi lapangan. Staf kantor yang ditugaskan ke
+        // proyek tidak berada di bawah mandor, jadi boleh kosong (15 Okt 2026).
+        && (
+          d.mandorId.size() > 0
+          || !(posisiKaryawan(d.employeeId) in ['MANDOR', 'TUKANG', 'KENEK'])
+        )
         // Penanggung jawab tidak boleh diri sendiri, KECUALI orang itu
         // memang seorang mandor. Mandor mengabsen dirinya sendiri, dan
         // kolom inilah yang dipakai untuk menentukan hak bacanya.
         && (
           d.mandorId != d.employeeId
-          || get(/databases/$(database)/documents/employees/$(d.employeeId)).data.position == 'MANDOR'
+          || posisiKaryawan(d.employeeId) == 'MANDOR'
         )
         && d.effectiveFrom is string && d.effectiveFrom.size() == 10
         && d.status in ['ACTIVE', 'ENDED'];

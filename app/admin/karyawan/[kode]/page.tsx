@@ -26,6 +26,7 @@ import {
   ubahKaryawan,
 } from "@/lib/data";
 import { useAuth } from "@/lib/auth";
+import { posisiLapangan } from "@/lib/karyawan";
 import { FOLDER_KTP, FOLDER_PROFIL } from "@/lib/cloudinary";
 import { bacaAngka, keRupiah, rupiahPenuh } from "@/lib/rupiah";
 import { tarifLemburPerJam, upahSehariDariTarif } from "@/lib/lembur";
@@ -162,8 +163,13 @@ function Isi({ kode }: { kode: string }) {
     setSalah(null);
     if (!pProyek) return setSalah("Proyek wajib dipilih.");
     if (!pSection) return setSalah("Section wajib dipilih.");
-    if (!pMandor) return setSalah("Mandor penanggung jawab wajib dipilih.");
-    if (pMandor === kode && karyawan?.position !== "MANDOR") {
+    // Staf kantor tidak berada di bawah mandor (Bang Syam, 15 Okt 2026):
+    // mandor hanya wajib untuk posisi lapangan. Hak staf proyek mencatat
+    // absen tukang/kenek diikat ke proyek penugasan, bukan ke mandor.
+    const lapangan = karyawan ? posisiLapangan(karyawan.position) : false;
+    const mandorDipakai = lapangan ? pMandor : "";
+    if (lapangan && !mandorDipakai) return setSalah("Mandor penanggung jawab wajib dipilih untuk pekerja lapangan.");
+    if (mandorDipakai === kode && karyawan?.position !== "MANDOR") {
       return setSalah("Hanya karyawan berposisi MANDOR yang boleh jadi penanggung jawab dirinya sendiri.");
     }
 
@@ -173,7 +179,7 @@ function Isi({ kode }: { kode: string }) {
         employeeId: kode,
         projectId: pProyek,
         sectionId: pSection,
-        mandorId: pMandor,
+        mandorId: mandorDipakai,
         effectiveFrom: pMulai,
         reason: pAlasan.trim(),
         createdBy: profile?.email || "",
@@ -219,7 +225,7 @@ function Isi({ kode }: { kode: string }) {
       </div>
     );
 
-  const namaMandor = (id: string) => mandor.find((m) => m.id === id)?.name || id;
+  const namaMandor = (id: string) => (id ? mandor.find((m) => m.id === id)?.name || id : "tanpa mandor (staf proyek)");
   const namaSection = (id: string) => sections.find((s) => s.id === id)?.name || id;
 
   return (
@@ -1073,25 +1079,33 @@ function Isi({ kode }: { kode: string }) {
             </select>
           </Field>
 
-          <Field label="Mandor penanggung jawab" wajib>
-            <select
-              className="input-dasar"
-              value={pMandor}
-              onChange={(e) => setPMandor(e.target.value)}
-            >
-              <option value="">— pilih mandor —</option>
-              {karyawan.position === "MANDOR" && (
-                <option value={kode}>{karyawan.name} (dirinya sendiri)</option>
-              )}
-              {mandor
-                .filter((m) => m.status === "ACTIVE" && m.id !== kode)
-                .map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name}
-                  </option>
-                ))}
-            </select>
-          </Field>
+          {posisiLapangan(karyawan.position) ? (
+            <Field label="Mandor penanggung jawab" wajib>
+              <select
+                className="input-dasar"
+                value={pMandor}
+                onChange={(e) => setPMandor(e.target.value)}
+              >
+                <option value="">— pilih mandor —</option>
+                {karyawan.position === "MANDOR" && (
+                  <option value={kode}>{karyawan.name} (dirinya sendiri)</option>
+                )}
+                {mandor
+                  .filter((m) => m.status === "ACTIVE" && m.id !== kode)
+                  .map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name}
+                    </option>
+                  ))}
+              </select>
+            </Field>
+          ) : (
+            <p className="text-xs text-muted">
+              Staf kantor tidak berada di bawah mandor, jadi tidak perlu ditag ke mandor. Dengan penugasan ini ia
+              boleh membuka Absen tim dan mencatat absen tukang/kenek di proyek tersebut, serta absen sendiri di titik
+              proyek lewat Absen saya.
+            </p>
+          )}
 
           {karyawan.position === "MANDOR" && (
             <p className="-mt-2 text-xs text-muted">
