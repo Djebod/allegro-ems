@@ -1,6 +1,21 @@
 rules_version = '2';
 
 // ============================================================
+//  VERSI RULES: 3 — ditulis 15 Okt 2026 pukul 08.32 WIB
+//
+//  Firebase Console harus memuat versi ini. Sebelum dan sesudah Publish,
+//  bandingkan baris VERSI di atas dengan yang tampil di tab Rules.
+//  Setiap perubahan rules WAJIB menaikkan nomor versi, menulis tanggal
+//  dan jam WIB, dan menambah satu baris riwayat di bawah (permintaan
+//  Bang Syam, 15 Okt 2026).
+//
+//  Riwayat:
+//   v3  15 Okt 2026 08.32  penugasan staf kantor boleh tanpa mandor (penugasanSah)
+//   v2  15 Okt 2026 08.00  koreksi absen lapangan oleh HR/Owner (attendanceCorrections, update attendance)
+//   v1  15 Okt 2026 07.40  mandor absen sendiri lewat Absen saya (mandorAtasDiriSendiri); versi pertama yang diberi nomor
+// ============================================================
+
+// ============================================================
 //  FIRESTORE RULES GABUNGAN — Allegro Global Construction
 //
 //  Satu Firebase project dipakai dua aplikasi:

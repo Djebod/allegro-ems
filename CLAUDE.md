@@ -60,6 +60,7 @@ Sejak 9 Okt 2026 (keputusan Bang Syam): **`firestore.rules` di repo ini dan `D:\
 
 Setiap kali rules berubah, **di repo mana pun**:
 
+0. **Naikkan nomor versi di kepala berkas** (permintaan Bang Syam, 15 Okt 2026): baris `VERSI RULES: N — ditulis <tanggal> pukul <jam> WIB` di bawah `rules_version`, plus satu baris riwayat `vN  tanggal jam  ringkasan`. Nomor naik satu tiap perubahan, jam memakai jam laptop (WIB). Sebutkan nomor versinya ke Bang Syam supaya ia bisa mencocokkan dengan yang tampil di Firebase Console.
 1. Ubah berkas di repo tempat bekerja, lalu **salin utuh** ke repo satunya (`cp`), jangan disunting terpisah. Blok `ap*` dan tanda `[ADMIN PROYEK]` jangan dihapus walau tidak dipakai EMS.
 2. Cek sama: dari `D:\project` jalankan `cmp allegro-absensi-payroll/firestore.rules allegro-project/database/schema/firestore-rules-gabungan.rules` (tidak ada keluaran = identik).
 3. Commit dan push di **kedua** repo.
