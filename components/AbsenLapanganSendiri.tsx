@@ -10,7 +10,7 @@ import { ambilProyek, catatSesi, pantauAbsensiSaya } from "@/lib/data";
 import { FOLDER_ABSENSI, cloudinarySiap, unggahFoto } from "@/lib/cloudinary";
 import type { TahapUnggah } from "@/lib/cloudinary";
 import { denganBatasWaktu } from "@/lib/batas-waktu";
-import { BATAS_SIMPAN_FIRESTORE_MS } from "@/lib/constants";
+import { BATAS_AJUKAN_LEMBUR_HARI, BATAS_SIMPAN_FIRESTORE_MS } from "@/lib/constants";
 import { jarakMeter } from "@/lib/lokasi";
 import { NAMA_SESI, URUTAN_SESI, hitungJam, jamDari, periksaSesi, tanggalHariIni } from "@/lib/absensi";
 import type { Attendance, Employee, JenisSesi, Project, TitikAbsen } from "@/types";
@@ -22,18 +22,26 @@ const TEKS_TAHAP: Record<TahapUnggah, string> = {
 };
 
 /**
- * Absen lapangan oleh tukang/kenek sendiri (keputusan Bang Syam, 9 Okt 2026).
+ * Absen lapangan oleh pekerja lapangan sendiri.
  *
- * Sebelumnya hanya mandor yang mencatat timnya. Sekarang pekerja lapangan
- * yang punya akun Google boleh absen sendiri, dengan aturan yang sama persis:
- * GPS di dalam radius proyek penugasannya, swafoto wajib, urutan sesi tidak
- * bisa dilompati. Catatannya masuk ke dokumen attendance yang sama dengan
- * yang dipakai mandor, jadi mandor tetap melihatnya di halaman timnya dan
- * payroll mingguan tidak perlu tahu siapa yang menekan tombolnya.
+ * Tukang/kenek yang punya akun Google boleh absen sendiri sejak 9 Okt 2026
+ * (keputusan Bang Syam). Sejak 15 Okt 2026 mandor juga absen di sini, dengan
+ * alur yang sama dengan staf kantor: swafoto + GPS, jam dari server. Dulu
+ * mandor memotret dirinya dengan kamera belakang di halaman tim, dan itu
+ * sulit diperiksa. Aturannya sama persis untuk semua: GPS di dalam radius
+ * proyek penugasan, swafoto wajib, urutan sesi tidak bisa dilompati.
+ * Catatannya masuk ke dokumen attendance yang sama dengan yang dicatat
+ * mandor atau staf proyek, jadi tetap terlihat di tim dan payroll mingguan
+ * tidak perlu tahu siapa yang menekan tombolnya.
  */
 export default function AbsenLapanganSendiri({ karyawan }: { karyawan: Employee }) {
   const { profile } = useAuth();
   const tanggal = tanggalHariIni();
+  const mandorSendiri = karyawan.position === "MANDOR";
+  // Mandor adalah penanggung jawab dirinya sendiri; penugasan biasanya sudah
+  // mengisi currentMandorId dengan kodenya sendiri, tetapi data lama bisa
+  // kosong, dan rules menerima kedua bentuk itu.
+  const mandorId = karyawan.currentMandorId || (mandorSendiri ? karyawan.id : "");
 
   const [proyek, setProyek] = useState<Project | null>(null);
   const [absen, setAbsen] = useState<Attendance | null>(null);
@@ -133,7 +141,7 @@ export default function AbsenLapanganSendiri({ karyawan }: { karyawan: Employee 
           karyawan,
           projectId: proyek.id,
           sectionId: karyawan.currentSectionId || "",
-          mandorId: karyawan.currentMandorId || "",
+          mandorId,
           jenis,
           titik: antrean.titik,
           photoUrl: foto.url,
@@ -157,11 +165,15 @@ export default function AbsenLapanganSendiri({ karyawan }: { karyawan: Employee 
 
   if (memuat) return <p className="text-muted">Memuat…</p>;
 
-  if (!karyawan.currentProjectId || !karyawan.currentMandorId)
+  if (!karyawan.currentProjectId || !mandorId)
     return (
       <Pesan
         jenis="gagal"
-        isi="Anda belum ditugaskan ke proyek dan mandor mana pun, jadi belum bisa absen sendiri. Minta Admin memeriksa penugasan Anda."
+        isi={
+          mandorSendiri
+            ? "Anda belum ditugaskan ke proyek mana pun, jadi belum bisa absen. Minta Admin memeriksa penugasan Anda."
+            : "Anda belum ditugaskan ke proyek dan mandor mana pun, jadi belum bisa absen sendiri. Minta Admin memeriksa penugasan Anda."
+        }
       />
     );
 
@@ -182,7 +194,10 @@ export default function AbsenLapanganSendiri({ karyawan }: { karyawan: Employee 
         </p>
         <p className="mt-3 text-xs text-muted">
           Absen hanya bisa dicatat dalam radius {proyek.attendanceRadiusMeter} meter dari titik proyek, dan wajib
-          swafoto. Mandor Anda tetap bisa mengabsenkan Anda; catatannya sama.
+          swafoto.{" "}
+          {mandorSendiri
+            ? "Catatan Anda dilihat staf kantor yang ditugaskan ke proyek ini dan Admin. Absen anak buah Anda dicatat di menu Absen tim."
+            : "Mandor Anda tetap bisa mengabsenkan Anda; catatannya sama."}
         </p>
 
         <div className="mt-4 grid grid-cols-2 gap-3 border-t border-line pt-4 sm:grid-cols-4">
@@ -264,14 +279,21 @@ export default function AbsenLapanganSendiri({ karyawan }: { karyawan: Employee 
           Periksa lokasi saya
         </button>
 
+        {mandorSendiri && (
+          <Link href="/mandor" className="btn-ringan block w-full text-center">
+            Absen tim (anak buah saya)
+          </Link>
+        )}
+
         <Link href="/beranda" className="btn-ringan block w-full text-center">
           Kembali ke beranda
         </Link>
       </div>
 
       <p className="mt-4 text-xs text-muted">
-        Lembur tetap harus diajukan lewat menu Lembur, lengkap dengan alasannya, paling lambat tujuh hari setelah
-        tanggalnya. Tanpa pengajuan yang disetujui, jam lembur di absensi tidak dibayar.
+        Lembur tetap harus diajukan lewat menu Lembur, lengkap dengan alasannya, paling lambat{" "}
+        {BATAS_AJUKAN_LEMBUR_HARI} hari setelah tanggalnya. Tanpa pengajuan yang disetujui, jam lembur di absensi
+        tidak dibayar.
       </p>
 
       <KameraBelakang

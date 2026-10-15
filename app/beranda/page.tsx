@@ -20,7 +20,8 @@ import { sisaSakit, sisaTahunan, JENIS_CUTI } from "@/lib/cuti";
 import { hariSabtu, jadwalUntuk } from "@/lib/jadwal";
 import { jamEfektifKantor } from "@/lib/kantor";
 import { cloudinarySiap, unggahFoto } from "@/lib/cloudinary";
-import { hitungJam, jamDari, tanggalHariIni, tanggalPendek } from "@/lib/absensi";
+import { hitungJam, jamDari, periksaSesi, tanggalHariIni, tanggalPendek } from "@/lib/absensi";
+import { jenisPekerja } from "@/lib/karyawan";
 import { FOLDER_PROFIL } from "@/lib/cloudinary";
 import type {
   AbsenKantor,
@@ -127,6 +128,11 @@ function Isi() {
     () => absenKantor.find((a) => a.date === hariIni) || null,
     [absenKantor, hariIni]
   );
+  /** Catatan lapangan hari ini: dipakai mandor, tukang, dan kenek yang absen di titik proyek. */
+  const lapanganHariIni = useMemo(
+    () => absenLapangan.find((a) => a.date === hariIni) || null,
+    [absenLapangan, hariIni]
+  );
 
   const rekapBulan = useMemo(() => {
     const jamKantor = absenKantor.reduce((t, a) => t + a.workHours, 0);
@@ -183,8 +189,21 @@ function Isi() {
   if (!karyawan) return <Pesan jenis="gagal" isi="Data karyawan Anda tidak ditemukan." />;
 
   const jadwal = jadwalUntuk(karyawan, hariIni);
-  // Mandor tidak absen di /absen: ia mencatat dirinya bersama timnya di lapangan.
+  // Mandor adalah pihak ketiga: menu cuti, izin, dan SP tidak berlaku baginya.
   const mandor = profile?.role === "MANDOR" || karyawan.position === "MANDOR";
+  // Pekerja lapangan (mandor, tukang, kenek) absen di titik proyek lewat
+  // menu Absen saya; angkanya dibaca dari catatan lapangan, bukan kantor.
+  const lapangan = jenisPekerja(karyawan) === "LAPANGAN";
+  const jamLapangan = lapanganHariIni ? hitungJam(lapanganHariIni) : null;
+  const tombolLapangan = !lapanganHariIni?.checkIn
+    ? "Absen masuk"
+    : periksaSesi(lapanganHariIni, "checkOut").boleh
+    ? lapanganHariIni.breakStart && !lapanganHariIni.breakEnd
+      ? "Selesai istirahat"
+      : "Istirahat atau pulang"
+    : periksaSesi(lapanganHariIni, "overtimeEnd").boleh
+    ? "Selesai lembur"
+    : "Absen sudah lengkap";
 
   return (
     <>
@@ -222,47 +241,87 @@ function Isi() {
       {/* Absen hari ini */}
       <div className="kartu mt-4">
         <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex flex-wrap gap-x-10 gap-y-3">
-            <div>
-              <p className="text-[11px] text-muted">Masuk hari ini</p>
-              <p className="text-xl font-bold leading-tight text-ink">
-                {jamDari(absenHariIni?.masuk?.waktu)}
-              </p>
-              {absenHariIni && absenHariIni.terlambatMenit > 0 && (
-                <p className="text-[11px] font-semibold text-bahaya">
-                  telat {absenHariIni.terlambatMenit} menit
-                </p>
-              )}
-            </div>
-            {absenHariIni?.istirahat && (
+          {lapangan ? (
+            <div className="flex flex-wrap gap-x-10 gap-y-3">
               <div>
-                <p className="text-[11px] text-muted">Istirahat</p>
+                <p className="text-[11px] text-muted">Masuk hari ini</p>
                 <p className="text-xl font-bold leading-tight text-ink">
-                  {jamDari(absenHariIni.istirahat.waktu)}–
-                  {absenHariIni.selesaiIstirahat ? jamDari(absenHariIni.selesaiIstirahat.waktu) : "…"}
+                  {jamDari(lapanganHariIni?.checkIn?.waktu)}
                 </p>
               </div>
-            )}
-            <div>
-              <p className="text-[11px] text-muted">Pulang</p>
-              <p className="text-xl font-bold leading-tight text-ink">
-                {jamDari(absenHariIni?.pulang?.waktu)}
-              </p>
+              {lapanganHariIni?.breakStart && (
+                <div>
+                  <p className="text-[11px] text-muted">Istirahat</p>
+                  <p className="text-xl font-bold leading-tight text-ink">
+                    {jamDari(lapanganHariIni.breakStart.waktu)}–
+                    {lapanganHariIni.breakEnd ? jamDari(lapanganHariIni.breakEnd.waktu) : "…"}
+                  </p>
+                </div>
+              )}
+              <div>
+                <p className="text-[11px] text-muted">Pulang</p>
+                <p className="text-xl font-bold leading-tight text-ink">
+                  {jamDari(lapanganHariIni?.checkOut?.waktu)}
+                </p>
+              </div>
+              <div>
+                <p className="text-[11px] text-muted">Jam kerja</p>
+                <p className="text-xl font-bold leading-tight text-ink">{jamLapangan?.workHours ?? 0}</p>
+                {jamLapangan && jamLapangan.overtimeHours > 0 && (
+                  <p className="text-[11px] text-muted">lembur {jamLapangan.overtimeHours} jam</p>
+                )}
+              </div>
             </div>
-            <div>
-              <p className="text-[11px] text-muted">Jam kerja</p>
-              <p className="text-xl font-bold leading-tight text-ink">
-                {absenHariIni?.workHours ?? 0}
-              </p>
+          ) : (
+            <div className="flex flex-wrap gap-x-10 gap-y-3">
+              <div>
+                <p className="text-[11px] text-muted">Masuk hari ini</p>
+                <p className="text-xl font-bold leading-tight text-ink">
+                  {jamDari(absenHariIni?.masuk?.waktu)}
+                </p>
+                {absenHariIni && absenHariIni.terlambatMenit > 0 && (
+                  <p className="text-[11px] font-semibold text-bahaya">
+                    telat {absenHariIni.terlambatMenit} menit
+                  </p>
+                )}
+              </div>
+              {absenHariIni?.istirahat && (
+                <div>
+                  <p className="text-[11px] text-muted">Istirahat</p>
+                  <p className="text-xl font-bold leading-tight text-ink">
+                    {jamDari(absenHariIni.istirahat.waktu)}–
+                    {absenHariIni.selesaiIstirahat ? jamDari(absenHariIni.selesaiIstirahat.waktu) : "…"}
+                  </p>
+                </div>
+              )}
+              <div>
+                <p className="text-[11px] text-muted">Pulang</p>
+                <p className="text-xl font-bold leading-tight text-ink">
+                  {jamDari(absenHariIni?.pulang?.waktu)}
+                </p>
+              </div>
+              <div>
+                <p className="text-[11px] text-muted">Jam kerja</p>
+                <p className="text-xl font-bold leading-tight text-ink">
+                  {absenHariIni?.workHours ?? 0}
+                </p>
+              </div>
             </div>
-          </div>
+          )}
 
           {karyawan.tidakWajibAbsen ? (
             <div className="rounded-xl bg-allegro-50 px-5 py-3 text-sm text-allegro-700">Tidak wajib absen</div>
-          ) : mandor ? (
-            <Link href="/mandor" className="btn-lapangan max-w-[14rem]">
-              Absen tim hari ini
-            </Link>
+          ) : lapangan ? (
+            <div className="flex flex-col gap-2">
+              <Link href="/absen" className="btn-lapangan max-w-[14rem]">
+                {tombolLapangan}
+              </Link>
+              {mandor && (
+                <Link href="/mandor" className="btn-ringan max-w-[14rem] text-center">
+                  Absen tim hari ini
+                </Link>
+              )}
+            </div>
           ) : cutiHariIni && !absenHariIni?.masuk ? (
             <div className="rounded-xl bg-allegro-50 px-5 py-3 text-sm text-allegro-700">
               Anda sedang {JENIS_CUTI[cutiHariIni.jenis]?.label.toLowerCase() || "cuti"} sampai{" "}
@@ -288,7 +347,7 @@ function Isi() {
         </div>
         {mandor && (
           <p className="mt-3 text-xs text-muted">
-            Kehadiran Anda dicatat bersama tim di halaman mandor, jadi angka di atas tetap kosong.
+            Absen Anda sendiri lewat Absen saya (swafoto di titik proyek). Anak buah Anda dicatat di Absen tim.
           </p>
         )}
       </div>
@@ -351,17 +410,17 @@ function Isi() {
 
       {/* Menu */}
       <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Link href={mandor ? "/mandor" : "/absen"} className="kartu hover:border-allegro-600">
-          <h3 className="font-semibold text-ink">{mandor ? "Absen Tim" : "Absen Saya"}</h3>
+        <Link href="/absen" className="kartu hover:border-allegro-600">
+          <h3 className="font-semibold text-ink">Absen Saya</h3>
           <p className="mt-1 text-sm text-muted">
-            {mandor ? "Catat kehadiran tim dan diri sendiri." : "Absen masuk dan pulang."}
+            {lapangan ? "Swafoto masuk dan pulang di titik proyek." : "Absen masuk dan pulang."}
           </p>
         </Link>
         {/* Mandor adalah pihak ketiga: tanpa cuti, izin, dan SP (client, 10 Okt 2026). */}
         {mandor ? (
-          <Link href="/tim-lapangan" className="kartu hover:border-allegro-600">
-            <h3 className="font-semibold text-ink">Tim Lapangan</h3>
-            <p className="mt-1 text-sm text-muted">Tabel jam absen anak buah hari ini.</p>
+          <Link href="/mandor" className="kartu hover:border-allegro-600">
+            <h3 className="font-semibold text-ink">Absen Tim</h3>
+            <p className="mt-1 text-sm text-muted">Catat kehadiran anak buah, satu foto wajah per orang.</p>
           </Link>
         ) : (
           <Link href="/cuti" className="kartu hover:border-allegro-600">

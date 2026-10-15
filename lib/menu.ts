@@ -33,7 +33,10 @@ export const MENU: GrupMenu[] = [
     judul: "Saya",
     item: [
       { label: "Beranda", href: "/beranda", peran: SEMUA },
-      { label: "Absen saya", href: "/absen", peran: BUKAN_MANDOR },
+      // Mandor absen sendiri di sini dengan alur yang sama dengan staf kantor:
+      // swafoto + GPS di titik proyek (perubahan alur 15 Okt 2026). Dulu ia
+      // mencatat dirinya di halaman tim dengan kamera belakang.
+      { label: "Absen saya", href: "/absen", peran: SEMUA },
       // Mandor mencatat timnya; staf kantor yang ditugaskan ke proyek mencatat
       // pekerja lapangan proyeknya dengan cara yang sama (10 Okt 2026).
       { label: "Absen tim", href: "/mandor", peran: SEMUA },

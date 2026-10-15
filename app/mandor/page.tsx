@@ -235,10 +235,14 @@ function Isi() {
       />
     );
 
-  const belum = tim.filter((t) => !absensi[t.id]?.checkIn).length;
-  const selesai = tim.filter((t) => absensi[t.id]?.status === "SELESAI").length;
+  // Mandor tidak lagi mencatat dirinya di sini (15 Okt 2026): ia absen
+  // sendiri lewat menu Absen saya dengan swafoto, seperti staf kantor.
+  // Halaman ini khusus anak buahnya. Staf proyek tetap melihat semua
+  // pekerja lapangan proyeknya, termasuk mandor.
   const anakBuah = tim.filter((t) => t.id !== mandorId);
-  const timTerlihat = pilihAnakBuah ? tim.filter((t) => t.id === pilihAnakBuah || t.id === mandorId) : tim;
+  const belum = anakBuah.filter((t) => !absensi[t.id]?.checkIn).length;
+  const selesai = anakBuah.filter((t) => absensi[t.id]?.status === "SELESAI").length;
+  const timTerlihat = pilihAnakBuah ? anakBuah.filter((t) => t.id === pilihAnakBuah) : anakBuah;
 
   return (
     <>
@@ -249,7 +253,7 @@ function Isi() {
         <h2 className="font-bold text-ink">{proyekSaya.name}</h2>
         <div className="mt-3 flex flex-wrap gap-4 text-sm">
           <span className="text-muted">
-            Tim <strong className="text-ink">{tim.length}</strong>
+            {modeStaf ? "Pekerja" : "Anak buah"} <strong className="text-ink">{anakBuah.length}</strong>
           </span>
           <span className="text-muted">
             Belum absen <strong className="text-ink">{belum}</strong>
@@ -263,7 +267,7 @@ function Isi() {
             ? "Anda staf yang ditugaskan ke proyek ini, jadi bisa mencatat absen pekerja lapangan seperti mandor. Catatannya tetap tercatat di bawah mandor masing-masing, dan nama Anda tersimpan sebagai pencatat. Absen Anda sendiri lewat menu Absen saya. "
             : "Absen hanya bisa dicatat dalam radius " +
               proyekSaya.attendanceRadiusMeter +
-              " meter dari titik proyek, dan wajib berfoto. Anak buah yang punya akun juga bisa absen sendiri lewat menu Absen saya; catatannya tetap muncul di sini. "}
+              " meter dari titik proyek, dan setiap sesi wajib foto wajah orangnya, satu per orang. Absen Anda sendiri lewat menu Absen saya (swafoto). Anak buah yang punya akun juga bisa absen sendiri; catatannya tetap muncul di sini. "}
           Tabel jam seluruh tim ada di{" "}
           <Link href="/tim-lapangan" className="text-allegro-600 underline">
             Tim lapangan
@@ -420,7 +424,7 @@ function Isi() {
       <KameraBelakang
         terbuka={Boolean(antrean)}
         judul={
-          antrean ? `${NAMA_SESI[antrean.jenis]} · ${antrean.karyawan.name}` : ""
+          antrean ? `Foto wajah ${antrean.karyawan.name} · ${NAMA_SESI[antrean.jenis].toLowerCase()}` : ""
         }
         onFoto={simpanFoto}
         onBatal={() => setAntrean(null)}
@@ -435,7 +439,7 @@ export default function MandorDashboard() {
     // Dibuka untuk semua peran: staf yang ditugaskan ke proyek mencatat absen
     // pekerja lapangan seperti mandor. Yang tidak ditugaskan diberi pesan.
     <Guard izinkan={["ADMIN", "FINANCE", "MANDOR", "HR", "OWNER", "KARYAWAN"]}>
-      <Shell judul="Absensi Lapangan" keterangan="Mandor dan staf proyek mencatat absen pekerja lapangan di lokasi proyek.">
+      <Shell judul="Absen Tim" keterangan="Mandor dan staf proyek mencatat absen pekerja lapangan di lokasi proyek, dengan foto wajah dan GPS.">
         <Isi />
       </Shell>
     </Guard>

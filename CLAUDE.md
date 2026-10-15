@@ -262,9 +262,16 @@ Batas 1 hari juga ditegakkan di `firestore.rules` (`tanggalLemburMasihBoleh`) me
 
 ### Absensi lapangan
 
-GPS wajib, radius per proyek (bawaan 1.000 m), foto wajib dari kamera belakang, satu foto per orang per sesi. Mandor mencatat timnya dan dirinya sendiri. Urutan sesi tidak bisa dilompati.
+GPS wajib, radius per proyek (bawaan 1.000 m), foto wajib dari kamera, satu foto per orang per sesi. Urutan sesi tidak bisa dilompati.
 
-**Tukang/kenek yang punya akun Google boleh absen sendiri** (9 Okt 2026) lewat menu Absen saya, yang untuk posisi lapangan menampilkan `components/AbsenLapanganSendiri.tsx`. Aturannya sama (radius proyek penugasan, swafoto, urutan sesi) dan catatannya masuk dokumen `attendance` yang sama, jadi tetap terlihat di tim mandor. Rules hanya menerima bila `mandorId` dan `projectId` cocok dengan `currentMandorId`/`currentProjectId` di dokumen karyawannya. Halaman mandor punya menu tarik-turun "Anak buah saya" untuk menyaring kartu.
+**Alur sejak 15 Okt 2026 (Bang Syam):** mandor, tukang, dan kenek adalah orang lapangan dan cenderung pihak ketiga. Masalah utamanya absen tukang/kenek yang tidak sesuai keadaan lapangan, jadi:
+
+- **Mandor absen sendiri** lewat menu Absen saya (`/absen`), alurnya sama dengan staf kantor: swafoto kamera depan + GPS di titik proyek penugasan, jam dari server. Menu Absen saya kini terbuka untuk peran MANDOR; `AbsenLapanganSendiri` memakai `mandorId` = `currentMandorId`, atau kode mandor itu sendiri bila kolomnya kosong (`mandorAtasDiriSendiri()` di rules). Mandor **tidak lagi** mencatat dirinya di halaman tim; kartu "(Anda)" dihapus dari `/mandor`.
+- **Mandor wajib mengabsenkan tukang/kenek di bawahnya** dari menu Absen tim (`/mandor`), dengan cara yang sama: satu foto wajah per orang per sesi (judul kamera "Foto wajah …"), GPS di radius proyek, jam server. Tukang/kenek yang punya akun Google tetap boleh absen sendiri (9 Okt 2026); belum ditanyakan apakah ini mau dimatikan.
+- **Absen mandor diawasi** staf kantor yang ditugaskan ke proyek itu (`/mandor` mode staf dan `/tim-lapangan` memuat mandor karena `pantauPekerjaProyek` menyaring `POSISI_LAPANGAN`; staf boleh mencatat untuk mandor, `stafProyekMencatat()` menerima `mandorId` = kode mandor sendiri) dan Admin (validasi bertanda tangan di `/admin/absensi`).
+- Beranda pekerja lapangan membaca angka hari ini dari `attendance` (`lapanganHariIni`), bukan `absenKantor`.
+
+Rules hanya menerima absen sendiri bila `projectId` cocok dengan `currentProjectId` dan `mandorId` cocok dengan `currentMandorId` (atau kode sendiri untuk MANDOR). Halaman mandor punya menu tarik-turun "Anak buah saya" untuk menyaring kartu.
 
 ### Absensi kantor
 
@@ -292,7 +299,7 @@ Menu *Izin keluar kantor* semula dirancang sebagai "keluar lalu kembali". Pada p
 
 ### Mandor adalah pihak ketiga (10 Okt 2026)
 
-Mandor cenderung vendor, bukan karyawan tetap. Karena itu **staf kantor yang ditugaskan ke proyek** (`currentProjectId`, posisi bukan lapangan) boleh membuka menu Absen tim (`/mandor`) dan mencatat absen semua pekerja lapangan di proyeknya seperti mandor: `pantauPekerjaProyek` + `pantauAbsensiProyek`, `catatSesi` dengan `mandorId` = `currentMandorId` si pekerja dan `recordedBy` = email staf. Rules `stafKantorProyek()`/`stafProyekMencatat()` menegakkan proyek dan mandorId itu. Hak ini diikat ke penugasan, **bukan** peran MANDOR, supaya staf tidak kehilangan hak kantornya. Untuk posisi MANDOR **tidak ada cuti, izin, dan surat peringatan**: menu Cuti dan izin, Izin pulang, Slip gaji, dan Surat peringatan disembunyikan dari peran MANDOR (`BUKAN_MANDOR` di `lib/menu.ts`), daftar karyawan di form SP tidak memuat mandor, dan rules menolak `leaveRequests`, `izinKeluar`, serta `warningLetters` yang `employeeId`-nya berposisi MANDOR (`posisiKaryawan()`). Lembur tetap ada karena mandor mengajukan lembur anak buahnya. Tukang/kenek tidak ikut dibatasi — belum ditanyakan.
+Mandor cenderung vendor, bukan karyawan tetap. Karena itu **staf kantor yang ditugaskan ke proyek** (`currentProjectId`, posisi bukan lapangan) boleh membuka menu Absen tim (`/mandor`) dan mencatat absen semua pekerja lapangan di proyeknya seperti mandor: `pantauPekerjaProyek` + `pantauAbsensiProyek`, `catatSesi` dengan `mandorId` = `currentMandorId` si pekerja dan `recordedBy` = email staf. Rules `stafKantorProyek()`/`stafProyekMencatat()` menegakkan proyek dan mandorId itu. Hak ini diikat ke penugasan, **bukan** peran MANDOR, supaya staf tidak kehilangan hak kantornya. Untuk posisi MANDOR **tidak ada cuti, izin, dan surat peringatan**: menu Cuti dan izin, Izin pulang, Slip gaji, dan Surat peringatan disembunyikan dari peran MANDOR (`BUKAN_MANDOR` di `lib/menu.ts`), daftar karyawan di form SP tidak memuat mandor, dan rules menolak `leaveRequests`, `izinKeluar`, serta `warningLetters` yang `employeeId`-nya berposisi MANDOR (`posisiKaryawan()`). Lembur tetap ada karena mandor mengajukan lembur anak buahnya. Tukang/kenek tidak ikut dibatasi — belum ditanyakan. Absen mandor sendiri: lihat Absensi lapangan (alur 15 Okt 2026).
 
 ### Tim lapangan (10 Okt 2026)
 

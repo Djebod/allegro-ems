@@ -242,8 +242,9 @@ function Isi() {
 
   if (!karyawan) return <Pesan jenis="gagal" isi="Data karyawan Anda tidak ditemukan." />;
 
-  // Tukang dan kenek yang punya akun absen di titik proyek dengan aturan
-  // lapangan (sesi masuk/istirahat/pulang/lembur), bukan aturan kantor.
+  // Mandor, tukang, dan kenek yang punya akun absen di titik proyek dengan
+  // aturan lapangan (sesi masuk/istirahat/pulang/lembur), bukan aturan kantor.
+  // Caranya sama dengan staf kantor: swafoto + GPS, jam dari server.
   if (jenisPekerja(karyawan) === "LAPANGAN") return <AbsenLapanganSendiri karyawan={karyawan} />;
 
   if (karyawan.tidakWajibAbsen)
@@ -441,7 +442,8 @@ function Isi() {
 
 export default function HalamanAbsenSaya() {
   return (
-    <Guard izinkan={["ADMIN", "FINANCE", "HR", "OWNER", "KARYAWAN"]}>
+    // Mandor ikut: ia absen sendiri di sini seperti staf kantor (15 Okt 2026).
+    <Guard izinkan={["ADMIN", "FINANCE", "HR", "OWNER", "KARYAWAN", "MANDOR"]}>
       <Shell judul="Absen Saya" keterangan="Absen masuk, istirahat, dan pulang dari lokasi kantor atau proyek.">
         <Isi />
       </Shell>

@@ -571,10 +571,20 @@ service cloud.firestore {
     }
 
     /**
-     * Pekerja lapangan (tukang/kenek) yang punya akun boleh mengabsen
-     * dirinya sendiri (9 Okt 2026), tetapi hanya di proyek dan di bawah
-     * mandor yang sedang ditugaskan kepadanya menurut dokumen karyawannya.
-     * Dengan begitu catatannya tetap muncul di tim mandor yang benar.
+     * Mandor yang catatannya berada di bawah dirinya sendiri: penugasan
+     * mengisi currentMandorId dengan kodenya sendiri, tetapi data lama bisa
+     * kosong. Mandor absen sendiri lewat Absen saya sejak 15 Okt 2026.
+     */
+    function mandorAtasDiriSendiri(k, d) {
+      return k.get('position', '') == 'MANDOR' && d.mandorId == d.employeeId;
+    }
+
+    /**
+     * Pekerja lapangan yang punya akun boleh mengabsen dirinya sendiri
+     * (tukang/kenek sejak 9 Okt 2026, mandor sejak 15 Okt 2026), tetapi
+     * hanya di proyek dan di bawah mandor yang sedang ditugaskan kepadanya
+     * menurut dokumen karyawannya. Dengan begitu catatannya tetap muncul
+     * di tim mandor yang benar.
      */
     function absenDiriSendiri() {
       let d = request.resource.data;
@@ -583,7 +593,7 @@ service cloud.firestore {
         && d.employeeId == karyawanSaya()
         // Dibaca dengan nilai bawaan null supaya karyawan yang belum
         // ditugaskan ditolak dengan rapi, bukan lewat galat kolom hilang.
-        && d.mandorId == k.get('currentMandorId', null)
+        && (d.mandorId == k.get('currentMandorId', null) || mandorAtasDiriSendiri(k, d))
         && d.projectId == k.get('currentProjectId', null);
     }
 
@@ -605,9 +615,12 @@ service cloud.firestore {
      */
     function stafProyekMencatat() {
       let d = request.resource.data;
+      let k = get(/databases/$(database)/documents/employees/$(d.employeeId)).data;
       return stafKantorProyek()
         && d.projectId == proyekPenugasanSaya()
-        && d.mandorId == get(/databases/$(database)/documents/employees/$(d.employeeId)).data.get('currentMandorId', null);
+        // Staf proyek juga boleh mencatat mandor itu sendiri (mengawasi
+        // absen mandor, 15 Okt 2026); catatan mandor berada di bawah dirinya.
+        && (d.mandorId == k.get('currentMandorId', null) || mandorAtasDiriSendiri(k, d));
     }
 
     /** Dokumen absensi lapangan baru: hari ini, semua sesinya berjam server. */
