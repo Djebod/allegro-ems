@@ -122,6 +122,9 @@ function Isi({ kode }: { kode: string }) {
   }, [kode]);
 
   const tarifBerlaku = tarif.find((t) => t.effectiveUntil === null) || null;
+  /* Staf kantor (bukan posisi lapangan) digaji bulanan. Staf yang
+     telanjur punya tarif harian/per jam tetap ditampilkan seperti biasa. */
+  const stafBulanan = !!karyawan && !posisiLapangan(karyawan.position) && !tarifBerlaku;
   const tugasBerlaku = tugas.find((t) => t.status === "ACTIVE") || null;
   const sectionProyek = sections.filter((s) => s.projectId === pProyek && s.status === "ACTIVE");
 
@@ -372,16 +375,35 @@ function Isi({ kode }: { kode: string }) {
         </div>
       </div>
 
-      {/* Tarif */}
+      {/* Tarif. Staf kantor digaji BULANAN: gaji pokok & tunjangannya
+          diatur di menu Payroll bulanan, bukan tarif harian/per jam di
+          sini (tarif ini hanya untuk payroll mingguan pekerja lapangan). */}
       <div className="mt-6 flex items-center justify-between">
-        <h2 className="text-lg font-bold text-allegro-700">Tarif gaji</h2>
-        <button className="btn-utama" onClick={() => setBukaTarif(true)}>
-          Tarif baru
-        </button>
+        <h2 className="text-lg font-bold text-allegro-700">{stafBulanan ? "Gaji bulanan" : "Tarif gaji"}</h2>
+        {stafBulanan ? (
+          <Link href="/payroll-bulanan" className="btn-utama">
+            Atur gaji bulanan
+          </Link>
+        ) : (
+          <button className="btn-utama" onClick={() => setBukaTarif(true)}>
+            Tarif baru
+          </button>
+        )}
       </div>
 
       <div className="mt-3 space-y-3">
-        {tarifBerlaku ? (
+        {stafBulanan ? (
+          <div className="kartu">
+            <p className="text-sm font-semibold text-ink">Mode MONTHLY — dibayar bulanan</p>
+            <p className="mt-1 text-sm text-muted">
+              Staf kantor masuk <b>payroll bulanan</b>. Gaji pokok dan tunjangannya diisi di menu{" "}
+              <Link href="/payroll-bulanan" className="font-medium text-allegro-700 underline">
+                Payroll bulanan → Gaji pokok &amp; tunjangan
+              </Link>
+              . Upah sehari (untuk lembur) dihitung otomatis: gaji pokok ÷ hari kerja bulan itu.
+            </p>
+          </div>
+        ) : tarifBerlaku ? (
           <div className="kartu">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
