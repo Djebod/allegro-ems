@@ -1,7 +1,7 @@
 rules_version = '2';
 
 // ============================================================
-//  VERSI RULES: 3 — ditulis 15 Okt 2026 pukul 08.32 WIB
+//  VERSI RULES: 4 — ditulis 20 Okt 2026 pukul 07.40 WIB
 //
 //  Firebase Console harus memuat versi ini. Sebelum dan sesudah Publish,
 //  bandingkan baris VERSI di atas dengan yang tampil di tab Rules.
@@ -10,6 +10,7 @@ rules_version = '2';
 //  Bang Syam, 15 Okt 2026).
 //
 //  Riwayat:
+//   v4  20 Okt 2026 07.40  [ADMIN PROYEK] kebijakan uang hasil rapat 10 Okt: apPengaturan (batas nominal Direksi + pelimpahan), apCounters (nomor resmi berurutan), PO/transfer di atas batas wajib Direksi, PIC dicabut dari PO, semua warga boleh klaim, PB boleh berfoto
 //   v3  15 Okt 2026 08.32  penugasan staf kantor boleh tanpa mandor (penugasanSah)
 //   v2  15 Okt 2026 08.00  koreksi absen lapangan oleh HR/Owner (attendanceCorrections, update attendance)
 //   v1  15 Okt 2026 07.40  mandor absen sendiri lewat Absen saya (mandorAtasDiriSendiri); versi pertama yang diberi nomor
@@ -1780,6 +1781,65 @@ service cloud.firestore {
       return superProyek() || berperanProyek(['SUPER_ADMIN','HEAD_ADMIN','ADMIN_DATA']);
     }
 
+    // ---------- [ADMIN PROYEK] kebijakan uang (rapat 10 Okt 2026, A1–A2) ----------
+    // Dokumen tunggal apPengaturan/kebijakan: { batasDireksi, pelimpahan:{aktif,kepada,sampai,oleh,alasan} }.
+    // Di atas batas nominal hanya Direksi yang boleh menyetujui PO & transfer, kecuali
+    // Direksi sedang melimpahkan haknya ke Head Admin (ada tanggal berakhirnya).
+    function adaKebijakan() {
+      return exists(/databases/$(database)/documents/apPengaturan/kebijakan);
+    }
+    function kebijakan() {
+      return get(/databases/$(database)/documents/apPengaturan/kebijakan).data;
+    }
+    function batasDireksi() {
+      return adaKebijakan() ? kebijakan().get('batasDireksi', 10000000) : 10000000;
+    }
+    function pelimpahanBerlaku() {
+      let p = kebijakan().get('pelimpahan', {});
+      return adaKebijakan()
+        && p.get('aktif', false) == true
+        && p.get('sampai', request.time) > request.time
+        && (p.get('kepada', '') == '' || p.get('kepada', '').lower() == emailUser());
+    }
+    /** Boleh menyetujui dokumen senilai `nominal`? Direksi selalu; Head Admin bila di bawah
+        batas atau sedang menerima pelimpahan. Peran lain tidak pernah. */
+    function bolehSetujuiNominal(nominal) {
+      return superProyek()
+        || berperanProyek(['SUPER_ADMIN','DIREKSI'])
+        || (berperanProyek(['HEAD_ADMIN']) && (nominal <= batasDireksi() || pelimpahanBerlaku()));
+    }
+
+    match /apPengaturan/{docId} {
+      // Semua warga perlu tahu batasnya untuk menampilkan peringatan di layar.
+      allow read: if wargaProyek();
+      // Hanya dokumen `kebijakan` yang dikenal. Batas diubah atasan; blok pelimpahan hanya
+      // boleh disentuh Direksi / Super Admin dan `oleh` wajib si Direksi itu sendiri.
+      allow create, update: if docId == 'kebijakan'
+        && atasanProyek()
+        && request.resource.data.batasDireksi is number
+        && request.resource.data.batasDireksi >= 0
+        && (
+          (resource == null && request.resource.data.get('pelimpahan', {}).get('aktif', false) == false)
+          || (resource != null && request.resource.data.get('pelimpahan', null) == resource.data.get('pelimpahan', null))
+          || (
+            (superProyek() || berperanProyek(['SUPER_ADMIN','DIREKSI']))
+            && request.resource.data.pelimpahan.aktif is bool
+            && request.resource.data.pelimpahan.oleh == emailUser()
+            && (request.resource.data.pelimpahan.aktif == false
+                || request.resource.data.pelimpahan.sampai > request.time)
+          )
+        );
+      allow delete: if false;
+    }
+
+    // Penghitung nomor resmi: id = <jenis>~<inisial proyek>~<tahun>, hanya naik satu-satu.
+    match /apCounters/{counterId} {
+      allow read: if wargaProyek();
+      allow create: if wargaProyek() && request.resource.data.urut == 1;
+      allow update: if wargaProyek() && request.resource.data.urut == resource.data.urut + 1;
+      allow delete: if false;
+    }
+
     // ---------- apMaterialRequests (PB) ----------
     match /apMaterialRequests/{pbId} {
       allow read: if wargaProyek();
@@ -1788,7 +1848,9 @@ service cloud.firestore {
         && request.resource.data.projectCode is string
         && request.resource.data.projectCode.size() > 0
         && request.resource.data.status == 'DIAJUKAN'
-        && request.resource.data.items.size() > 0;
+        && request.resource.data.items.size() > 0
+        // Foto pengajuan (rapat 10 Okt 2026) boleh kosong; bila diisi wajib dari Cloudinary.
+        && (request.resource.data.get('fotoUrl', '') == '' || fotoCloudinary(request.resource.data.fotoUrl));
 
       // Verifikasi PB hanya Planner / Head Admin. Purchasing boleh menandai
       // "DIPROSES" saat PB dipakai jadi PO. Isi permintaannya tidak boleh
@@ -1815,9 +1877,10 @@ service cloud.firestore {
 
     // ---------- apPurchaseOrders (PO + nota) ----------
     match /apPurchaseOrders/{poId} {
-      // PO memuat harga beli; Staf Lapangan tidak punya menu PO.
+      // PO memuat harga beli; Staf Lapangan tidak punya menu PO. PIC/Mandor dicabut
+      // (rapat 10 Okt 2026, D4: lapangan tidak boleh melihat harga).
       allow read: if atasanProyek()
-        || berperanProyek(['PURCHASING','ADMIN_PROYEK','ADMIN_DATA','PLANNER','QS','KOORDINATOR','PIC']);
+        || berperanProyek(['PURCHASING','ADMIN_PROYEK','ADMIN_DATA','PLANNER','QS','KOORDINATOR']);
 
       // PO lahir langsung sebagai MENUNGGU_APPROVAL: tidak ada PO yang
       // "sudah disetujui" sejak awal.
@@ -1830,10 +1893,12 @@ service cloud.firestore {
 
       allow update: if (
           // Approval: hanya Head Admin / Direksi, dan nilainya tidak boleh
-          // ikut berubah saat menyetujui.
+          // ikut berubah saat menyetujui. Di atas batas nominal wajib Direksi
+          // (atau Head Admin yang sedang menerima pelimpahan).
           atasanProyek()
           && resource.data.status == 'MENUNGGU_APPROVAL'
           && request.resource.data.status in ['DISETUJUI','DIKEMBALIKAN']
+          && (request.resource.data.status != 'DISETUJUI' || bolehSetujuiNominal(resource.data.subtotal))
           && request.resource.data.subtotal == resource.data.subtotal
           && request.resource.data.supplierId == resource.data.supplierId
           && request.resource.data.items == resource.data.items
@@ -1869,8 +1934,8 @@ service cloud.firestore {
                 && request.resource.data.get('nota', null) == resource.data.get('nota', null))
           )
         ) || (
-          // Penerimaan barang di lokasi boleh dicatat PIC / Koordinator.
-          (purchasing() || berperanProyek(['PIC','KOORDINATOR']))
+          // Penerimaan barang di lokasi boleh dicatat Koordinator (PIC dicabut, D4).
+          (purchasing() || berperanProyek(['KOORDINATOR']))
           && resource.data.status in ['DIBAYAR','KONTRA_BON','DIKIRIM']
           && request.resource.data.status == 'DITERIMA'
           && request.resource.data.subtotal == resource.data.subtotal
@@ -1916,15 +1981,16 @@ service cloud.firestore {
 
     // ---------- apClaims (klaim / reimburse) ----------
     match /apClaims/{klaimId} {
-      // Klaim memuat rekening pribadi pengaju. QS & Planner ikut membaca
-      // karena laporan RAB vs realisasi menghitung klaim.
-      allow read: if atasanProyek()
-        || berperanProyek(['ADMIN_PROYEK','ADMIN_DATA','PIC','KOORDINATOR','QS','PLANNER']);
+      // Klaim memuat rekening pribadi pengaju. Rapat 10 Okt 2026 (A4): semua karyawan
+      // boleh menalangi & mengklaim, tanpa batas nominal — jadi semua warga boleh membaca
+      // dan membuat. KLIEN tetap di luar (bukan wargaProyek).
+      allow read: if wargaProyek();
 
       // Wajib berfoto bukti sejak awal, lahir sebagai DIAJUKAN, dan memuat
       // rincian barang (tiap baris ditandai pos RAB) — nominal = jumlah item.
-      allow create: if (superProyek() || berperanProyek(['SUPER_ADMIN','HEAD_ADMIN','ADMIN_PROYEK','PIC','KOORDINATOR']))
+      allow create: if wargaProyek()
         && request.resource.data.status == 'DIAJUKAN'
+        && request.resource.data.diajukanOleh == emailUser()
         && request.resource.data.nominal is number
         && request.resource.data.nominal > 0
         && request.resource.data.items is list
@@ -2003,10 +2069,12 @@ service cloud.firestore {
         && request.resource.data.get('items', null) == resource.data.get('items', null)
         && ((
           // Approval final: Head Admin / Direksi. Nominal & penerima beku,
-          // supaya angka tidak bisa digeser setelah diperiksa.
+          // supaya angka tidak bisa digeser setelah diperiksa. Di atas batas
+          // nominal wajib Direksi (atau Head Admin penerima pelimpahan).
           atasanProyek()
           && resource.data.status in ['DIAJUKAN','DIKEMBALIKAN']
           && request.resource.data.status in ['DISETUJUI','DIKEMBALIKAN']
+          && (request.resource.data.status != 'DISETUJUI' || bolehSetujuiNominal(resource.data.nominal))
           && request.resource.data.nominal == resource.data.nominal
           && request.resource.data.penerima == resource.data.penerima
           // Empat mata: yang mengajukan tidak boleh menyetujui sendiri.
