@@ -165,7 +165,9 @@ export function pantauPengajuan(
 
 export async function ajukanCuti(data: Omit<PengajuanCuti, "id" | "createdAt" | "updatedAt">) {
   const ref = doc(collection(dbClient(), "leaveRequests"));
-  await setDoc(ref, { ...data, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+  // Kolom bernilai undefined dibuang: setDoc menolaknya ("Unsupported field value: undefined").
+  const bersih = Object.fromEntries(Object.entries(data).filter(([, v]) => v !== undefined));
+  await setDoc(ref, { ...bersih, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
   return ref.id;
 }
 

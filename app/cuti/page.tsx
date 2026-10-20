@@ -185,7 +185,8 @@ function Isi() {
         jumlahHari,
         jamKeluar: berbasisJam ? jamKeluar : "",
         jamKembali: berbasisJam ? jamKembali : "",
-        keperluan: jenis === "MENINGGALKAN_KANTOR" ? keperluan : undefined,
+        // Firestore menolak nilai undefined: kolom keperluan hanya dikirim untuk Meninggalkan kantor.
+        ...(jenis === "MENINGGALKAN_KANTOR" ? { keperluan } : {}),
         alasan: alasan.trim() + catatanTambahan,
         lampiranUrl: lampiran,
         mendesak,
