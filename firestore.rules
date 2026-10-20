@@ -2302,6 +2302,8 @@ service cloud.firestore {
         && request.resource.data.tanggal == resource.data.tanggal
         && request.resource.data.dibuatOleh == resource.data.dibuatOleh
         && request.resource.data.status in ['DRAFT','TERBIT']
+        // Tanda tangan pengawas (rapat 10 Okt 2026, B16) boleh kosong; bila ada wajib Cloudinary.
+        && (request.resource.data.get('ttdPengawasUrl', '') == '' || fotoCloudinary(request.resource.data.ttdPengawasUrl))
         // Menerbitkan ke klien hanya boleh oleh yang berwenang.
         && (request.resource.data.status == resource.data.status
             || atasanProyek()
