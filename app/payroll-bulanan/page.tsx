@@ -622,7 +622,7 @@ function Isi() {
 
 export default function HalamanPayrollBulanan() {
   return (
-    <Guard izinkan={["ADMIN", "HR", "OWNER", "FINANCE"]}>
+    <Guard izinkan={["OWNER", "FINANCE"]}>
       <Shell judul="Payroll Bulanan" keterangan="Gaji staf kantor per bulan." lebar>
         <Isi />
       </Shell>

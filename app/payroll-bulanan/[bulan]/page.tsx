@@ -742,7 +742,7 @@ export default function HalamanRincianPayrollBulanan() {
   const bulan = decodeURIComponent(String(params.bulan));
   const sah = /^\d{4}-\d{2}$/.test(bulan);
   return (
-    <Guard izinkan={["ADMIN", "HR", "OWNER", "FINANCE"]}>
+    <Guard izinkan={["OWNER", "FINANCE"]}>
       <Shell
         judul={sah ? `Payroll ${namaBulan(bulan)}` : "Payroll Bulanan"}
         keterangan="Gaji staf kantor. Isian manual bisa diubah selama Draft atau Diperiksa."

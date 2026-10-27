@@ -686,12 +686,19 @@ export function pantauKoreksi(
 
 const BON_BERJALAN: StatusBon[] = ["OPEN", "PARTIALLY_PAID"];
 
+/**
+ * Admin hanya boleh membaca kasbon pekerja lapangan (rapat 27 Okt 2026),
+ * jadi kuerinya wajib menyaring `lapangan == true` - Security Rules
+ * menolak kueri yang bisa memuat kasbon staf kantor.
+ */
 export function pantauBon(
   onData: (data: EmployeeLoan[]) => void,
-  onGagal: () => void
+  onGagal: () => void,
+  hanyaLapangan = false
 ) {
+  const kol = collection(dbClient(), "employeeLoans");
   return onSnapshot(
-    collection(dbClient(), "employeeLoans"),
+    hanyaLapangan ? query(kol, where("lapangan", "==", true)) : kol,
     (snap) => {
       const isi = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<EmployeeLoan, "id">) }));
       isi.sort((a, b) => b.loanDate.localeCompare(a.loanDate));
@@ -704,10 +711,13 @@ export function pantauBon(
 export function pantauPembayaranBon(
   loanId: string,
   onData: (data: LoanRepayment[]) => void,
-  onGagal: () => void
+  onGagal: () => void,
+  hanyaLapangan = false
 ) {
+  const syarat = [where("loanId", "==", loanId)];
+  if (hanyaLapangan) syarat.push(where("lapangan", "==", true));
   return onSnapshot(
-    query(collection(dbClient(), "loanRepayments"), where("loanId", "==", loanId)),
+    query(collection(dbClient(), "loanRepayments"), ...syarat),
     (snap) =>
       onData(snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<LoanRepayment, "id">) }))),
     onGagal
@@ -753,6 +763,7 @@ export async function buatBon(data: {
   await setDoc(bonRef, {
     employeeId: data.karyawan.id,
     employeeName: data.karyawan.name,
+    lapangan: posisiLapangan(data.karyawan.position),
     originalAmount: data.jumlah,
     remainingAmount: data.jumlah,
     loanDate: data.tanggal,
@@ -806,6 +817,7 @@ export async function catatPembayaranBon(opsi: {
     employeeId: kini.employeeId,
     payrollId: opsi.payrollId,
     amount: opsi.jumlah,
+    lapangan: kini.lapangan === true,
     catatan: opsi.catatan,
     createdBy: opsi.oleh,
     createdAt: serverTimestamp(),
@@ -910,11 +922,21 @@ export async function semuaTarif(): Promise<SalaryRate[]> {
   return snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<SalaryRate, "id">) }));
 }
 
-export async function bonBerjalan(): Promise<EmployeeLoan[]> {
+/**
+ * Bon yang masih berjalan. `hanyaLapangan` dipakai payroll mingguan (bisa
+ * dijalankan Admin, dan isinya memang hanya pekerja lapangan); status
+ * disaring di sini supaya tidak perlu indeks gabungan.
+ */
+export async function bonBerjalan(hanyaLapangan = false): Promise<EmployeeLoan[]> {
+  const kol = collection(dbClient(), "employeeLoans");
   const snap = await getDocs(
-    query(collection(dbClient(), "employeeLoans"), where("status", "in", ["OPEN", "PARTIALLY_PAID"]))
+    hanyaLapangan
+      ? query(kol, where("lapangan", "==", true))
+      : query(kol, where("status", "in", ["OPEN", "PARTIALLY_PAID"]))
   );
-  return snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<EmployeeLoan, "id">) }));
+  return snap.docs
+    .map((d) => ({ id: d.id, ...(d.data() as Omit<EmployeeLoan, "id">) }))
+    .filter((b) => BON_BERJALAN.includes(b.status));
 }
 
 /* --- menyimpan --- */
@@ -1038,7 +1060,7 @@ export async function majukanStatusPayroll(payroll: Payroll, oleh: string) {
     const snap = await getDocs(
       query(collection(db, "payrollItems"), where("payrollId", "==", payroll.id))
     );
-    const daftarBon = await bonBerjalan();
+    const daftarBon = await bonBerjalan(true);
 
     for (const d of snap.docs) {
       const item = d.data() as PayrollItem;
@@ -1095,7 +1117,7 @@ export async function susunItemPayroll(opsi: {
     ambilAbsensiRentang(opsi.periodStart, opsi.periodEnd),
     semuaKaryawan(),
     semuaTarif(),
-    bonBerjalan(),
+    bonBerjalan(true),
     // Lembur hanya dibayar bila ada pengajuan yang disetujui pada tanggalnya.
     ambilLemburDisetujui(opsi.periodStart, opsi.periodEnd),
   ]);

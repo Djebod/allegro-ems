@@ -837,19 +837,33 @@ service cloud.firestore {
         );
     }
 
+    // Kasbon pekerja lapangan (Mandor/Tukang/Kenek) ditandai lapangan == true.
+    // Rapat 27 Okt 2026: Admin hanya boleh kasbon lapangan; kasbon staf
+    // kantor hanya Finance dan Owner. Data lama tanpa kolom = bukan lapangan.
+    function bonLapangan(d) {
+      return d.get('lapangan', false) == true;
+    }
+    function posisiLapanganSah(employeeId) {
+      return posisiKaryawan(employeeId) in ['MANDOR', 'TUKANG', 'KENEK'];
+    }
+
     match /employeeLoans/{bonId} {
-      // Karyawan tidak punya akses; bon adalah urusan Admin dan Finance.
-      // HR ikut membaca karena menyusun payroll bulanan (usulan potongan bon).
-      allow read: if isAdmin() || isFinance() || isOwner() || isHR();
-      allow create: if (isAdmin() || isFinance()) && bonSah()
-        && rencanaCicilanSah(request.resource.data);
+      // Karyawan tidak punya akses; bon adalah urusan Finance/Owner, dan
+      // Admin untuk kasbon pekerja lapangan saja.
+      allow read: if isFinance() || isOwner() || (isAdmin() && bonLapangan(resource.data));
+      allow create: if (isFinance() || (isAdmin() && bonLapangan(request.resource.data)))
+        && bonSah()
+        && rencanaCicilanSah(request.resource.data)
+        // Penanda lapangan harus sesuai posisi karyawannya.
+        && request.resource.data.get('lapangan', false) == posisiLapanganSah(request.resource.data.employeeId);
 
       // Nominal asli dan pemiliknya tidak boleh berubah. Yang boleh
       // berubah hanya sisa dan statusnya, karena itulah yang bergerak
       // setiap kali ada pembayaran.
       // Owner ikut, karena potongan bon payroll bulanan dibukukan saat
       // Owner menyetujui payroll itu.
-      allow update: if (isAdmin() || isFinance() || isOwner()) && bonSah()
+      allow update: if (isFinance() || isOwner() || (isAdmin() && bonLapangan(resource.data))) && bonSah()
+        && request.resource.data.get('lapangan', false) == resource.data.get('lapangan', false)
         && request.resource.data.employeeId == resource.data.employeeId
         && request.resource.data.originalAmount == resource.data.originalAmount
         && request.resource.data.loanDate == resource.data.loanDate
@@ -877,10 +891,13 @@ service cloud.firestore {
 
     // ---------- loanRepayments ----------
     match /loanRepayments/{bayarId} {
-      // Owner dan HR ikut membaca untuk bagian "Data Kasbon" di slip gaji.
-      allow read: if isAdmin() || isFinance() || isOwner() || isHR();
-      allow create: if (isAdmin() || isFinance() || isOwner())
+      // Owner ikut membaca untuk bagian "Data Kasbon" di slip gaji. Admin
+      // hanya pembayaran kasbon lapangan (kolom lapangan = salinan bonnya).
+      allow read: if isFinance() || isOwner() || (isAdmin() && bonLapangan(resource.data));
+      allow create: if (isFinance() || isOwner() || (isAdmin() && bonLapangan(request.resource.data)))
         && request.resource.data.loanId is string
+        && request.resource.data.get('lapangan', false)
+             == bonLapangan(get(/databases/$(database)/documents/employeeLoans/$(request.resource.data.loanId)).data)
         && request.resource.data.amount is number
         && request.resource.data.amount > 0;
       // Catatan pembayaran bersifat tambah-saja, sama seperti jejak audit.
@@ -969,11 +986,12 @@ service cloud.firestore {
     }
 
     // ================= PAYROLL BULANAN (staf kantor) =================
-    // Owner (Ko Freddy, Ko David, Pak Christian), HR (Firda), Finance
-    // (merangkap, keputusan client 28 Sep 2026), dan Admin sistem.
-    // Menyetujui, menandai dibayar, dan mengunci tetap hanya Owner.
+    // Gaji staf kantor HANYA Finance (Firda) dan Owner (rapat 27 Okt 2026).
+    // Admin (termasuk Reinaldo dan Admin sistem) serta HR tidak boleh
+    // membaca maupun mengisi. Menyetujui, menandai dibayar, dan mengunci
+    // tetap hanya Owner.
     function urusGajiBulanan() {
-      return isAdmin() || isHR() || isOwner() || isFinance();
+      return isOwner() || isFinance();
     }
 
     // ---------- gajiBulanan ----------
@@ -1087,7 +1105,6 @@ service cloud.firestore {
     // dihapus. Karyawan hanya bisa membaca slip miliknya sendiri.
     match /slipGaji/{slipId} {
       allow read: if urusGajiBulanan()
-        || isFinance()
         || (sudahLogin() && resource.data.employeeId == karyawanSaya());
 
       allow create: if isOwner()

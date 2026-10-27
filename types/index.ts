@@ -384,6 +384,13 @@ export interface EmployeeLoan {
   mulaiPotong: string;
   /** Besar potongan tiap bulan, dibulatkan ke atas. */
   cicilanPerBulan: number;
+  /**
+   * Kasbon pekerja lapangan (Mandor/Tukang/Kenek). Admin hanya boleh
+   * melihat dan mengurus kasbon lapangan; kasbon staf kantor hanya
+   * Finance dan Owner (keputusan rapat 27 Okt 2026). Kosong = data lama,
+   * diperlakukan sebagai bukan lapangan.
+   */
+  lapangan?: boolean;
   createdBy: string;
   createdAt?: unknown;
   updatedAt?: unknown;
@@ -408,6 +415,8 @@ export interface LoanRepayment {
   /** Kosong bila dibayar tunai di luar payroll. */
   payrollId: string | null;
   amount: number;
+  /** Salinan EmployeeLoan.lapangan, supaya hak baca Admin bisa dicek per baris. */
+  lapangan?: boolean;
   catatan: string;
   createdBy: string;
   createdAt?: unknown;

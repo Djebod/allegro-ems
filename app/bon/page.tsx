@@ -17,6 +17,7 @@ import {
 import { bacaAngka, keRupiah, rupiahPenuh } from "@/lib/rupiah";
 import { tanggalHariIni, tanggalPendek } from "@/lib/absensi";
 import { TENOR_KASBON_BAWAAN } from "@/lib/constants";
+import { posisiLapangan } from "@/lib/karyawan";
 import type { Employee, EmployeeLoan, LoanRepayment, StatusBon } from "@/types";
 
 const SARINGAN: { nilai: "BERJALAN" | "SEMUA" | StatusBon; label: string }[] = [
@@ -42,6 +43,9 @@ function labelStatus(s: StatusBon) {
 
 function Isi() {
   const { profile } = useAuth();
+  /* Admin hanya mengurus kasbon Mandor/Tukang/Kenek; kasbon staf kantor
+     hanya Finance dan Owner (rapat 27 Okt 2026). */
+  const hanyaLapangan = profile?.role === "ADMIN";
   const [bon, setBon] = useState<EmployeeLoan[]>([]);
   const [karyawan, setKaryawan] = useState<Employee[]>([]);
   const [memuat, setMemuat] = useState(true);
@@ -68,7 +72,9 @@ function Isi() {
   const [alasanBatal, setAlasanBatal] = useState("");
 
   useEffect(() => {
-    daftarKaryawanAktif().then(setKaryawan).catch(() => {});
+    daftarKaryawanAktif()
+      .then((d) => setKaryawan(hanyaLapangan ? d.filter((k) => posisiLapangan(k.position)) : d))
+      .catch(() => {});
     return pantauBon(
       (d) => {
         setBon(d);
@@ -77,17 +83,18 @@ function Isi() {
       () => {
         setSalah("Data bon tidak bisa dibaca. Pastikan Security Rules terbaru sudah di-publish.");
         setMemuat(false);
-      }
+      },
+      hanyaLapangan
     );
-  }, []);
+  }, [hanyaLapangan]);
 
   useEffect(() => {
     if (!bayarUntuk) {
       setRiwayat([]);
       return;
     }
-    return pantauPembayaranBon(bayarUntuk.id, setRiwayat, () => setRiwayat([]));
-  }, [bayarUntuk]);
+    return pantauPembayaranBon(bayarUntuk.id, setRiwayat, () => setRiwayat([]), hanyaLapangan);
+  }, [bayarUntuk, hanyaLapangan]);
 
   const terlihat = useMemo(() => {
     const k = cari.trim().toLowerCase();
@@ -508,11 +515,16 @@ function Isi() {
 }
 
 export default function HalamanBon() {
+  const { profile } = useAuth();
   return (
     <Guard izinkan={["ADMIN", "FINANCE"]}>
       <Shell
         judul="Bon Karyawan"
-        keterangan="Pinjaman karyawan dan pelunasannya."
+        keterangan={
+          profile?.role === "ADMIN"
+            ? "Pinjaman pekerja lapangan (Mandor, Tukang, Kenek). Kasbon staf kantor diurus Finance."
+            : "Pinjaman karyawan dan pelunasannya."
+        }
         lebar
       >
         <Isi />

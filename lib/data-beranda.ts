@@ -2,6 +2,7 @@
 
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { dbClient } from "@/lib/firebase";
+import { bonBerjalan as ambilBonBerjalan } from "@/lib/data";
 import { keTanggal } from "@/lib/absensi";
 import { BATAS_INGAT_KONTRAK_HARI } from "@/lib/constants";
 import type { AbsenKantor, Employee, EmployeeLoan, Payroll, PengajuanCuti, PengajuanLembur, Role } from "@/types";
@@ -96,12 +97,8 @@ export async function ambilRingkasanTindakan(role: Role, hariIni: string): Promi
           )
           .sort((a, b) => (a.kontrakSelesai || "").localeCompare(b.kontrakSelesai || ""));
       }),
-      aman(bolehKeuangan(role), async () => {
-        const snap = await getDocs(
-          query(collection(db, "employeeLoans"), where("status", "in", ["OPEN", "PARTIALLY_PAID"]))
-        );
-        return snap.docs.map((d) => ({ id: d.id, ...(d.data() as Omit<EmployeeLoan, "id">) }));
-      }),
+      // Admin hanya boleh membaca kasbon pekerja lapangan (rapat 27 Okt 2026).
+      aman(bolehKeuangan(role), () => ambilBonBerjalan(role === "ADMIN")),
       aman(bolehKeuangan(role), async () => {
         const snap = await getDocs(
           query(collection(db, "payroll"), where("status", "in", ["DRAFT", "REVIEW"]))

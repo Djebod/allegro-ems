@@ -380,11 +380,7 @@ function Isi({ kode }: { kode: string }) {
           sini (tarif ini hanya untuk payroll mingguan pekerja lapangan). */}
       <div className="mt-6 flex items-center justify-between">
         <h2 className="text-lg font-bold text-allegro-700">{stafBulanan ? "Gaji bulanan" : "Tarif gaji"}</h2>
-        {stafBulanan ? (
-          <Link href="/payroll-bulanan" className="btn-utama">
-            Atur gaji bulanan
-          </Link>
-        ) : (
+        {stafBulanan ? null : (
           <button className="btn-utama" onClick={() => setBukaTarif(true)}>
             Tarif baru
           </button>
@@ -396,11 +392,9 @@ function Isi({ kode }: { kode: string }) {
           <div className="kartu">
             <p className="text-sm font-semibold text-ink">Mode MONTHLY — dibayar bulanan</p>
             <p className="mt-1 text-sm text-muted">
-              Staf kantor masuk <b>payroll bulanan</b>. Gaji pokok dan tunjangannya diisi di menu{" "}
-              <Link href="/payroll-bulanan" className="font-medium text-allegro-700 underline">
-                Payroll bulanan → Gaji pokok &amp; tunjangan
-              </Link>
-              . Upah sehari (untuk lembur) dihitung otomatis: gaji pokok ÷ hari kerja bulan itu.
+              Staf kantor masuk <b>payroll bulanan</b>. Gaji pokok, tunjangan, dan slipnya hanya
+              bisa dilihat dan diisi <b>Finance dan Owner</b> di menu Payroll bulanan (keputusan
+              rapat 27 Okt 2026).
             </p>
           </div>
         ) : tarifBerlaku ? (

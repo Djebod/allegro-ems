@@ -83,8 +83,9 @@ export const MENU: GrupMenu[] = [
     item: [
       { label: "Kasbon", href: "/bon", peran: ["ADMIN", "FINANCE"] },
       { label: "Payroll mingguan", href: "/payroll", peran: ["ADMIN", "FINANCE"] },
-      // Owner, HR, Finance (merangkap), dan Admin sistem.
-      { label: "Payroll bulanan", href: "/payroll-bulanan", peran: ["ADMIN", "HR", "OWNER", "FINANCE"] },
+      // Gaji staf kantor: HANYA Finance (Firda) dan Owner (rapat 27 Okt 2026).
+      // Admin (termasuk Reinaldo) dan HR tidak boleh membuka.
+      { label: "Payroll bulanan", href: "/payroll-bulanan", peran: ["OWNER", "FINANCE"] },
     ],
   },
   {
