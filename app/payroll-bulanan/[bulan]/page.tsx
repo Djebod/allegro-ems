@@ -145,7 +145,11 @@ function Isi({ bulan }: { bulan: string }) {
   const bisaUbah = p?.status === "DRAFT" || p?.status === "REVIEW";
   const berikut = p ? statusBerikutBulanan(p.status) : null;
   // Menyetujui dan langkah sesudahnya hanya Owner (dijaga juga di Security Rules).
-  const bolehMaju = !!berikut && (p?.status === "DRAFT" || adalahOwner);
+  /* Owner: Setujui dan Kunci. "Tandai sudah dibayar" boleh juga oleh
+     Finance, yang tahu transfernya sudah jalan (27 Okt 2026). */
+  const adalahFinance = profile?.role === "FINANCE";
+  const bolehMaju =
+    !!berikut && (p?.status === "DRAFT" || adalahOwner || (berikut === "PAID" && adalahFinance));
 
   const terlihat = useMemo(() => {
     const kata = cari.trim().toLowerCase();
@@ -341,7 +345,7 @@ function Isi({ bulan }: { bulan: string }) {
             )}
             {berikut && (
               <button className="btn-utama" disabled={!!sibuk || !bolehMaju} onClick={maju}
-                title={!bolehMaju ? "Hanya Owner yang boleh melakukan langkah ini" : undefined}>
+                title={!bolehMaju ? (berikut === "PAID" ? "Hanya Finance atau Owner yang boleh melakukan langkah ini" : "Hanya Owner yang boleh melakukan langkah ini") : undefined}>
                 {sibuk === "maju" ? "Memproses…" : TOMBOL_MAJU[p.status]}
               </button>
             )}
@@ -353,7 +357,7 @@ function Isi({ bulan }: { bulan: string }) {
             <span>
               Slip gaji terbit ke karyawan: <b>{slipTerbit.length}</b> dari {items.length} orang.
             </span>
-            {slipTerbit.length < items.length && adalahOwner && (
+            {slipTerbit.length < items.length && (adalahOwner || adalahFinance) && (
               <button
                 className="btn-kuning"
                 disabled={!!sibuk}

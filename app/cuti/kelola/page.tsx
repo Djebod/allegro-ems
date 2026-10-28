@@ -75,7 +75,8 @@ function Isi() {
 
   // Tahap "Diketahui" milik atasan langsung; HR/Admin hanya cadangan
   // (belum ada HRD, 10 Okt 2026). Owner tidak bisa melompatinya.
-  const bolehCadangan = profile?.role === "HR" || profile?.role === "ADMIN";
+  // Finance (Firda) ikut sebagai cadangan sejak 27 Okt 2026.
+  const bolehCadangan = profile?.role === "HR" || profile?.role === "ADMIN" || profile?.role === "FINANCE";
   const [tandaiJuga, setTandaiJuga] = useState(false);
   const sudahDiketahui = !!putus?.diketahuiOleh;
   const bolehSetujui = sudahDiketahui || (bolehCadangan && tandaiJuga);
@@ -381,7 +382,7 @@ function Isi() {
                 {bolehCadangan && (
                   <label className="mt-2 flex items-start gap-2">
                     <input type="checkbox" className="mt-0.5" checked={tandaiJuga} onChange={(e) => setTandaiJuga(e.target.checked)} />
-                    <span>Tandai diketahui sekarang sebagai cadangan HR/Admin, lalu setujui</span>
+                    <span>Tandai diketahui sekarang sebagai cadangan HR/Admin/Finance, lalu setujui</span>
                   </label>
                 )}
               </div>
@@ -478,7 +479,7 @@ function Isi() {
 
 export default function HalamanKelolaCuti() {
   return (
-    <Guard izinkan={["ADMIN", "HR", "OWNER"]}>
+    <Guard izinkan={["ADMIN", "HR", "OWNER", "FINANCE"]}>
       <Shell judul="Kelola Cuti & Izin" keterangan="Pengajuan yang masuk dan saldo cuti karyawan." lebar>
         <Isi />
       </Shell>

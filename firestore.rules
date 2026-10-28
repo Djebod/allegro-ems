@@ -1052,8 +1052,11 @@ service cloud.firestore {
         && resource.data.status != 'LOCKED'
         && request.resource.data.bulan == resource.data.bulan
         && request.resource.data.status in ['DRAFT', 'REVIEW', 'APPROVED', 'PAID', 'LOCKED']
-        // Menyetujui (dan semua langkah sesudahnya) hanya oleh Owner.
-        && (request.resource.data.status in ['DRAFT', 'REVIEW'] || isOwner() || resource.data.status == request.resource.data.status)
+        // Menyetujui (dan semua langkah sesudahnya) hanya oleh Owner -
+        // kecuali "Tandai sudah dibayar" (APPROVED -> PAID): Finance (Firda)
+        // yang tahu transfernya sudah jalan (27 Okt 2026).
+        && (request.resource.data.status in ['DRAFT', 'REVIEW'] || isOwner() || resource.data.status == request.resource.data.status
+            || (isFinance() && resource.data.status == 'APPROVED' && request.resource.data.status == 'PAID'))
         // Yang sudah disetujui tidak bisa mundur.
         && !(resource.data.status in ['APPROVED', 'PAID'] && request.resource.data.status in ['DRAFT', 'REVIEW']);
 
@@ -1107,7 +1110,8 @@ service cloud.firestore {
       allow read: if urusGajiBulanan()
         || (sudahLogin() && resource.data.employeeId == karyawanSaya());
 
-      allow create: if isOwner()
+      // Diterbitkan saat payroll ditandai Dibayar - oleh Owner atau Finance.
+      allow create: if (isOwner() || isFinance())
         && slipId == request.resource.data.bulan + '__' + request.resource.data.employeeId
         && statusBulananSesudah(request.resource.data.bulan) in ['PAID', 'LOCKED']
         && request.resource.data.bersih is number;
@@ -1149,7 +1153,8 @@ service cloud.firestore {
             && (resource == null || resource.data.employeeId == karyawanSaya()));
 
       // Saldo tidak boleh diubah oleh pemiliknya sendiri, hanya oleh HR.
-      allow create, update: if urusKepegawaian() && saldoSah()
+      // Finance (Firda) ikut sejak 27 Okt 2026: ia yang mengelola cuti.
+      allow create, update: if (urusKepegawaian() || isFinance()) && saldoSah()
         // Bagian sebelum garis bawah wajib kode karyawannya, supaya satu
         // orang tidak bisa punya dua kartu di tahun yang sama.
         && saldoId.split('_')[0] == request.resource.data.employeeId;
@@ -1261,19 +1266,21 @@ service cloud.firestore {
         && (
           (
             // Tahap 1: atasan langsung menandai diketahui, sekali saja, selagi menunggu.
-            (isHR() || isAdmin() || (sudahLogin() && resource.data.atasanId == karyawanSaya()))
+            // Finance (Firda) jadi cadangan seperti HR/Admin (27 Okt 2026).
+            (isHR() || isAdmin() || isFinance() || (sudahLogin() && resource.data.atasanId == karyawanSaya()))
             && resource.data.get('diketahuiOleh', null) == null
             && resource.data.status == 'DIAJUKAN'
             && request.resource.data.diff(resource.data).affectedKeys()
                  .hasOnly(['diketahuiOleh', 'diketahuiPada', 'updatedAt'])
           ) || (
             // Tahap 2: keputusan. DISETUJUI wajib sudah diketahui, kecuali
-            // HR/Admin menandainya sebagai cadangan dalam tulisan yang sama.
-            urusKepegawaian()
+            // HR/Admin/Finance menandainya sebagai cadangan dalam tulisan yang sama.
+            // Finance (Firda) boleh memutuskan cuti/izin/sakit sejak 27 Okt 2026.
+            (urusKepegawaian() || isFinance())
             && (
               request.resource.data.status != 'DISETUJUI'
               || resource.data.get('diketahuiOleh', null) != null
-              || ((isHR() || isAdmin()) && request.resource.data.get('diketahuiOleh', null) != null)
+              || ((isHR() || isAdmin() || isFinance()) && request.resource.data.get('diketahuiOleh', null) != null)
             )
           ) || (
             resource.data.employeeId == karyawanSaya()
