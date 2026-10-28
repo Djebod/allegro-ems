@@ -211,7 +211,7 @@ function Isi() {
 
 export default function HalamanImporKaryawan() {
   return (
-    <Guard izinkan={["ADMIN", "HR", "OWNER"]}>
+    <Guard izinkan={["ADMIN", "HR", "OWNER", "FINANCE"]}>
       <Shell judul="Impor Data Karyawan" keterangan="Isi lewat Excel, unggah sekali jadi." lebar>
         <Isi />
       </Shell>

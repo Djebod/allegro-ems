@@ -77,6 +77,11 @@ service cloud.firestore {
     function isHR()      { return berperan('HR'); }
     function isOwner()   { return berperan('OWNER'); }
 
+    /** Data karyawan (tambah/ubah/KTP/tarif/penugasan): Admin dan Finance (Firda, 27 Okt 2026). */
+    function kelolaKaryawan() {
+      return isAdmin() || isFinance();
+    }
+
     /** Yang mengurus kepegawaian: HR, Owner, dan Admin sistem. */
     function urusKepegawaian() {
       return isAdmin() || isHR() || isOwner();
@@ -353,10 +358,11 @@ service cloud.firestore {
         || atasanProyek()
         || berperanProyek(['ADMIN_PROYEK']);
 
-      allow create: if isAdmin() && karyawanSah()
+      // Finance (Firda) mengelola Data karyawan sama seperti Admin (27 Okt 2026).
+      allow create: if kelolaKaryawan() && karyawanSah()
         && request.resource.data.employeeCode == employeeId;
 
-      allow update: if (isAdmin() || isHR()) && karyawanSah()
+      allow update: if (kelolaKaryawan() || isHR()) && karyawanSah()
         && request.resource.data.employeeCode == resource.data.employeeCode
         && request.resource.data.nik == resource.data.nik;
 
@@ -398,7 +404,7 @@ service cloud.firestore {
 
       // Hanya boleh dihapus kalau memang salah input dan belum dipakai
       // di mana pun. Setelah ada absensi, karyawan cukup dinonaktifkan.
-      allow delete: if isAdmin();
+      allow delete: if kelolaKaryawan();
     }
 
     // ---------- employeePrivate (foto KTP) ----------
@@ -407,8 +413,8 @@ service cloud.firestore {
     // HR dan Owner boleh membaca sejak Tahap 22: foto KTP ditampilkan di
     // rincian absen untuk mencocokkan wajah sebelum memvalidasi.
     match /employeePrivate/{employeeId} {
-      allow read: if urusKepegawaian();
-      allow write: if isAdmin();
+      allow read: if urusKepegawaian() || isFinance();
+      allow write: if kelolaKaryawan();
     }
 
     // ---------- salaryRates ----------
@@ -427,11 +433,11 @@ service cloud.firestore {
       // lewat jalur ini. Itu urusan Admin dan Finance.
       allow read: if isAdmin() || isFinance();
 
-      allow create: if isAdmin() && tarifSah() && request.resource.data.effectiveUntil == null;
+      allow create: if kelolaKaryawan() && tarifSah() && request.resource.data.effectiveUntil == null;
 
       // Satu-satunya perubahan yang diizinkan: menutup masa berlaku.
       // Angkanya sendiri tidak boleh diubah, karena payroll lama memakainya.
-      allow update: if isAdmin()
+      allow update: if kelolaKaryawan()
         && request.resource.data.employeeId == resource.data.employeeId
         && request.resource.data.paymentMode == resource.data.paymentMode
         && request.resource.data.dailyRate == resource.data.dailyRate
@@ -473,13 +479,13 @@ service cloud.firestore {
             && resource != null
             && resource.data.mandorId == profilSaya().employeeId);
 
-      allow create: if isAdmin() && penugasanSah()
+      allow create: if kelolaKaryawan() && penugasanSah()
         && request.resource.data.status == 'ACTIVE'
         && request.resource.data.effectiveUntil == null;
 
       // Hanya untuk menutup penugasan. Isi penugasannya tidak boleh diubah,
       // supaya histori penempatan tetap sesuai kenyataan.
-      allow update: if isAdmin()
+      allow update: if kelolaKaryawan()
         && request.resource.data.employeeId == resource.data.employeeId
         && request.resource.data.projectId == resource.data.projectId
         && request.resource.data.sectionId == resource.data.sectionId

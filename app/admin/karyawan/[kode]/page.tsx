@@ -380,7 +380,13 @@ function Isi({ kode }: { kode: string }) {
           sini (tarif ini hanya untuk payroll mingguan pekerja lapangan). */}
       <div className="mt-6 flex items-center justify-between">
         <h2 className="text-lg font-bold text-allegro-700">{stafBulanan ? "Gaji bulanan" : "Tarif gaji"}</h2>
-        {stafBulanan ? null : (
+        {stafBulanan ? (
+          profile?.role === "FINANCE" || profile?.role === "OWNER" ? (
+            <Link href="/payroll-bulanan" className="btn-utama">
+              Atur gaji bulanan
+            </Link>
+          ) : null
+        ) : (
           <button className="btn-utama" onClick={() => setBukaTarif(true)}>
             Tarif baru
           </button>
@@ -1167,7 +1173,7 @@ export default function HalamanDetailKaryawan() {
   const kode = decodeURIComponent(String(params.kode));
 
   return (
-    <Guard izinkan={["ADMIN"]}>
+    <Guard izinkan={["ADMIN", "FINANCE"]}>
       <Shell
         judul="Detail karyawan"
         keterangan="Foto, tarif gaji, dan penugasan proyek."

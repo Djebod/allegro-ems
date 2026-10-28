@@ -69,8 +69,9 @@ export const MENU: GrupMenu[] = [
   {
     judul: "Kepegawaian",
     item: [
-      { label: "Data karyawan", href: "/admin/karyawan", peran: ["ADMIN"] },
-      { label: "Impor karyawan", href: "/admin/karyawan/impor", peran: KEPEGAWAIAN },
+      // Finance (Firda) mengelola data karyawan sama seperti Admin (27 Okt 2026).
+      { label: "Data karyawan", href: "/admin/karyawan", peran: ["ADMIN", "FINANCE"] },
+      { label: "Impor karyawan", href: "/admin/karyawan/impor", peran: ["ADMIN", "HR", "OWNER", "FINANCE"] },
       // Finance (Firda) ikut menyetujui cuti, izin, dan sakit (27 Okt 2026).
       { label: "Kelola cuti", href: "/cuti/kelola", peran: ["ADMIN", "HR", "OWNER", "FINANCE"] },
       // Finance ikut membaca karena lembur yang disetujui masuk payroll.

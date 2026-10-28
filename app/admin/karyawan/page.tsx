@@ -549,7 +549,7 @@ function Isi() {
 
 export default function HalamanKaryawan() {
   return (
-    <Guard izinkan={["ADMIN"]}>
+    <Guard izinkan={["ADMIN", "FINANCE"]}>
       <Shell judul="Data Karyawan" keterangan="Staf kantor dan pekerja lapangan (mandor, tukang, kenek), dipisah.">
         <Isi />
       </Shell>
