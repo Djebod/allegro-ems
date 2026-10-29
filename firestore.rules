@@ -1660,6 +1660,10 @@ service cloud.firestore {
     function bolehImportRab() {
       return atasanProyek() || berperanProyek(['QS']);
     }
+    /** Menyetujui revisi RAB: Direksi (dan super admin). */
+    function direksiProyek() {
+      return superProyek() || berperanProyek(['SUPER_ADMIN', 'DIREKSI']);
+    }
 
     match /apRabHeaders/{rabId} {
       allow read: if wargaProyek();
@@ -1669,16 +1673,32 @@ service cloud.firestore {
         && request.resource.data.projectCode.size() > 0
         && request.resource.data.totalRab is number
         && request.resource.data.jumlahItem is number
-        && request.resource.data.aktif is bool;
+        && request.resource.data.aktif is bool
+        // Revisi di aplikasi (28 Okt 2026): hanya Head Admin / Direksi, lahir
+        // sebagai MENUNGGU dan belum berlaku sampai disetujui Direksi.
+        && (request.resource.data.get('sumber', '') != 'REVISI'
+            || (atasanProyek()
+                && request.resource.data.status == 'MENUNGGU'
+                && request.resource.data.aktif == false));
 
       // Yang boleh berubah hanya penanda versi aktif. Angka RAB beku:
       // kalau nilainya bisa diketik ulang, audit biaya kehilangan dasar.
-      // Revisi dilakukan dengan import versi baru.
+      // Revisi = versi baru (import ulang, atau revisi di aplikasi).
       allow update: if bolehImportRab()
         && request.resource.data.projectCode == resource.data.projectCode
         && request.resource.data.versi == resource.data.versi
         && request.resource.data.totalRab == resource.data.totalRab
-        && request.resource.data.jumlahItem == resource.data.jumlahItem;
+        && request.resource.data.jumlahItem == resource.data.jumlahItem
+        && request.resource.data.get('sumber', '') == resource.data.get('sumber', '')
+        // Revisi yang belum disetujui / ditolak hanya bisa diputuskan Direksi,
+        // dan yang ditolak tidak bisa dihidupkan lagi.
+        && (!(resource.data.get('status', '') in ['MENUNGGU', 'DITOLAK'])
+            || (direksiProyek()
+                && resource.data.status == 'MENUNGGU'
+                && request.resource.data.status in ['DISETUJUI', 'DITOLAK']
+                && (request.resource.data.status == 'DISETUJUI' || request.resource.data.aktif == false)))
+        // Status revisi yang sudah disetujui tidak bisa diubah lagi.
+        && (resource.data.get('status', '') != 'DISETUJUI' || request.resource.data.status == 'DISETUJUI');
 
       allow delete: if false;
     }
