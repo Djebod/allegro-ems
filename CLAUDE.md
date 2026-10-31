@@ -10,7 +10,7 @@ Sistem kepegawaian PT Allegro Global Construction: absensi lapangan, payroll min
 
 | | |
 |---|---|
-| Folder | `D:\Project\allegro-absensi-payroll` |
+| Folder | `D:\Project\allegro-ems` |
 | Repo | `github.com/Djebod/allegro-ems` |
 | Hosting | Vercel, project `allegro-ems` |
 | Stack | Next.js 15 (App Router) · React 19 · TypeScript · Tailwind 3 |
@@ -54,15 +54,15 @@ git push
 
 ## 4. firestore.rules harus di-publish manual, dan isinya SAMA PERSIS dengan repo Allegro Project
 
-**Firestore ini dipakai bersama** aplikasi Allegro Project (`D:\project\allegro-project`, repo `Djebod/allegro-project`). Satu database hanya punya satu rules, dan yang di-publish terakhir menimpa semuanya. Dulu `firestore.rules` di sini hanya berisi bagian EMS, dan mem-publish-nya mematikan Allegro Project (terjadi 9 Okt 2026).
+**Firestore ini dipakai bersama** aplikasi Allegro Project (`D:\project\Allegro-Project`, repo `Djebod/Allegro-Project`). Satu database hanya punya satu rules, dan yang di-publish terakhir menimpa semuanya. Dulu `firestore.rules` di sini hanya berisi bagian EMS, dan mem-publish-nya mematikan Allegro Project (terjadi 9 Okt 2026).
 
-Sejak 9 Okt 2026 (keputusan Bang Syam): **`firestore.rules` di repo ini dan `D:\project\allegro-project\database\schema\firestore-rules-gabungan.rules` adalah berkas yang sama persis** — bagian EMS, blok `ap*` milik Allegro Project, dan ubahan bertanda `[ADMIN PROYEK]` (blok `users`, `undangan`, `projects`, `employees`, `payroll`, `payrollItems`). Dengan begitu berkas mana pun yang di-publish, kedua aplikasi tetap hidup.
+Sejak 9 Okt 2026 (keputusan Bang Syam): **`firestore.rules` di repo ini dan `D:\project\Allegro-Project\database\schema\firestore-rules-gabungan.rules` adalah berkas yang sama persis** — bagian EMS, blok `ap*` milik Allegro Project, dan ubahan bertanda `[ADMIN PROYEK]` (blok `users`, `undangan`, `projects`, `employees`, `payroll`, `payrollItems`). Dengan begitu berkas mana pun yang di-publish, kedua aplikasi tetap hidup.
 
 Setiap kali rules berubah, **di repo mana pun**:
 
 0. **Naikkan nomor versi di kepala berkas** (permintaan Bang Syam, 15 Okt 2026): baris `VERSI RULES: N — ditulis <tanggal> pukul <jam> WIB` di bawah `rules_version`, plus satu baris riwayat `vN  tanggal jam  ringkasan`. Nomor naik satu tiap perubahan, jam memakai jam laptop (WIB). Sebutkan nomor versinya ke Bang Syam supaya ia bisa mencocokkan dengan yang tampil di Firebase Console.
 1. Ubah berkas di repo tempat bekerja, lalu **salin utuh** ke repo satunya (`cp`), jangan disunting terpisah. Blok `ap*` dan tanda `[ADMIN PROYEK]` jangan dihapus walau tidak dipakai EMS.
-2. Cek sama: dari `D:\project` jalankan `cmp allegro-absensi-payroll/firestore.rules allegro-project/database/schema/firestore-rules-gabungan.rules` (tidak ada keluaran = identik).
+2. Cek sama: dari `D:\project` jalankan `cmp allegro-ems/firestore.rules Allegro-Project/database/schema/firestore-rules-gabungan.rules` (tidak ada keluaran = identik).
 3. Commit dan push di **kedua** repo.
 4. Firebase Console → Firestore Database → tab Rules → hapus isi lama → tempel isi berkas → **Publish**.
 

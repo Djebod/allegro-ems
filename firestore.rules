@@ -1,7 +1,7 @@
 rules_version = '2';
 
 // ============================================================
-//  VERSI RULES: 4 — ditulis 20 Okt 2026 pukul 07.40 WIB
+//  VERSI RULES: 5 — ditulis 31 Okt 2026 pukul 07.19 WIB
 //
 //  Firebase Console harus memuat versi ini. Sebelum dan sesudah Publish,
 //  bandingkan baris VERSI di atas dengan yang tampil di tab Rules.
@@ -10,6 +10,7 @@ rules_version = '2';
 //  Bang Syam, 15 Okt 2026).
 //
 //  Riwayat:
+//   v5  31 Okt 2026 07.19  [ADMIN PROYEK] breakdown Planner per item PB, pencatatan sisa PO, dan laporan harian berbasis item RAB
 //   v4  20 Okt 2026 07.40  [ADMIN PROYEK] kebijakan uang hasil rapat 10 Okt: apPengaturan (batas nominal Direksi + pelimpahan), apCounters (nomor resmi berurutan), PO/transfer di atas batas wajib Direksi, PIC dicabut dari PO, semua warga boleh klaim, PB boleh berfoto
 //   v3  15 Okt 2026 08.32  penugasan staf kantor boleh tanpa mandor (penugasanSah)
 //   v2  15 Okt 2026 08.00  koreksi absen lapangan oleh HR/Owner (attendanceCorrections, update attendance)
@@ -1899,24 +1900,39 @@ service cloud.firestore {
         && request.resource.data.projectCode.size() > 0
         && request.resource.data.status == 'DIAJUKAN'
         && request.resource.data.items.size() > 0
+        && request.resource.data.plannerBreakdown is list
+        && request.resource.data.plannerBreakdown.size() == 0
         // Foto pengajuan (rapat 10 Okt 2026) boleh kosong; bila diisi wajib dari Cloudinary.
         && (request.resource.data.get('fotoUrl', '') == '' || fotoCloudinary(request.resource.data.fotoUrl));
 
-      // Verifikasi PB hanya Planner / Head Admin. Purchasing boleh menandai
-      // "DIPROSES" saat PB dipakai jadi PO. Isi permintaannya tidak boleh
-      // diubah setelah diajukan, supaya yang disetujui = yang diminta.
+      // Isi permintaan PB beku sesudah diajukan. Planner menyetujui breakdown
+      // per item; Purchasing hanya mencadangkan volume melalui transaksi PO.
       allow update: if request.resource.data.projectCode == resource.data.projectCode
         && request.resource.data.items == resource.data.items
         && (
           (
             (superProyek() || berperanProyek(['SUPER_ADMIN','HEAD_ADMIN','PLANNER']))
             && resource.data.status == 'DIAJUKAN'
-            && request.resource.data.status in ['DIVERIFIKASI','DITOLAK']
+            && request.resource.data.status in ['DIAJUKAN','DIVERIFIKASI','DITOLAK']
+            && request.resource.data.diff(resource.data).affectedKeys()
+                 .hasOnly(['plannerBreakdown','status','verifikasiOleh','verifikasiPada','catatanVerifikasi','riwayat'])
+            && (request.resource.data.status == 'DITOLAK'
+                || (request.resource.data.plannerBreakdown is list
+                    && request.resource.data.plannerBreakdown.size() == resource.data.items.size()))
           ) || (
-            // Purchasing hanya boleh memproses PB yang SUDAH diverifikasi.
+            // Purchasing hanya boleh mencadangkan sisa item PB yang sudah disetujui.
             purchasing()
+            && request.resource.data.diff(resource.data).affectedKeys()
+                 .hasOnly(['status','volumeTerpesan','poTransaksiId','riwayat'])
+            && request.resource.data.get('plannerBreakdown', []) == resource.data.get('plannerBreakdown', [])
+            && request.resource.data.volumeTerpesan is map
+            && request.resource.data.poTransaksiId is string
+            && !exists(/databases/$(database)/documents/apPurchaseOrders/$(request.resource.data.poTransaksiId))
+            && getAfter(/databases/$(database)/documents/apPurchaseOrders/$(request.resource.data.poTransaksiId)).data.pbIds.hasAny([pbId])
+            && getAfter(/databases/$(database)/documents/apPurchaseOrders/$(request.resource.data.poTransaksiId)).data.dibuatPada == request.time
+            && request.resource.data.volumeTerpesan != resource.data.get('volumeTerpesan', {})
             && (
-              (resource.data.status == 'DIVERIFIKASI' && request.resource.data.status == 'DIPROSES')
+              (resource.data.status == 'DIVERIFIKASI' && request.resource.data.status in ['DIPROSES','SELESAI'])
               || (resource.data.status == 'DIPROSES' && request.resource.data.status in ['DIPROSES','SELESAI'])
             )
           )
@@ -1938,6 +1954,16 @@ service cloud.firestore {
         && request.resource.data.status == 'MENUNGGU_APPROVAL'
         && request.resource.data.projectCode is string
         && request.resource.data.supplierId is string
+        && request.resource.data.pbId is string
+        && request.resource.data.pbIds is list
+        && request.resource.data.pbIds.size() > 0
+        && request.resource.data.pbIds.hasAny([request.resource.data.pbId])
+        // PO dan pencatatan sisa PB wajib berada dalam transaksi yang sama.
+        && get(/databases/$(database)/documents/apMaterialRequests/$(request.resource.data.pbId)).data.projectCode == request.resource.data.projectCode
+        && get(/databases/$(database)/documents/apMaterialRequests/$(request.resource.data.pbId)).data.status in ['DIVERIFIKASI','DIPROSES']
+        && getAfter(/databases/$(database)/documents/apMaterialRequests/$(request.resource.data.pbId)).data.poTransaksiId == poId
+        && getAfter(/databases/$(database)/documents/apMaterialRequests/$(request.resource.data.pbId)).data.volumeTerpesan != get(/databases/$(database)/documents/apMaterialRequests/$(request.resource.data.pbId)).data.get('volumeTerpesan', {})
+        && getAfter(/databases/$(database)/documents/apMaterialRequests/$(request.resource.data.pbId)).data.status in ['DIPROSES','SELESAI']
         && request.resource.data.subtotal is number
         && request.resource.data.items.size() > 0;
 
@@ -2342,6 +2368,9 @@ service cloud.firestore {
         && request.resource.data.tanggal is string
         && request.resource.data.pekerjaan is string
         && request.resource.data.pekerjaan.size() > 0
+        && request.resource.data.pekerjaanItems is list
+        && request.resource.data.pekerjaanItems.size() > 0
+        && request.resource.data.rencanaBesokItems is list
         // Laporan lahir sebagai draft; menerbitkan adalah langkah tersendiri.
         && request.resource.data.status == 'DRAFT'
         && request.resource.data.dibuatOleh == emailUser();
