@@ -2420,8 +2420,9 @@ service cloud.firestore {
     }
 
     // ---------- apFotoArsip (arsip ZIP foto laporan harian + hapus massal) ----------
-    // Alur: DIUNDUH (ZIP dibuat & diunduh) -> TERSIMPAN (dikonfirmasi tersimpan)
+    // Alur: DIUNDUH (ZIP dibuat & diunduh; boleh diunduh ulang, tercatat siapa/kapan/berapa kali)
     // -> DIHAPUS (foto dilepas dari laporan, file Cloudinary dihapus endpoint server).
+    // TERSIMPAN = status lama (sebelum 31 Okt 2026 sore), diperlakukan sama dengan DIUNDUH.
     // DIUNDUH boleh BATAL. Daftar foto & identitas ZIP beku sejak dibuat.
     // Direksi hanya melihat (keputusan 31 Okt 2026).
     function kelolaArsipFoto() {
@@ -2436,7 +2437,9 @@ service cloud.firestore {
         && request.resource.data.projectCode.size() > 0
         && request.resource.data.status == 'DIUNDUH'
         && request.resource.data.dibuatOleh == emailUser()
+        && request.resource.data.diunduhOleh == emailUser()
         && request.resource.data.diunduhPada == request.time
+        && request.resource.data.jumlahUnduh == 1
         && request.resource.data.namaFile is string
         && request.resource.data.namaFile.size() > 0
         && request.resource.data.sha256 is string
@@ -2447,17 +2450,19 @@ service cloud.firestore {
         && request.resource.data.jumlahFoto == request.resource.data.photoMap.size();
 
       allow update: if kelolaArsipFoto()
-        && ((resource.data.status == 'DIUNDUH'
-              && request.resource.data.status == 'TERSIMPAN'
-              && request.resource.data.konfirmasiOleh == emailUser()
-              && request.resource.data.konfirmasiPada == request.time
-              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'konfirmasiOleh', 'konfirmasiPada']))
+        // Unduh ulang: status tetap, pencatat = pemanggil, jam server, hitungan naik satu.
+        && ((resource.data.status in ['DIUNDUH', 'TERSIMPAN']
+              && request.resource.data.status == resource.data.status
+              && request.resource.data.diunduhOleh == emailUser()
+              && request.resource.data.diunduhPada == request.time
+              && request.resource.data.jumlahUnduh == resource.data.get('jumlahUnduh', 1) + 1
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['diunduhOleh', 'diunduhPada', 'jumlahUnduh']))
           || (resource.data.status == 'DIUNDUH'
               && request.resource.data.status == 'BATAL'
               && request.resource.data.dibatalkanOleh == emailUser()
               && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'dibatalkanOleh', 'dibatalkanPada']))
-          // Hapus massal hanya dari arsip yang sudah diunduh DAN dikonfirmasi tersimpan.
-          || (resource.data.status == 'TERSIMPAN'
+          // Hapus massal hanya dari arsip yang ZIP-nya sudah pernah diunduh.
+          || (resource.data.status in ['DIUNDUH', 'TERSIMPAN']
               && request.resource.data.status == 'DIHAPUS'
               && request.resource.data.dihapusOleh == emailUser()
               && request.resource.data.dihapusPada == request.time
