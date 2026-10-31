@@ -1666,27 +1666,44 @@ service cloud.firestore {
       return superProyek() || berperanProyek(['SUPER_ADMIN', 'DIREKSI']);
     }
 
+    /** Mengajukan RAB Kedua (tambah/kurang pekerjaan): atasan, Admin Proyek, Planner. */
+    function pengajuRabKedua() {
+      return atasanProyek() || berperanProyek(['ADMIN_PROYEK', 'PLANNER']);
+    }
+
     match /apRabHeaders/{rabId} {
       allow read: if wargaProyek();
 
-      allow create: if bolehImportRab()
-        && request.resource.data.projectCode is string
+      allow create: if request.resource.data.projectCode is string
         && request.resource.data.projectCode.size() > 0
         && request.resource.data.totalRab is number
         && request.resource.data.jumlahItem is number
         && request.resource.data.aktif is bool
-        // Revisi di aplikasi (28 Okt 2026): hanya Head Admin / Direksi, lahir
-        // sebagai MENUNGGU dan belum berlaku sampai disetujui Direksi.
-        && (request.resource.data.get('sumber', '') != 'REVISI'
-            || (atasanProyek()
-                && request.resource.data.status == 'MENUNGGU'
-                && request.resource.data.aktif == false));
+        && ((request.resource.data.get('sumber', '') != 'RAB_KEDUA'
+              && bolehImportRab()
+              // Revisi di aplikasi (28 Okt 2026): hanya Head Admin / Direksi, lahir
+              // sebagai MENUNGGU dan belum berlaku sampai disetujui Direksi.
+              && (request.resource.data.get('sumber', '') != 'REVISI'
+                  || (atasanProyek()
+                      && request.resource.data.status == 'MENUNGGU'
+                      && request.resource.data.aktif == false)))
+            // RAB Kedua (31 Okt 2026): daftar tambah/kurang terpisah dari RAB pertama.
+            // Lahir MENUNGGU, tidak pernah aktif, wajib alasan; disetujui Direksi.
+            || (request.resource.data.get('sumber', '') == 'RAB_KEDUA'
+              && pengajuRabKedua()
+              && request.resource.data.status == 'MENUNGGU'
+              && request.resource.data.aktif == false
+              && request.resource.data.alasan is string
+              && request.resource.data.alasan.size() >= 5));
 
       // Yang boleh berubah hanya penanda versi aktif. Angka RAB beku:
       // kalau nilainya bisa diketik ulang, audit biaya kehilangan dasar.
       // Revisi = versi baru (import ulang, atau revisi di aplikasi).
       allow update: if bolehImportRab()
         && request.resource.data.projectCode == resource.data.projectCode
+        // RAB Kedua tidak pernah menjadi RAB berlaku dan hanya Direksi yang memutuskannya.
+        && (resource.data.get('sumber', '') != 'RAB_KEDUA'
+            || (direksiProyek() && request.resource.data.aktif == false))
         && request.resource.data.versi == resource.data.versi
         && request.resource.data.totalRab == resource.data.totalRab
         && request.resource.data.jumlahItem == resource.data.jumlahItem
@@ -1708,7 +1725,10 @@ service cloud.firestore {
     match /apRabItems/{itemId} {
       allow read: if wargaProyek();
 
-      allow create: if bolehImportRab()
+      allow create: if (bolehImportRab()
+            || (pengajuRabKedua()
+              && request.resource.data.get('sumber', '') == 'RAB_KEDUA'
+              && request.resource.data.get('jenisPerubahan', '') in ['TAMBAH', 'KURANG']))
         && request.resource.data.rabId is string
         && request.resource.data.rabId.size() > 0
         && request.resource.data.projectCode is string
@@ -2373,7 +2393,9 @@ service cloud.firestore {
         && request.resource.data.rencanaBesokItems is list
         // Laporan lahir sebagai draft; menerbitkan adalah langkah tersendiri.
         && request.resource.data.status == 'DRAFT'
-        && request.resource.data.dibuatOleh == emailUser();
+        && request.resource.data.dibuatOleh == emailUser()
+        // Maksimal 25 foto per laporan (31 Okt 2026).
+        && request.resource.data.get('fotoUrls', []).size() <= 25;
 
       allow update: if (atasanProyek()
           || berperanProyek(['ADMIN_PROYEK','PIC','KOORDINATOR','STAF_LAPANGAN']))
@@ -2381,6 +2403,9 @@ service cloud.firestore {
         && request.resource.data.tanggal == resource.data.tanggal
         && request.resource.data.dibuatOleh == resource.data.dibuatOleh
         && request.resource.data.status in ['DRAFT','TERBIT']
+        // Maks 25 foto; laporan lama yang terlanjur lebih hanya boleh berkurang.
+        && (request.resource.data.get('fotoUrls', []).size() <= 25
+            || request.resource.data.get('fotoUrls', []).size() <= resource.data.get('fotoUrls', []).size())
         // Tanda tangan pengawas (rapat 10 Okt 2026, B16) boleh kosong; bila ada wajib Cloudinary.
         && (request.resource.data.get('ttdPengawasUrl', '') == '' || fotoCloudinary(request.resource.data.ttdPengawasUrl))
         // Menerbitkan ke klien hanya boleh oleh yang berwenang.
@@ -2392,6 +2417,55 @@ service cloud.firestore {
       allow delete: if (atasanProyek()
           || berperanProyek(['ADMIN_PROYEK','PIC','KOORDINATOR','STAF_LAPANGAN']))
         && resource.data.status != 'TERBIT';
+    }
+
+    // ---------- apFotoArsip (arsip ZIP foto laporan harian + hapus massal) ----------
+    // Alur: DIUNDUH (ZIP dibuat & diunduh) -> TERSIMPAN (dikonfirmasi tersimpan)
+    // -> DIHAPUS (foto dilepas dari laporan, file Cloudinary dihapus endpoint server).
+    // DIUNDUH boleh BATAL. Daftar foto & identitas ZIP beku sejak dibuat.
+    // Direksi hanya melihat (keputusan 31 Okt 2026).
+    function kelolaArsipFoto() {
+      return superProyek() || berperanProyek(['SUPER_ADMIN', 'HEAD_ADMIN', 'ADMIN_PROYEK']);
+    }
+
+    match /apFotoArsip/{arsipId} {
+      allow read: if atasanProyek() || kelolaArsipFoto();
+
+      allow create: if kelolaArsipFoto()
+        && request.resource.data.projectCode is string
+        && request.resource.data.projectCode.size() > 0
+        && request.resource.data.status == 'DIUNDUH'
+        && request.resource.data.dibuatOleh == emailUser()
+        && request.resource.data.diunduhPada == request.time
+        && request.resource.data.namaFile is string
+        && request.resource.data.namaFile.size() > 0
+        && request.resource.data.sha256 is string
+        && request.resource.data.sha256.size() == 64
+        && request.resource.data.photoMap is list
+        && request.resource.data.photoMap.size() > 0
+        && request.resource.data.photoMap.size() <= 150
+        && request.resource.data.jumlahFoto == request.resource.data.photoMap.size();
+
+      allow update: if kelolaArsipFoto()
+        && ((resource.data.status == 'DIUNDUH'
+              && request.resource.data.status == 'TERSIMPAN'
+              && request.resource.data.konfirmasiOleh == emailUser()
+              && request.resource.data.konfirmasiPada == request.time
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'konfirmasiOleh', 'konfirmasiPada']))
+          || (resource.data.status == 'DIUNDUH'
+              && request.resource.data.status == 'BATAL'
+              && request.resource.data.dibatalkanOleh == emailUser()
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'dibatalkanOleh', 'dibatalkanPada']))
+          // Hapus massal hanya dari arsip yang sudah diunduh DAN dikonfirmasi tersimpan.
+          || (resource.data.status == 'TERSIMPAN'
+              && request.resource.data.status == 'DIHAPUS'
+              && request.resource.data.dihapusOleh == emailUser()
+              && request.resource.data.dihapusPada == request.time
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'dihapusOleh', 'dihapusPada', 'jumlahLaporanDiubah', 'cloudinaryStatus']))
+          || (resource.data.status == 'DIHAPUS'
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['cloudinaryStatus', 'cloudinaryDihapus', 'cloudinaryPesan', 'cloudinaryPada'])));
+
+      allow delete: if false;
     }
 
     // ---------- apTours (tur virtual 360°) ----------
