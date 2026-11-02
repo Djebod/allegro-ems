@@ -11,7 +11,7 @@ import { FOLDER_ABSENSI, cloudinarySiap, unggahFoto } from "@/lib/cloudinary";
 import type { TahapUnggah } from "@/lib/cloudinary";
 import { denganBatasWaktu } from "@/lib/batas-waktu";
 import { BATAS_AJUKAN_LEMBUR_HARI, BATAS_SIMPAN_FIRESTORE_MS } from "@/lib/constants";
-import { jarakMeter } from "@/lib/lokasi";
+import { ambilPosisi, jarakMeter } from "@/lib/lokasi";
 import { NAMA_SESI, URUTAN_SESI, hitungJam, jamDari, periksaSesi, tanggalHariIni } from "@/lib/absensi";
 import type { Attendance, Employee, JenisSesi, Project, TitikAbsen } from "@/types";
 
@@ -68,33 +68,19 @@ export default function AbsenLapanganSendiri({ karyawan }: { karyawan: Employee 
   }, [karyawan.id, karyawan.currentProjectId, tanggal]);
 
   const ambilTitik = useCallback((): Promise<TitikAbsen> => {
-    return new Promise((selesai, gagal) => {
-      if (!navigator.geolocation) {
-        gagal(new Error("Perangkat ini tidak mendukung GPS."));
-        return;
-      }
-      if (!proyek) {
-        gagal(new Error("Proyek belum diketahui. Minta Admin memeriksa penugasan Anda."));
-        return;
-      }
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          selesai({
-            latitude: pos.coords.latitude,
-            longitude: pos.coords.longitude,
-            accuracy: Math.round(pos.coords.accuracy),
-            distanceFromProjectMeter: jarakMeter(
-              pos.coords.latitude,
-              pos.coords.longitude,
-              proyek.latitude,
-              proyek.longitude
-            ),
-          });
-        },
-        () => gagal(new Error("Lokasi tidak bisa diambil. Nyalakan GPS dan izinkan akses lokasi.")),
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
-      );
-    });
+    if (!proyek)
+      return Promise.reject(new Error("Proyek belum diketahui. Minta Admin memeriksa penugasan Anda."));
+    return ambilPosisi().then((pos) => ({
+      latitude: pos.coords.latitude,
+      longitude: pos.coords.longitude,
+      accuracy: Math.round(pos.coords.accuracy),
+      distanceFromProjectMeter: jarakMeter(
+        pos.coords.latitude,
+        pos.coords.longitude,
+        proyek.latitude,
+        proyek.longitude
+      ),
+    }));
   }, [proyek]);
 
   async function mulaiSesi(jenis: JenisSesi) {

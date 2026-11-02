@@ -24,7 +24,7 @@ import { ambilProyek } from "@/lib/data";
 import { hariSabtu } from "@/lib/jadwal";
 import type { JenisAbsenKantor } from "@/lib/data-kantor";
 import { jadwalUntuk } from "@/lib/jadwal";
-import { jarakMeter } from "@/lib/lokasi";
+import { ambilPosisi, jarakMeter } from "@/lib/lokasi";
 import { cloudinarySiap, unggahFoto } from "@/lib/cloudinary";
 import type { TahapUnggah } from "@/lib/cloudinary";
 import { GalatBatasWaktu, denganBatasWaktu } from "@/lib/batas-waktu";
@@ -112,36 +112,26 @@ function Isi() {
   }
 
   async function periksaLokasi(): Promise<TitikTerdekat | null> {
-    return new Promise((selesai) => {
-      if (!navigator.geolocation) {
-        setSalah("Perangkat ini tidak mendukung GPS.");
-        selesai(null);
-        return;
-      }
-      setMencari(true);
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          const hasil = cariTitikTerdekat(titikSaya(), (t) =>
-            jarakMeter(pos.coords.latitude, pos.coords.longitude, t.latitude, t.longitude)
-          );
-          setTitik({
-            latitude: pos.coords.latitude,
-            longitude: pos.coords.longitude,
-            accuracy: Math.round(pos.coords.accuracy),
-            distanceFromProjectMeter: hasil.jarakMeter,
-          });
-          setTerdekat(hasil);
-          setMencari(false);
-          selesai(hasil);
-        },
-        () => {
-          setSalah("Lokasi tidak bisa diambil. Nyalakan GPS dan izinkan akses lokasi.");
-          setMencari(false);
-          selesai(null);
-        },
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
+    setMencari(true);
+    try {
+      const pos = await ambilPosisi();
+      const hasil = cariTitikTerdekat(titikSaya(), (t) =>
+        jarakMeter(pos.coords.latitude, pos.coords.longitude, t.latitude, t.longitude)
       );
-    });
+      setTitik({
+        latitude: pos.coords.latitude,
+        longitude: pos.coords.longitude,
+        accuracy: Math.round(pos.coords.accuracy),
+        distanceFromProjectMeter: hasil.jarakMeter,
+      });
+      setTerdekat(hasil);
+      return hasil;
+    } catch (e) {
+      setSalah(e instanceof Error ? e.message : "Lokasi tidak bisa diambil.");
+      return null;
+    } finally {
+      setMencari(false);
+    }
   }
 
   async function mulai(jenis: JenisAbsenKantor) {

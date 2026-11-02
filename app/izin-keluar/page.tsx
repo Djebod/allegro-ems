@@ -10,7 +10,7 @@ import { useAuth } from "@/lib/auth";
 import { dbClient } from "@/lib/firebase";
 import { semuaKantor } from "@/lib/data-kantor";
 import { cariKantorTerdekat, jamWIB } from "@/lib/kantor";
-import { jarakMeter } from "@/lib/lokasi";
+import { ambilPosisi, jarakMeter } from "@/lib/lokasi";
 import { cloudinarySiap, unggahFoto } from "@/lib/cloudinary";
 import { tanggalHariIni, tanggalPendek } from "@/lib/absensi";
 import { NAMA_KEPERLUAN, keadaanIzin, teksDurasi, warnaKeadaan } from "@/lib/izin-keluar";
@@ -107,35 +107,28 @@ function Isi() {
 
   const ambilLokasi = useCallback(
     () =>
-      new Promise<Omit<SesiIzinKeluar, "waktu" | "photoUrl"> | null>((selesai) => {
-        if (!navigator.geolocation) {
-          setSalah("Perangkat ini tidak mendukung GPS.");
-          return selesai(null);
-        }
+      (async (): Promise<Omit<SesiIzinKeluar, "waktu" | "photoUrl"> | null> => {
         setMencari(true);
-        navigator.geolocation.getCurrentPosition(
-          (pos) => {
-            const t = cariKantorTerdekat(kantor, (k) =>
-              jarakMeter(pos.coords.latitude, pos.coords.longitude, k.latitude, k.longitude)
-            );
-            setMencari(false);
-            selesai({
-              latitude: pos.coords.latitude,
-              longitude: pos.coords.longitude,
-              akurasi: Math.round(pos.coords.accuracy),
-              kantorNama: t.kantor?.nama || "",
-              jarakMeter: t.jarakMeter,
-              diDalamRadius: t.diDalamRadius,
-            });
-          },
-          () => {
-            setMencari(false);
-            setSalah("Lokasi tidak bisa diambil. Nyalakan GPS dan izinkan akses lokasi.");
-            selesai(null);
-          },
-          { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
-        );
-      }),
+        try {
+          const pos = await ambilPosisi();
+          const t = cariKantorTerdekat(kantor, (k) =>
+            jarakMeter(pos.coords.latitude, pos.coords.longitude, k.latitude, k.longitude)
+          );
+          return {
+            latitude: pos.coords.latitude,
+            longitude: pos.coords.longitude,
+            akurasi: Math.round(pos.coords.accuracy),
+            kantorNama: t.kantor?.nama || "",
+            jarakMeter: t.jarakMeter,
+            diDalamRadius: t.diDalamRadius,
+          };
+        } catch (e) {
+          setSalah(e instanceof Error ? e.message : "Lokasi tidak bisa diambil.");
+          return null;
+        } finally {
+          setMencari(false);
+        }
+      })(),
     [kantor]
   );
 

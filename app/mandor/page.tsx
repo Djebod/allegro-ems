@@ -21,7 +21,7 @@ import {
 } from "@/lib/data";
 import { posisiLapangan } from "@/lib/karyawan";
 import { FOLDER_ABSENSI, cloudinarySiap, unggahFoto } from "@/lib/cloudinary";
-import { jarakMeter } from "@/lib/lokasi";
+import { ambilPosisi, jarakMeter } from "@/lib/lokasi";
 import {
   NAMA_SESI,
   URUTAN_SESI,
@@ -123,34 +123,19 @@ function Isi() {
 
   /** Ambil lokasi segar tiap kali absen, jangan pakai yang lama. */
   const ambilTitik = useCallback((): Promise<TitikAbsen> => {
-    return new Promise((selesai, gagal) => {
-      if (!navigator.geolocation) {
-        gagal(new Error("Perangkat ini tidak mendukung GPS."));
-        return;
-      }
-      if (!proyekSaya) {
-        gagal(new Error("Proyek belum diketahui. Minta Admin memeriksa penugasan Anda."));
-        return;
-      }
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          const jarak = jarakMeter(
-            pos.coords.latitude,
-            pos.coords.longitude,
-            proyekSaya.latitude,
-            proyekSaya.longitude
-          );
-          selesai({
-            latitude: pos.coords.latitude,
-            longitude: pos.coords.longitude,
-            accuracy: Math.round(pos.coords.accuracy),
-            distanceFromProjectMeter: jarak,
-          });
-        },
-        () => gagal(new Error("Lokasi tidak bisa diambil. Nyalakan GPS dan izinkan akses lokasi.")),
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
-      );
-    });
+    if (!proyekSaya)
+      return Promise.reject(new Error("Proyek belum diketahui. Minta Admin memeriksa penugasan Anda."));
+    return ambilPosisi().then((pos) => ({
+      latitude: pos.coords.latitude,
+      longitude: pos.coords.longitude,
+      accuracy: Math.round(pos.coords.accuracy),
+      distanceFromProjectMeter: jarakMeter(
+        pos.coords.latitude,
+        pos.coords.longitude,
+        proyekSaya.latitude,
+        proyekSaya.longitude
+      ),
+    }));
   }, [proyekSaya]);
 
   async function mulaiSesi(karyawan: Employee, jenis: JenisSesi) {
