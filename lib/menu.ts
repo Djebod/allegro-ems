@@ -97,6 +97,12 @@ export const MENU: GrupMenu[] = [
       { label: "Pengguna dan peran", href: "/admin/users", peran: ["ADMIN"] },
     ],
   },
+  {
+    // Paling bawah (permintaan Bang Syam, 2 Nov 2026). Isinya di
+    // lib/catatan-update.ts; poinnya disaring per peran.
+    judul: "Info",
+    item: [{ label: "Catatan update", href: "/catatan-update", peran: SEMUA }],
+  },
 ];
 
 /** Menu yang boleh dilihat satu peran. Grup yang kosong dibuang. */

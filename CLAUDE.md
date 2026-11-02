@@ -465,4 +465,5 @@ Kalau salah satunya terjawab, perbarui berkas ini.
 - Sebutkan berkas mana yang ditaruh di mana
 - Kalau ada yang dihapus, sebutkan daftarnya
 - Jangan bilang "sudah selesai" tanpa membuktikan — jalankan `npm run uji` dan `npm run build` dulu
+- Setiap perubahan yang terasa di layar pengguna: tambahkan poinnya di `lib/catatan-update.ts` (menu Info → Catatan update, paling bawah; 2 Nov 2026). Bahasa pengguna, bukan pesan commit; poin soal gaji/hak pengelola diberi `peran`
 - Kalau ada keputusan yang saya ambil sendiri karena datanya menunjukkan sesuatu, katakan terus terang berikut alasannya, dan sebutkan konstanta mana yang bisa diubah kalau ternyata keliru

@@ -51,6 +51,14 @@ function IkonKeuangan({ className }: { className?: string }) {
   );
 }
 
+function IkonInfo({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 20 20" fill="currentColor">
+      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+    </svg>
+  );
+}
+
 function IkonSistem({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 20 20" fill="currentColor">
@@ -71,6 +79,8 @@ function ikonGrup(judul: string, className: string) {
       return <IkonKeuangan className={className} />;
     case "sistem":
       return <IkonSistem className={className} />;
+    case "info":
+      return <IkonInfo className={className} />;
     default:
       return null;
   }
@@ -124,6 +134,13 @@ const TEMA_BLOK: Record<
     garisSubmenu: "border-purple-400/30",
     badge: "bg-purple-400/20 text-purple-300",
     ikonBg: "bg-purple-400/20 text-purple-300",
+  },
+  info: {
+    wadah: "bg-allegro-600/40 border-allegro-500/30",
+    judul: "text-rose-300 font-bold",
+    garisSubmenu: "border-rose-400/30",
+    badge: "bg-rose-400/20 text-rose-300",
+    ikonBg: "bg-rose-400/20 text-rose-300",
   },
 };
 
