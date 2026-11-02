@@ -1,7 +1,7 @@
 rules_version = '2';
 
 // ============================================================
-//  VERSI RULES: 5 — ditulis 31 Okt 2026 pukul 07.19 WIB
+//  VERSI RULES: 6 — ditulis 2 Nov 2026 pukul 08.47 WIB
 //
 //  Firebase Console harus memuat versi ini. Sebelum dan sesudah Publish,
 //  bandingkan baris VERSI di atas dengan yang tampil di tab Rules.
@@ -10,6 +10,7 @@ rules_version = '2';
 //  Bang Syam, 15 Okt 2026).
 //
 //  Riwayat:
+//   v6  2 Nov 2026 08.47  Finance (Firda, merangkap HRD) boleh koreksi jam & putuskan absen luar jangkauan kantor (urusAbsenKantor)
 //   v5  31 Okt 2026 07.19  [ADMIN PROYEK] breakdown Planner per item PB, pencatatan sisa PO, dan laporan harian berbasis item RAB
 //   v4  20 Okt 2026 07.40  [ADMIN PROYEK] kebijakan uang hasil rapat 10 Okt: apPengaturan (batas nominal Direksi + pelimpahan), apCounters (nomor resmi berurutan), PO/transfer di atas batas wajib Direksi, PIC dicabut dari PO, semua warga boleh klaim, PB boleh berfoto
 //   v3  15 Okt 2026 08.32  penugasan staf kantor boleh tanpa mandor (penugasanSah)
@@ -86,6 +87,16 @@ service cloud.firestore {
     /** Yang mengurus kepegawaian: HR, Owner, dan Admin sistem. */
     function urusKepegawaian() {
       return isAdmin() || isHR() || isOwner();
+    }
+
+    /**
+     * Koreksi jam dan keputusan absen luar jangkauan di absensi kantor:
+     * pengurus kepegawaian ditambah Finance, karena Firda (peran FINANCE)
+     * merangkap HRD (2 Nov 2026; client E9). Perannya tidak diganti ke HR
+     * supaya akses payroll bulanan Finance tetap ada.
+     */
+    function urusAbsenKantor() {
+      return urusKepegawaian() || isFinance();
     }
 
     /** Kode karyawan yang tersambung ke akun yang sedang login. */
@@ -793,8 +804,8 @@ service cloud.firestore {
     // Koreksi jam dan keputusan absen luar radius oleh Admin/HR/Owner.
     // Tambah-saja dan wajib bertanda tangan, sama seperti attendanceCorrections.
     match /officeAttendanceCorrections/{koreksiId} {
-      allow read: if urusKepegawaian() || isFinance();
-      allow create: if urusKepegawaian()
+      allow read: if urusAbsenKantor();
+      allow create: if urusAbsenKantor()
         && request.resource.data.attendanceId is string
         && request.resource.data.attendanceId.size() > 0
         && request.resource.data.employeeId is string
@@ -1565,7 +1576,7 @@ service cloud.firestore {
         && request.resource.data.date == resource.data.date
         && sesiKantorTetapAtauBaru()
         && (
-          urusKepegawaian()
+          urusAbsenKantor()
           || (
             resource.data.employeeId == karyawanSaya()
             && tanggalHariIniWIB(resource.data.date)

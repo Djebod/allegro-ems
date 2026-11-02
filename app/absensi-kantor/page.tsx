@@ -105,7 +105,8 @@ function Isi() {
   // Foto profil untuk mencocokkan wajah swafoto; bukan KTP, karena foto KTP
   // sering bertahun-tahun lalu dan wajahnya sudah berubah. Pembanding hanya
   // untuk Admin/HR/Owner yang memvalidasi; Finance melihat rincian tanpa itu.
-  const bolehBanding = profile?.role === "ADMIN" || profile?.role === "HR" || profile?.role === "OWNER";
+  // Finance ikut: Firda merangkap HRD (2 Nov 2026).
+  const bolehBanding = ["ADMIN", "HR", "OWNER", "FINANCE"].includes(profile?.role ?? "");
   const [foto, setFoto] = useState<{ employeeId: string; url: string | null } | undefined>(undefined);
   useEffect(() => {
     const id = buka?.employeeId;
