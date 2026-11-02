@@ -1,7 +1,7 @@
 rules_version = '2';
 
 // ============================================================
-//  VERSI RULES: 6 — ditulis 2 Nov 2026 pukul 08.47 WIB
+//  VERSI RULES: 7 — ditulis 2 Nov 2026 pukul 10.30 WIB
 //
 //  Firebase Console harus memuat versi ini. Sebelum dan sesudah Publish,
 //  bandingkan baris VERSI di atas dengan yang tampil di tab Rules.
@@ -10,6 +10,7 @@ rules_version = '2';
 //  Bang Syam, 15 Okt 2026).
 //
 //  Riwayat:
+//   v7  2 Nov 2026 10.30  [ADMIN PROYEK] angka RAB hanya Super Admin/Direksi/Head Admin/QS: apRabHarga baru, apRabItems/apRabHeaders tanpa angka, BAST tanpa nilai, prospek & draft RAB hanya level admin
 //   v6  2 Nov 2026 08.47  Finance (Firda, merangkap HRD) boleh koreksi jam & putuskan absen luar jangkauan kantor (urusAbsenKantor)
 //   v5  31 Okt 2026 07.19  [ADMIN PROYEK] breakdown Planner per item PB, pencatatan sisa PO, dan laporan harian berbasis item RAB
 //   v4  20 Okt 2026 07.40  [ADMIN PROYEK] kebijakan uang hasil rapat 10 Okt: apPengaturan (batas nominal Direksi + pelimpahan), apCounters (nomor resmi berurutan), PO/transfer di atas batas wajib Direksi, PIC dicabut dari PO, semua warga boleh klaim, PB boleh berfoto
@@ -1672,6 +1673,17 @@ service cloud.firestore {
     function bolehImportRab() {
       return atasanProyek() || berperanProyek(['QS']);
     }
+    /** Angka RAB & turunannya: hanya Super Admin, Direksi, Head Admin, QS (v7, 2 Nov 2026). */
+    function hargaRab() {
+      return atasanProyek() || berperanProyek(['QS']);
+    }
+    function kunciHargaItem() {
+      return ['hargaSatuan', 'totalHarga', 'totalExcel', 'hargaSatuanBiaya', 'totalBiaya',
+              'hargaSatuanJual', 'totalJual', 'bobot', 'nilaiPerubahan'];
+    }
+    function kunciHargaHeader() {
+      return ['totalRab', 'totalTambah', 'totalKurang', 'totalBiaya', 'totalJual', 'perubahan'];
+    }
     /** Menyetujui revisi RAB: Direksi (dan super admin). */
     function direksiProyek() {
       return superProyek() || berperanProyek(['SUPER_ADMIN', 'DIREKSI']);
@@ -1687,7 +1699,8 @@ service cloud.firestore {
 
       allow create: if request.resource.data.projectCode is string
         && request.resource.data.projectCode.size() > 0
-        && request.resource.data.totalRab is number
+        // Angka RAB disimpan di apRabHarga (v7), tidak boleh ikut di sini.
+        && !request.resource.data.keys().hasAny(kunciHargaHeader())
         && request.resource.data.jumlahItem is number
         && request.resource.data.aktif is bool
         && ((request.resource.data.get('sumber', '') != 'RAB_KEDUA'
@@ -1716,7 +1729,10 @@ service cloud.firestore {
         && (resource.data.get('sumber', '') != 'RAB_KEDUA'
             || (direksiProyek() && request.resource.data.aktif == false))
         && request.resource.data.versi == resource.data.versi
-        && request.resource.data.totalRab == resource.data.totalRab
+        && request.resource.data.get('totalRab', null) == resource.data.get('totalRab', null)
+        && request.resource.data.get('perubahan', null) == resource.data.get('perubahan', null)
+        && request.resource.data.get('totalTambah', null) == resource.data.get('totalTambah', null)
+        && request.resource.data.get('totalKurang', null) == resource.data.get('totalKurang', null)
         && request.resource.data.jumlahItem == resource.data.jumlahItem
         && request.resource.data.get('sumber', '') == resource.data.get('sumber', '')
         // Revisi yang belum disetujui / ditolak hanya bisa diputuskan Direksi,
@@ -1728,6 +1744,13 @@ service cloud.firestore {
                 && (request.resource.data.status == 'DISETUJUI' || request.resource.data.aktif == false)))
         // Status revisi yang sudah disetujui tidak bisa diubah lagi.
         && (resource.data.get('status', '') != 'DISETUJUI' || request.resource.data.status == 'DISETUJUI');
+
+      // Pemindahan angka data lama (v7): hanya membuang angka, dan angkanya
+      // harus sudah tersimpan di apRabHarga dalam tulisan yang sama.
+      allow update: if hargaRab()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(kunciHargaHeader())
+        && !request.resource.data.keys().hasAny(kunciHargaHeader())
+        && existsAfter(/databases/$(database)/documents/apRabHarga/$(rabId));
 
       allow delete: if false;
     }
@@ -1744,9 +1767,32 @@ service cloud.firestore {
         && request.resource.data.rabId.size() > 0
         && request.resource.data.projectCode is string
         && request.resource.data.projectCode.size() > 0
-        && request.resource.data.totalHarga is number;
+        // Angka RAB disimpan di apRabHarga (v7), tidak boleh ikut di sini.
+        && !request.resource.data.keys().hasAny(kunciHargaItem());
 
-      // Baris RAB adalah salinan dokumen anggaran: tambah-saja.
+      // Baris RAB adalah salinan dokumen anggaran: tambah-saja. Satu-satunya
+      // perubahan: membuang angka data lama yang sudah tersalin ke apRabHarga.
+      allow update: if hargaRab()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(kunciHargaItem())
+        && !request.resource.data.keys().hasAny(kunciHargaItem())
+        && existsAfter(/databases/$(database)/documents/apRabHarga/$(itemId));
+      allow delete: if false;
+    }
+
+    // ---------- apRabHarga (angka RAB, v7 — 2 Nov 2026) ----------
+    // Satu dokumen per baris (jenis ITEM, id = id apRabItems) atau per header
+    // (jenis HEADER, id = id apRabHeaders). Hanya level admin yang membaca dan
+    // menulis. Angka beku: tambah-saja, sama seperti baris RAB.
+    match /apRabHarga/{hargaId} {
+      allow read: if hargaRab();
+      allow create: if hargaRab()
+        && request.resource.data.jenis in ['ITEM', 'HEADER']
+        && request.resource.data.rabId is string
+        && request.resource.data.rabId.size() > 0
+        && request.resource.data.projectCode is string
+        && request.resource.data.projectCode.size() > 0
+        && (request.resource.data.jenis != 'ITEM' || request.resource.data.get('totalHarga', 0) is number)
+        && (request.resource.data.jenis != 'HEADER' || request.resource.data.get('totalRab', 0) is number);
       allow update, delete: if false;
     }
 
@@ -1754,7 +1800,8 @@ service cloud.firestore {
     // Prospek hidup di luar `projects` supaya calon proyek yang belum tentu menang tidak
     // menjadi titik absen EMS. Tahap 2 menambah apPenawaran (OL), Tahap 3 apKontrak (SPK).
     function bolehLihatProspek() {
-      return atasanProyek() || berperanProyek(['QS', 'PLANNER', 'ADMIN_DATA']);
+      // Isinya angka RAB (anggaran biaya + harga jual): hanya level admin (v7, 2 Nov 2026).
+      return hargaRab();
     }
     function bolehTulisProspek() {
       return atasanProyek() || berperanProyek(['QS']);
@@ -2356,8 +2403,8 @@ service cloud.firestore {
         && request.resource.data.nomor.size() > 0
         && request.resource.data.items is list
         && request.resource.data.items.size() > 0
-        && request.resource.data.nilai is number
-        && request.resource.data.nilai >= 0
+        // Nilai BAST dihitung dari apRabHarga saat ditampilkan (v7), tidak disimpan.
+        && !('nilai' in request.resource.data)
         // BAST lahir menunggu tanda tangan, tidak bisa langsung sah.
         && request.resource.data.status == 'MENUNGGU_TANDA_TANGAN'
         && request.resource.data.dibuatOleh == emailUser();
@@ -2368,7 +2415,7 @@ service cloud.firestore {
         && request.resource.data.projectCode == resource.data.projectCode
         && request.resource.data.nomor == resource.data.nomor
         && request.resource.data.items == resource.data.items
-        && request.resource.data.nilai == resource.data.nilai
+        && request.resource.data.get('nilai', null) == resource.data.get('nilai', null)
         && request.resource.data.dibuatOleh == resource.data.dibuatOleh
         && request.resource.data.status in ['MENUNGGU_TANDA_TANGAN','DITANDATANGANI','DIBATALKAN']
         // Yang sudah ditandatangani tidak bisa diutak-atik lagi.
@@ -2378,6 +2425,14 @@ service cloud.firestore {
             || (fotoCloudinary(request.resource.data.ttdPerusahaanUrl)
                 && fotoCloudinary(request.resource.data.ttdKlienUrl)
                 && (atasanProyek() || berperanProyek(['KOORDINATOR','PIC']))));
+
+      // Pemindahan data lama (v7): membuang nilai & totalHarga per item,
+      // jumlah item tetap. Berlaku juga untuk BAST yang sudah ditandatangani.
+      allow update: if hargaRab()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nilai', 'items'])
+        && !('nilai' in request.resource.data)
+        && request.resource.data.items is list
+        && request.resource.data.items.size() == resource.data.items.size();
 
       allow delete: if false;
     }
